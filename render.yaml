@@ -89,8 +89,9 @@ services:
     routes:
       # Client-side routing (React Router) — unknown paths fall back to the
       # SPA shell instead of 404ing.
-      - src: /*
-        dest: /index.html
+      - type: rewrite
+        source: /*
+        destination: /index.html
     headers:
       - path: /assets/*
         name: Cache-Control
@@ -108,8 +109,9 @@ services:
       - key: REACT_APP_API_URL
         value: https://ignition-api.onrender.com/api/v1
     routes:
-      - src: /*
-        dest: /index.html
+      - type: rewrite
+        source: /*
+        destination: /index.html
     headers:
       - path: /static/*
         name: Cache-Control
