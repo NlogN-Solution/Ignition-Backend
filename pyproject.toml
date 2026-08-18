@@ -31,6 +31,7 @@ dependencies = [
     "redis==5.2.1",
     "celery==5.4.0",
     "slowapi==0.1.9",
+    "cloudinary==1.46.0",
 ]
 
 [project.optional-dependencies]

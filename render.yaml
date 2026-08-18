@@ -1,0 +1,116 @@
+# Render Blueprint for Ignition.
+#
+# Three separate GitHub repos (Ignition-Backend, Ignition-AdminFrontend,
+# Ignition-StudentDashboard) are wired into one Blueprint via each service's
+# own `repo:` field — Render doesn't require every service to live in the repo
+# that holds render.yaml itself. Deploy this from the Render dashboard via
+# "New +" → "Blueprint", pointing it at the Ignition-Backend repo (this file's
+# home). Grant Render's GitHub App access to all three repos first, or the
+# admin/student services will fail to attach.
+#
+# Postgres is NOT defined here — Neon is external. Paste its connection string
+# into DATABASE_URL when Render prompts for it during the first Blueprint sync
+# (see the `sync: false` entries below).
+#
+# Service names become the default subdomain (<name>.onrender.com) and must be
+# globally unique across all of Render, not just your account. If "ignition-api"
+# etc. are taken, rename them here AND update every CORS_ORIGINS /
+# VITE_API_BASE_URL / REACT_APP_API_URL value below to match.
+
+services:
+  # ── Redis (rate limiting + dashboard cache) ─────────────────────────────────
+  - type: keyvalue
+    name: ignition-redis
+    plan: starter
+    region: oregon
+    ipAllowList: [] # no public endpoint access; Render's private network can still reach it
+    maxmemoryPolicy: allkeys-lru
+
+  # ── Backend API ──────────────────────────────────────────────────────────────
+  - type: web
+    name: ignition-api
+    runtime: docker
+    repo: https://github.com/NlogN-Solution/Ignition-Backend.git
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter # preDeployCommand (used below for migrations) needs a paid plan, not free
+    region: oregon
+    healthCheckPath: /api/v1/health
+    # Runs once per deploy, before the new version takes traffic. If your plan
+    # doesn't support this, drop it and instead run `alembic upgrade head`
+    # manually from the Render Shell after each deploy that adds a migration.
+    preDeployCommand: alembic upgrade head
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false # paste Neon's connection string here when prompted
+      - key: JWT_SECRET_KEY
+        generateValue: true # Render generates and stores a random 256-bit value
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "15"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "30"
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: ignition-redis
+          property: connectionString
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "25"
+      - key: TIMEZONE
+        value: Asia/Kathmandu
+      # Update these two hosts if you rename ignition-admin/ignition-student
+      # below, or once you attach custom domains.
+      - key: CORS_ORIGINS
+        value: '["https://ignition-admin.onrender.com","https://ignition-student.onrender.com"]'
+
+  # ── Admin dashboard (staff) — static site ────────────────────────────────────
+  - type: web
+    name: ignition-admin
+    runtime: static
+    repo: https://github.com/NlogN-Solution/Ignition-AdminFrontend.git
+    branch: main
+    buildCommand: npm install -g pnpm && pnpm install --frozen-lockfile && pnpm build
+    staticPublishPath: ./dist
+    envVars:
+      # Update this if ignition-api ends up on a different subdomain.
+      - key: VITE_API_BASE_URL
+        value: https://ignition-api.onrender.com/api/v1
+    routes:
+      # Client-side routing (React Router) — unknown paths fall back to the
+      # SPA shell instead of 404ing.
+      - src: /*
+        dest: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+
+  # ── Student portal — static site ─────────────────────────────────────────────
+  - type: web
+    name: ignition-student
+    runtime: static
+    repo: https://github.com/NlogN-Solution/Ignition-StudentDashboard.git
+    branch: main
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./build
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://ignition-api.onrender.com/api/v1
+    routes:
+      - src: /*
+        dest: /index.html
+    headers:
+      - path: /static/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable

@@ -15,7 +15,7 @@ from ..api.exceptions import (
     UnprocessableEntityException,
 )
 from ..core.config import get_settings
-from ..core.uploads import DOCUMENT_EXTENSIONS, store_upload
+from ..core.uploads import DOCUMENT_EXTENSIONS, LEAVE_ATTACHMENT_FOLDER, store_upload
 from ..models import User
 from ..models.enums import LeaveStatus
 from ..schemas.leave import (
@@ -129,8 +129,8 @@ async def create_leave_request(
         # ED360 writes `Path(file.filename).suffix` unchecked and with no size
         # cap, into the publicly served upload directory — same hole the avatar
         # and document uploads had.
-        stored_file_name, _ = await store_upload(file, DOCUMENT_EXTENSIONS)
-        attachment_url = f"/uploads/{stored_file_name}"
+        stored = await store_upload(file, DOCUMENT_EXTENSIONS, folder=LEAVE_ATTACHMENT_FOLDER)
+        attachment_url = stored.url
         attachment_name = file.filename
 
     request = await service.create_request(

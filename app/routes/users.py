@@ -8,7 +8,7 @@ from ..api.auth import get_current_user, require_role
 from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from ..core.config import get_settings
 from ..core.rbac import can_manage_target
-from ..core.uploads import AVATAR_EXTENSIONS, store_upload
+from ..core.uploads import AVATAR_EXTENSIONS, AVATAR_FOLDER, store_upload
 from ..models import User
 from ..models.enums import ActivityType, UserRole
 from ..schemas.user import (
@@ -35,14 +35,15 @@ def _client_ip(request: Request) -> str | None:
 
 
 async def _store_avatar(file: UploadFile) -> str:
-    """Persist an avatar and return its public URL.
+    """Persist an avatar to Cloudinary and return its public, CDN-served URL.
 
-    Avatars stay on the public `/uploads` mount: they are low-sensitivity and
-    are rendered by <img> tags all over the dashboard. Documents deliberately do
-    not — see `routes/document.py:download_document`.
+    Avatars are uploaded publicly: they are low-sensitivity and are rendered by
+    <img> tags all over the dashboard. Documents deliberately are not — see
+    `routes/document.py:download_document`.
     """
-    stored_file_name, _ = await store_upload(file, AVATAR_EXTENSIONS)
-    return f"/uploads/{stored_file_name}"
+    stored = await store_upload(file, AVATAR_EXTENSIONS, folder=AVATAR_FOLDER)
+    assert stored.url is not None  # public upload (private=False, the default): Cloudinary always returns a URL
+    return stored.url
 
 
 @router.get("", response_model=UserList, summary="List users")

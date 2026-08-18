@@ -3,11 +3,11 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 from ..api.auth import require_role
 from ..api.exceptions import ForbiddenException, NotFoundException
-from ..core.uploads import DOCUMENT_EXTENSIONS, resolve_stored_path, store_upload
+from ..core.uploads import DOCUMENT_EXTENSIONS, DOCUMENT_FOLDER, build_download_response, store_upload
 from ..models import Document, User
 from ..models.enums import DocumentType, NotificationType, UserRole
 from ..schemas.document import (
@@ -126,7 +126,7 @@ async def upload_document(
     if user.role is UserRole.STUDENT:
         student_id = user.id
 
-    stored_file_name, content = await store_upload(file, DOCUMENT_EXTENSIONS)
+    stored = await store_upload(file, DOCUMENT_EXTENSIONS, folder=DOCUMENT_FOLDER, private=True)
 
     # `file_url` now points at the authenticated download route, which needs the
     # row's own id — so the id is generated here rather than by the column
@@ -139,11 +139,11 @@ async def upload_document(
             "uploaded_by": user.id,
             "document_type": document_type,
             "title": title or file.filename,
-            "original_file_name": file.filename or stored_file_name,
-            "stored_file_name": stored_file_name,
+            "original_file_name": file.filename or stored.stored_file_name,
+            "stored_file_name": stored.stored_file_name,
             "file_url": f"/api/v1/documents/{document_id}/download",
             "mime_type": file.content_type,
-            "file_size": len(content),
+            "file_size": stored.size,
             "remarks": remarks,
         }
     )
@@ -156,24 +156,26 @@ async def download_document(
     document_id: UUID,
     service: DocumentService = Depends(get_document_service),
     user: User = Depends(_VIEW_ROLES),
-) -> FileResponse:
+) -> Response:
     """Authenticated, ownership-checked file access.
 
     ED360 serves uploads straight off a public `/uploads` static mount, so any
     passport scan or bank statement is retrievable by URL with no token at all —
     and those URLs travel in referrers, logs and shared links. Here the bytes
     are reachable only through this handler, which applies the same visibility
-    rule as the metadata.
+    rule as the metadata, then redirects to a Cloudinary URL that is itself
+    signed and short-lived rather than public.
     """
     document = await service.get_document(document_id)
     if document is None:
         raise NotFoundException("Document not found")
     _assert_visible_to(user, document)
 
-    return FileResponse(
-        resolve_stored_path(document.stored_file_name),
-        media_type=document.mime_type or "application/octet-stream",
-        filename=document.original_file_name,
+    return build_download_response(
+        document.stored_file_name,
+        folder=DOCUMENT_FOLDER,
+        mime_type=document.mime_type,
+        download_name=document.original_file_name,
     )
 
 
