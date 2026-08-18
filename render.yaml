@@ -1,21 +1,25 @@
-# Render Blueprint for Ignition.
+# Render Blueprint for the Ignition backend API only.
 #
-# Three separate GitHub repos (Ignition-Backend, Ignition-AdminFrontend,
-# Ignition-StudentDashboard) are wired into one Blueprint via each service's
-# own `repo:` field — Render doesn't require every service to live in the repo
-# that holds render.yaml itself. Deploy this from the Render dashboard via
-# "New +" → "Blueprint", pointing it at the Ignition-Backend repo (this file's
-# home). Grant Render's GitHub App access to all three repos first, or the
-# admin/student services will fail to attach.
+# The two frontends (Ignition-AdminFrontend, Ignition-StudentDashboard) are
+# deployed separately as their own static sites via the Render dashboard
+# ("New +" → "Static Site"), not through this Blueprint — bundling everything
+# into one Blueprint needs a paid multi-service plan tier this account doesn't
+# have. This file only provisions Redis + the API.
+#
+# Deploy from the Render dashboard via "New +" → "Blueprint", pointing it at
+# the Ignition-Backend repo (this file's home).
 #
 # Postgres is NOT defined here — Neon is external. Paste its connection string
 # into DATABASE_URL when Render prompts for it during the first Blueprint sync
 # (see the `sync: false` entries below).
 #
-# Service names become the default subdomain (<name>.onrender.com) and must be
-# globally unique across all of Render, not just your account. If "ignition-api"
-# etc. are taken, rename them here AND update every CORS_ORIGINS /
-# VITE_API_BASE_URL / REACT_APP_API_URL value below to match.
+# "ignition-api" becomes the default subdomain (ignition-api.onrender.com) and
+# must be globally unique across all of Render, not just your account. If it's
+# taken, rename it below.
+#
+# After creating the two static sites separately, come back and update
+# CORS_ORIGINS below with their real onrender.com URLs (or custom domains),
+# then redeploy the API — otherwise the browser will block their requests to it.
 
 services:
   # ── Redis (rate limiting + dashboard cache) ─────────────────────────────────
@@ -69,50 +73,7 @@ services:
         value: "25"
       - key: TIMEZONE
         value: Asia/Kathmandu
-      # Update these two hosts if you rename ignition-admin/ignition-student
-      # below, or once you attach custom domains.
+      # Placeholder — replace with the two static sites' real URLs once they
+      # exist (see the note at the top of this file), then redeploy.
       - key: CORS_ORIGINS
         value: '["https://ignition-admin.onrender.com","https://ignition-student.onrender.com"]'
-
-  # ── Admin dashboard (staff) — static site ────────────────────────────────────
-  - type: web
-    name: ignition-admin
-    runtime: static
-    repo: https://github.com/NlogN-Solution/Ignition-AdminFrontend.git
-    branch: main
-    buildCommand: npm install -g pnpm && pnpm install --frozen-lockfile && pnpm build
-    staticPublishPath: ./dist
-    envVars:
-      # Update this if ignition-api ends up on a different subdomain.
-      - key: VITE_API_BASE_URL
-        value: https://ignition-api.onrender.com/api/v1
-    routes:
-      # Client-side routing (React Router) — unknown paths fall back to the
-      # SPA shell instead of 404ing.
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    headers:
-      - path: /assets/*
-        name: Cache-Control
-        value: public, max-age=31536000, immutable
-
-  # ── Student portal — static site ─────────────────────────────────────────────
-  - type: web
-    name: ignition-student
-    runtime: static
-    repo: https://github.com/NlogN-Solution/Ignition-StudentDashboard.git
-    branch: main
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./build
-    envVars:
-      - key: REACT_APP_API_URL
-        value: https://ignition-api.onrender.com/api/v1
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    headers:
-      - path: /static/*
-        name: Cache-Control
-        value: public, max-age=31536000, immutable
