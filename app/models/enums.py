@@ -195,6 +195,22 @@ class PaymentStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class PaymentPurpose(str, Enum):
+    """What a payment was for.
+
+    Ignition charges a one-time fee for access to the student portal, set per
+    country (see `PortalAccessFee`). That is a different kind of money from an
+    application fee or a tuition deposit, and access is granted by the presence
+    of a completed `PORTAL_ACCESS` payment — so the distinction has to be a
+    column, not a convention in `remarks`.
+    """
+
+    PORTAL_ACCESS = "portal_access"
+    APPLICATION_FEE = "application_fee"
+    TUITION_DEPOSIT = "tuition_deposit"
+    OTHER = "other"
+
+
 class PaymentMethod(str, Enum):
     CASH = "cash"
     BANK_TRANSFER = "bank_transfer"
@@ -468,6 +484,100 @@ class SavingsGoalKind(str, Enum):
     EMERGENCY_FUND = "emergency_fund"
 
 
+# --- Public catalogue and CMS (CATALOGUE-CMS-PLAN.md) -----------------------
+# The four catalogue enums mirror the public site's controlled vocabularies
+# verbatim, em dashes and ampersands included: `Ignition-Landing`'s facets are
+# closed const tuples (`data/universities/types.ts`, `data/courses/types.ts`)
+# and the two must not drift. The values are therefore the display strings the
+# site already renders, not snake_case keys.
+
+
+class UkRegion(str, Enum):
+    ENGLAND_NORTH = "England — North"
+    ENGLAND_MIDLANDS = "England — Midlands"
+    ENGLAND_SOUTH = "England — South"
+    SCOTLAND = "Scotland"
+    WALES = "Wales"
+    NORTHERN_IRELAND = "Northern Ireland"
+
+
+class CourseSubject(str, Enum):
+    COMPUTING = "Computing"
+    ENGINEERING = "Engineering"
+    HEALTH = "Health"
+    SCIENCES = "Sciences"
+    BUSINESS = "Business"
+    LAW = "Law"
+    ARTS_DESIGN = "Arts & Design"
+    SOCIAL_SCIENCES = "Social Sciences"
+    EDUCATION = "Education"
+    HUMANITIES = "Humanities"
+
+
+class CourseLevel(str, Enum):
+    """What a course *is*.
+
+    Distinct from `DegreeLevel`, which is what an application is made at. Both
+    are load-bearing and they are not merged: `DegreeLevel` is consumed by
+    applications and the student portal, `CourseLevel` by the public
+    catalogue's facets.
+    """
+
+    FOUNDATION = "Foundation"
+    UNDERGRADUATE = "Undergraduate"
+    TOP_UP = "Top-Up"
+    INTEGRATED_MASTERS = "Integrated Masters"
+    POSTGRADUATE = "Postgraduate"
+
+
+class EntryRoute(str, Enum):
+    """A column of a university's entry-criteria matrix.
+
+    Unlike the three enums above these are keys rather than display strings:
+    the label a university actually prints ("BNurs(Adult Nursing)",
+    "Enhanced Extended Masters") is kept verbatim on
+    `university_routes.label`, because 44 institutions spell the same route ten
+    different ways and staff recognise their own wording.
+    """
+
+    UNDERGRADUATE = "undergraduate"
+    INTERNATIONAL_YEAR_ONE = "international_year_one"
+    INTERNATIONAL_FOUNDATION_YEAR = "international_foundation_year"
+    PRE_MASTERS = "pre_masters"
+    POSTGRADUATE = "postgraduate"
+    TOP_UP = "top_up"
+    EXTENDED_MASTERS = "extended_masters"
+    MRES = "mres"
+    DBA = "dba"
+    NURSING = "nursing"
+
+
+class ContentKind(str, Enum):
+    PAGE = "page"
+    GUIDE = "guide"
+    POST = "post"
+    FRAGMENT = "fragment"
+
+
+class BlockType(str, Enum):
+    """A typed content block, each rendering through a component the public
+    site already has. `COMPONENT` is the escape hatch for interactive slots,
+    and its allowlist lives in the landing rather than the database so no
+    editor can name an arbitrary component.
+    """
+
+    PROSE = "prose"
+    CARDS = "cards"
+    TIMELINE = "timeline"
+    CHECKLIST = "checklist"
+    FAQ = "faq"
+    CALLOUT = "callout"
+    STATS = "stats"
+    LIST = "list"
+    CTA = "cta"
+    COMPONENT = "component"
+
+
 #: Every Postgres ENUM this schema needs, as (python_enum, type_name) pairs.
 #: `enum_type(..., create_type=False)` means table DDL does NOT emit CREATE TYPE,
 #: and `alembic revision --autogenerate` will not write them either — the initial
@@ -480,8 +590,12 @@ PG_ENUMS: list[tuple[type[Enum], str]] = [
     (AppointmentStatus, "appointment_status"),
     (AppointmentType, "appointment_type"),
     (AttendanceSource, "attendance_source"),
+    (BlockType, "content_block_type"),
     (AttendanceStatus, "attendance_status"),
     (ChecklistItemStatus, "checklist_item_status"),
+    (ContentKind, "content_kind"),
+    (CourseLevel, "course_level"),
+    (CourseSubject, "course_subject"),
     (ConversionSource, "conversion_source"),
     (DegreeLevel, "degree_level"),
     (DocumentStatus, "document_status"),
@@ -489,6 +603,7 @@ PG_ENUMS: list[tuple[type[Enum], str]] = [
     (EmploymentEventType, "employment_event_type"),
     (EmploymentType, "employment_type"),
     (EnglishTestType, "english_test_type"),
+    (EntryRoute, "entry_route"),
     (FollowUpMethod, "follow_up_method"),
     (FollowUpOutcome, "follow_up_outcome"),
     (FundingSourceStatus, "funding_source_status"),
@@ -516,6 +631,7 @@ PG_ENUMS: list[tuple[type[Enum], str]] = [
     (TaskType, "task_type"),
     (UserRole, "user_role"),
     (UserStatus, "user_status"),
+    (UkRegion, "uk_region"),
     (VisaAppointmentStatus, "visa_appointment_status"),
     (VisaCaseStatus, "visa_case_status"),
     (VisaDocumentRequirementStatus, "visa_document_requirement_status"),
@@ -523,3 +639,74 @@ PG_ENUMS: list[tuple[type[Enum], str]] = [
     (WorkflowActivityType, "workflow_activity_type"),
     (WorkflowStepStatus, "workflow_step_status"),
 ]
+
+class EligibilityIndicator(str, Enum):
+    """One dimension of a preliminary eligibility assessment.
+
+    Deliberately three-valued and deliberately hedged. This is a *preliminary*
+    read on the information a student typed into a public form — nobody has
+    verified a transcript, and no university has been asked. `LIKELY_MEETS` is
+    the strongest thing it can say, and it means "worth a counsellor's time",
+    never "eligible".
+
+    `INSUFFICIENT_INFORMATION` is a real answer, not a failure: a student who
+    has not taken an English test yet is not ineligible, they are early.
+    """
+
+    LIKELY_MEETS = "likely_meets"
+    NEEDS_REVIEW = "needs_review"
+    INSUFFICIENT_INFORMATION = "insufficient_information"
+
+
+class EligibilityOverall(str, Enum):
+    """What the whole assessment adds up to.
+
+    Only ever a routing decision — which queue this lands in and how quickly
+    someone should call. The counsellor makes the actual recommendation, which
+    is why there is no `NOT_ELIGIBLE` here: a public form cannot establish it,
+    and a student reading it would take it as final.
+    """
+
+    PRELIMINARY_LIKELY_ELIGIBLE = "preliminary_likely_eligible"
+    NEEDS_COUNSELLOR_REVIEW = "needs_counsellor_review"
+    MORE_INFORMATION_REQUIRED = "more_information_required"
+
+
+class DocumentReadiness(str, Enum):
+    """How ready one class of document is, as the student reports it."""
+
+    READY = "ready"
+    IN_PROGRESS = "in_progress"
+    NOT_AVAILABLE = "not_available"
+    NOT_SURE = "not_sure"
+
+
+class FundingSource(str, Enum):
+    FAMILY = "family"
+    LOAN = "loan"
+    SCHOLARSHIP = "scholarship"
+    SELF = "self"
+    COMBINATION = "combination"
+
+
+class EnglishEvidence(str, Enum):
+    """How a student intends to satisfy the English requirement.
+
+    Wider than `EnglishTestType` because two of these are not tests: a medium
+    of instruction letter is documentary evidence, and "not taken yet" is a
+    state most students are in when they first ask.
+    """
+
+    IELTS = "ielts"
+    PTE = "pte"
+    TOEFL = "toefl"
+    OTHER_TEST = "other_test"
+    MOI = "moi"
+    NOT_TAKEN = "not_taken"
+
+
+class ContactMethod(str, Enum):
+    PHONE = "phone"
+    WHATSAPP = "whatsapp"
+    EMAIL = "email"
+

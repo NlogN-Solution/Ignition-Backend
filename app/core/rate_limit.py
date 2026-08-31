@@ -23,3 +23,8 @@ LOGIN_RATE_LIMIT = "10/minute"
 REGISTER_RATE_LIMIT = "5/minute"
 PASSWORD_RATE_LIMIT = "5/minute"
 REFRESH_RATE_LIMIT = "30/minute"
+
+#: The one public endpoint that writes. Looser than the credential limits —
+#: a student correcting a typo and resubmitting is normal — but tight enough
+#: that the lead table cannot be filled from a script.
+ELIGIBILITY_RATE_LIMIT = "6/minute"

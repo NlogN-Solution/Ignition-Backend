@@ -12,8 +12,11 @@ from .academic import BlogPost, Country, CountryGuide, Intake, Program, Universi
 from .application import Application, ApplicationStatusHistory
 from .appointment import Appointment
 from .attendance import AttendancePolicy, AttendanceRecord
+from .catalogue import CourseProfile, Scholarship, UniversityRoute
+from .content import ContentBlock, ContentPage, MediaAsset
 from .department import Department, EmployeeEmploymentEvent
 from .document import ApplicationDocument, Document, StudentEnglishTest
+from .eligibility import EligibilityAssessment
 from .finance import (
     BudgetCategory,
     CostOfLivingCategory,
@@ -37,7 +40,7 @@ from .lead import Lead, LeadActivity, LeadFollowUp
 from .leave import LeaveRequest, LeaveType
 from .message import Message
 from .notification import Notification
-from .payment import Payment
+from .payment import Payment, PortalAccessFee
 from .payroll import PayrollRun, Payslip, PayslipLineItem, SalaryStructure
 from .student_checklist import ChecklistTemplateItem, StudentChecklistItem
 from .student_history import StudentEducationHistory, StudentWorkExperience
@@ -71,92 +74,86 @@ from .workflow import (
 )
 
 __all__ = [
-    # Identity
-    "User",
-    "StudentProfile",
-    "StudentEducationHistory",
-    "StudentWorkExperience",
-    "EmployeeProfile",
-    "Department",
-    "EmployeeEmploymentEvent",
-    # HR
+    "ActivityLog",
+    "Application",
+    "ApplicationChecklistItem",
+    "ApplicationDocument",
+    "ApplicationStatusHistory",
+    "ApplicationWorkflow",
+    "ApplicationWorkflowStep",
+    "Appointment",
     "AttendancePolicy",
     "AttendanceRecord",
-    "LeaveType",
-    "LeaveRequest",
-    "SalaryStructure",
-    "PayrollRun",
-    "Payslip",
-    "PayslipLineItem",
-    # CRM
+    "BlogPost",
+    "BudgetCategory",
+    "ChecklistTemplateItem",
+    "ContentBlock",
+    "ContentPage",
+    "CostOfLivingCategory",
+    "Country",
+    "CountryCostOfLiving",
+    "CountryGuide",
+    "CourseProfile",
+    "CurrencyRate",
+    "Department",
+    "DepartureChecklistItem",
+    "Document",
+    "EmployeeEmploymentEvent",
+    "EmployeeProfile",
+    "Intake",
+    "InterviewAnswer",
+    "InterviewFeedbackBand",
+    "InterviewQuestion",
+    "InterviewSession",
+    "InterviewType",
+    "EligibilityAssessment",
     "Lead",
     "LeadActivity",
     "LeadFollowUp",
-    # Catalog
-    "Country",
-    "University",
-    "Program",
-    "Intake",
-    "CountryGuide",
-    "BlogPost",
-    # Education domain
-    "Document",
-    "ApplicationDocument",
-    "StudentEnglishTest",
-    "Application",
-    "ApplicationStatusHistory",
-    "Appointment",
-    "Task",
-    "Payment",
-    "Notification",
+    "LeaveRequest",
+    "LeaveType",
+    "LoanDisbursement",
+    "LoanDocument",
+    "MediaAsset",
     "Message",
-    # Workflow engine
-    "WorkflowTemplate",
-    "WorkflowStage",
-    "WorkflowStageDocumentRequirement",
-    "ApplicationWorkflow",
-    "ApplicationWorkflowStep",
-    "WorkflowStepActivity",
-    "ApplicationChecklistItem",
-    # Student portal (Phase 4)
-    "StudentSavedCourse",
-    "StudentSavedUniversity",
-    "StudentCompareCourse",
-    # Phase 6 — progress and points
-    "ProgressMilestone",
-    "StudentMilestone",
+    "Notification",
+    "Payment",
+    "PayrollRun",
+    "Payslip",
+    "PayslipLineItem",
     "PointsRule",
-    "StudentPointsLedger",
-    # Phase 6 — journey checklist
-    "ChecklistTemplateItem",
+    "PortalAccessFee",
+    "Program",
+    "ProgressMilestone",
+    "SalaryStructure",
+    "Scholarship",
+    "StudentBudget",
     "StudentChecklistItem",
-    # Phase 6 — interviews
-    "InterviewType",
-    "InterviewQuestion",
-    "InterviewFeedbackBand",
-    "InterviewSession",
-    "InterviewAnswer",
-    # Phase 6 — visa and pre-departure
-    "VisaCase",
-    "VisaStage",
-    "VisaAppointment",
-    "VisaDocumentRequirement",
-    "VisaFee",
-    "DepartureChecklistItem",
-    # Phase 6 — finance
+    "StudentCompareCourse",
+    "StudentDashboardSettings",
+    "StudentEducationHistory",
+    "StudentEnglishTest",
     "StudentFundingSource",
     "StudentLoan",
-    "LoanDocument",
-    "LoanDisbursement",
-    "StudentBudget",
-    "BudgetCategory",
+    "StudentMilestone",
+    "StudentPointsLedger",
+    "StudentProfile",
+    "StudentSavedCourse",
+    "StudentSavedUniversity",
     "StudentSavingsGoal",
-    "CountryCostOfLiving",
-    "CostOfLivingCategory",
-    "CurrencyRate",
-    # Phase 6 — dashboard preferences
-    "StudentDashboardSettings",
-    # Audit
+    "StudentWorkExperience",
+    "Task",
+    "University",
+    "UniversityRoute",
+    "User",
     "UserSession",
-    "ActivityLog",
+    "VisaAppointment",
+    "VisaCase",
+    "VisaDocumentRequirement",
+    "VisaFee",
+    "VisaStage",
+    "WorkflowStage",
+    "WorkflowStageDocumentRequirement",
+    "WorkflowStepActivity",
+    "WorkflowTemplate",
 ]

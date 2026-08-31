@@ -30,6 +30,29 @@ PUBLIC_ENDPOINTS: set[tuple[str, str]] = {
     ("POST", "/api/v1/auth/login"),
     ("POST", "/api/v1/auth/register"),
     ("POST", "/api/v1/auth/refresh"),
+    # The public catalogue (CATALOGUE-CMS-PLAN.md §6). Ignition-Landing has no
+    # account and no session, so the data behind the marketing site has to be
+    # readable without a token. Every one of these is a GET, serves only
+    # `is_published` records, and clamps `limit` — see app/routes/public.py.
+    ("GET", "/api/v1/public/universities"),
+    ("GET", "/api/v1/public/universities/{slug}"),
+    ("GET", "/api/v1/public/courses"),
+    ("GET", "/api/v1/public/courses/facets"),
+    ("GET", "/api/v1/public/course-profiles"),
+    ("GET", "/api/v1/public/course-profiles/{slug}"),
+    ("GET", "/api/v1/public/scholarships"),
+    ("GET", "/api/v1/public/content"),
+    ("GET", "/api/v1/public/content/{key}"),
+    ("GET", "/api/v1/public/posts"),
+    ("GET", "/api/v1/public/posts/{slug}"),
+    ("GET", "/api/v1/public/taxonomies"),
+    # The one public endpoint that writes. It creates a lead from a stranger's
+    # own details, which is the point of the feature — a form that required an
+    # account before telling someone whether they qualify would not be used.
+    # Rate-limited (ELIGIBILITY_RATE_LIMIT), validated field by field, and its
+    # response is deliberately narrower than what it stores: no lead id, no
+    # internal reasoning. See app/routes/public.py.
+    ("POST", "/api/v1/public/eligibility"),
 }
 
 #: FastAPI's own docs routes, which are disabled in production by `main.py`.
@@ -101,8 +124,20 @@ def test_every_endpoint_declares_an_auth_dependency() -> None:
     )
 
 
+#: A route is unauthenticated either because nothing guards it, or because it
+#: is marked `require_public`. The marker exists so the *first* case stays a
+#: build failure — an endpoint that simply forgot its dependency — while a
+#: deliberate one still declares itself from `app.api.auth`. Both land here,
+#: because to a caller without a token the two are indistinguishable.
+_UNAUTHENTICATED_LEVELS = {"public"}
+
+
+def _is_public(levels: set[str]) -> bool:
+    return not levels or levels <= _UNAUTHENTICATED_LEVELS
+
+
 def test_the_public_surface_is_exactly_what_we_intend() -> None:
-    actual_public = {(method, path) for method, path, levels in _endpoints() if not levels}
+    actual_public = {(method, path) for method, path, levels in _endpoints() if _is_public(levels)}
 
     newly_public = actual_public - PUBLIC_ENDPOINTS
     assert not newly_public, (

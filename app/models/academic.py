@@ -23,10 +23,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..db.base import Base
 from ..db.mixins import TimestampMixin, UUIDPKMixin
 from ..db.types import enum_type
-from .enums import DegreeLevel
+from .enums import CourseLevel, CourseSubject, DegreeLevel, UkRegion
 
 if TYPE_CHECKING:
     from .application import Application
+    from .catalogue import CourseProfile, Scholarship, UniversityRoute
 
 # The catalog is global. In ED360 these four tables were the only tenant-free
 # ones and that was the right call — a university is a fact about the world, not
@@ -95,8 +96,68 @@ class University(Base, UUIDPKMixin, TimestampMixin):
     campus_type: Mapped[str | None] = mapped_column(String(50))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
+    # --- Public catalogue (CATALOGUE-CMS-PLAN.md §5.1) ------------------------
+    # One catalogue, not two: these columns extend the table the counsellors
+    # already use rather than creating a parallel `public_universities`. That
+    # is what closes the slug-vs-UUID gap described in HANDOFF.md.
+    #
+    # Field names map 1:1 onto `Ignition-Landing/data/universities/types.ts`
+    # (snake_case here, camelCase there). Almost all are nullable, and that is
+    # the contract rather than laziness: the public site hides every section
+    # whose field is absent, so a university with no rankings must produce *no
+    # rankings key at all* — see the `exclude_none` note in the schemas.
+    slug: Mapped[str | None] = mapped_column(String(160), unique=True)
+    region: Mapped[UkRegion | None] = mapped_column(enum_type(UkRegion, "uk_region", create_type=False))
+    tagline: Mapped[str | None] = mapped_column(String(300))
+    overview: Mapped[str | None] = mapped_column(Text)
+    student_experience: Mapped[str | None] = mapped_column(Text)
+    careers_text: Mapped[str | None] = mapped_column(Text)
+    tuition_min: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    tuition_max: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    living_cost_monthly: Mapped[float | None] = mapped_column(Numeric(10, 2))
+    accommodation: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    entry: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    placement_year: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    international_support: Mapped[list[str] | None] = mapped_column(JSONB)
+    facilities: Mapped[list[str] | None] = mapped_column(JSONB)
+    #: Denormalised from this university's offerings; recomputed on import.
+    subjects: Mapped[list[str] | None] = mapped_column(JSONB)
+    monogram: Mapped[str | None] = mapped_column(String(3))
+    founded: Mapped[str | None] = mapped_column(String(20))
+    kind: Mapped[str | None] = mapped_column(String(100))
+    campus: Mapped[str | None] = mapped_column(String(200))
+    student_population: Mapped[str | None] = mapped_column(String(50))
+    international_students: Mapped[str | None] = mapped_column(String(120))
+    student_staff_ratio: Mapped[str | None] = mapped_column(String(20))
+    history: Mapped[list[str] | None] = mapped_column(JSONB)
+    milestones: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    # Nothing queries or joins on these, and the `faculties` / `highlights`
+    # columns above already settled that argument for this table.
+    rankings: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    awards: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    employability: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    interview_profile: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    imagery: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    flyer_url: Mapped[str | None] = mapped_column(Text)
+    #: Visible on the public site. Distinct from `is_active`, which means
+    #: selectable in an application: a half-written marketing record must not
+    #: appear in a counsellor's dropdown, and an inactive partner must not
+    #: vanish from a public page mid-cycle.
+    is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    #: Drives the site's "Example data" badge per record, so imported
+    #: universities lose it and anything still fictional keeps it.
+    is_example: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
     country: Mapped[Country] = relationship(back_populates="universities")
     programs: Mapped[list[Program]] = relationship(
+        back_populates="university",
+        cascade="all, delete-orphan",
+    )
+    routes: Mapped[list[UniversityRoute]] = relationship(
+        back_populates="university",
+        cascade="all, delete-orphan",
+    )
+    scholarships: Mapped[list[Scholarship]] = relationship(
         back_populates="university",
         cascade="all, delete-orphan",
     )
@@ -105,6 +166,8 @@ class University(Base, UUIDPKMixin, TimestampMixin):
         Index("idx_universities_country_id", "country_id"),
         Index("idx_universities_name", "name"),
         Index("idx_universities_is_active", "is_active"),
+        Index("idx_universities_slug", "slug"),
+        Index("idx_universities_is_published", "is_published"),
     )
 
     def __repr__(self) -> str:
@@ -141,7 +204,40 @@ class Program(Base, UUIDPKMixin, TimestampMixin):
     course_type: Mapped[str | None] = mapped_column(String(50))
     image_url: Mapped[str | None] = mapped_column(Text)
 
+    # --- Public catalogue (CATALOGUE-CMS-PLAN.md §5.3) ------------------------
+    # A `Program` is one university's offering of a course — ~4,300 of them.
+    # `course_profile_id` links it to the editorial explainer for that subject
+    # where one exists; an unmapped offering still appears in search, because
+    # the link is an enhancement and never a gate.
+    slug: Mapped[str | None] = mapped_column(String(200), unique=True)
+    course_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("course_profiles.id", ondelete="SET NULL"),
+    )
+    route_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("university_routes.id", ondelete="SET NULL"),
+    )
+    subject: Mapped[CourseSubject | None] = mapped_column(enum_type(CourseSubject, "course_subject", create_type=False))
+    #: What the course is. `degree_level` above stays: it is what an
+    #: application is made at, and the two vocabularies serve different
+    #: consumers. Derived from this one on import; do not merge them.
+    course_level: Mapped[CourseLevel | None] = mapped_column(enum_type(CourseLevel, "course_level", create_type=False))
+    qualification: Mapped[str | None] = mapped_column(String(60))
+    #: The branch string verbatim — "London/Manchester". Six institutions list
+    #: a branch campus rather than their home city, so this is not a place to
+    #: derive the university's own city from.
+    campus: Mapped[str | None] = mapped_column(String(120))
+    duration_years: Mapped[float | None] = mapped_column(Numeric(3, 1))
+    placement: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    extra_requirements: Mapped[str | None] = mapped_column(Text)
+    #: "lower" | "upper" | NULL — preserves the spreadsheet's tier grouping so
+    #: the fee prose stays authoritative.
+    fee_tier: Mapped[str | None] = mapped_column(String(20))
+    is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    is_example: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
     university: Mapped[University] = relationship(back_populates="programs")
+    course_profile: Mapped[CourseProfile | None] = relationship(back_populates="programs")
+    route: Mapped[UniversityRoute | None] = relationship(back_populates="programs")
     intakes: Mapped[list[Intake]] = relationship(
         back_populates="program",
         cascade="all, delete-orphan",
@@ -152,6 +248,10 @@ class Program(Base, UUIDPKMixin, TimestampMixin):
         Index("idx_programs_university_id", "university_id"),
         Index("idx_programs_name", "name"),
         Index("idx_programs_is_active", "is_active"),
+        Index("idx_programs_slug", "slug"),
+        Index("idx_programs_subject", "subject"),
+        Index("idx_programs_course_level", "course_level"),
+        Index("idx_programs_is_published", "is_published"),
     )
 
     def __repr__(self) -> str:

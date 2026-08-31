@@ -14,11 +14,19 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import ActivityLog, ApplicationChecklistItem, Notification
-from ..models.enums import ActivityType, ChecklistItemStatus, NotificationType
+from ..models import ActivityLog, ApplicationChecklistItem, Lead, LeadActivity, Notification, User
+from ..models.enums import (
+    ActivityType,
+    ChecklistItemStatus,
+    ConversionSource,
+    LeadActivityType,
+    LeadSource,
+    LeadStatus,
+    NotificationType,
+)
 from ..services.progress_service import PointsService, ProgressService
 from ..services.staff_resolution import resolve_responsible_staff_ids
 from .cache import invalidate_dashboard_cache
@@ -32,6 +40,7 @@ from .events import (
     Event,
     InterviewCompleted,
     PaymentCompleted,
+    StudentCreated,
     TaskAssigned,
     event_bus,
 )
@@ -319,6 +328,84 @@ async def invalidate_dashboard_on_interview_completed(event: InterviewCompleted,
     await invalidate_dashboard_cache(event.student_id)
 
 
+# --- Lead coverage ------------------------------------------------------------
+
+
+async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncSession) -> None:
+    """Make sure every student account has a lead behind it.
+
+    The admin console works one pipeline: raw lead -> prospect -> client. A student
+    who signs up on the public portal never passed through it, so before this
+    existed they were reachable only through Users & Staff, which is admin-only —
+    a counsellor answering their call could not open them at all.
+
+    **Link before insert.** `leads.email` carries a unique index where the address
+    is not null, so an insert for an address a lead already holds would fail. It
+    would also be wrong: someone who filled in the eligibility form and *then*
+    registered is one person, and this joins the two records rather than making a
+    second one.
+
+    Conversion here is a statement of fact, not of sales progress — they already
+    have an account — so it records `registration_completed` as the source.
+    """
+    result = await session.execute(select(Lead).where(Lead.email == event.email))
+    lead = result.scalar_one_or_none()
+
+    if lead is not None:
+        if lead.converted_user_id is not None:
+            return
+        old_status = lead.status
+        lead.converted_user_id = event.student_id
+        lead.status = LeadStatus.CONVERTED
+        lead.converted_at = event.occurred_at
+        if lead.conversion_source is None:
+            lead.conversion_source = ConversionSource.REGISTRATION_COMPLETED
+        session.add(
+            LeadActivity(
+                lead_id=lead.id,
+                activity_type=LeadActivityType.CONVERTED,
+                title="Registered on the portal",
+                description="They created their own student account, so this lead is now a client.",
+                old_status=old_status,
+                new_status=LeadStatus.CONVERTED,
+            )
+        )
+        await session.commit()
+        logger.info("Linked lead %s to self-registered student %s", lead.id, event.student_id)
+        return
+
+    user = (await session.execute(select(User).where(User.id == event.student_id))).scalar_one_or_none()
+    if user is None:  # pragma: no cover - the row was just committed by the caller
+        return
+
+    new_lead = Lead(
+        first_name=user.first_name,
+        last_name=user.last_name or None,
+        email=user.email,
+        # `leads.phone` is NOT NULL and must be non-blank; self-signup does not
+        # require one. Saying so is better than inventing a number.
+        phone=(user.phone or "").strip() or "not provided",
+        source=LeadSource.WEBSITE,
+        status=LeadStatus.CONVERTED,
+        converted_user_id=user.id,
+        converted_at=event.occurred_at,
+        conversion_source=ConversionSource.REGISTRATION_COMPLETED,
+    )
+    session.add(new_lead)
+    await session.flush()
+    session.add(
+        LeadActivity(
+            lead_id=new_lead.id,
+            activity_type=LeadActivityType.LEAD_CREATED,
+            title="Signed up on the portal",
+            description="Created automatically so the student is reachable from the Leads pipeline.",
+            new_status=LeadStatus.CONVERTED,
+        )
+    )
+    await session.commit()
+    logger.info("Created lead %s for self-registered student %s", new_lead.id, event.student_id)
+
+
 def register_subscribers() -> None:
     """Wire every subscriber. Idempotent — safe to call more than once.
 
@@ -337,6 +424,7 @@ def register_subscribers() -> None:
     event_bus.subscribe(DocumentUploaded, log_document_upload)
     event_bus.subscribe(DocumentUploaded, notify_reviewers_of_upload)
     event_bus.subscribe(AppointmentScheduled, notify_about_appointment)
+    event_bus.subscribe(StudentCreated, link_or_create_lead_for_student)
 
     # Phase 6 modules ride the same events.
     event_bus.subscribe(DocumentApproved, advance_progress_on_document)

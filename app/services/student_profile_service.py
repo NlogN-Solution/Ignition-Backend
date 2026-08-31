@@ -4,11 +4,11 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.deps import get_db_session
-from ..models import StudentEducationHistory, StudentProfile, StudentWorkExperience
+from ..models import Program, StudentEducationHistory, StudentProfile, StudentWorkExperience, University
 from .partial_update import reject_null_on_required
 
 
@@ -50,6 +50,100 @@ class StudentProfileService:
         await self.session.commit()
         await self.session.refresh(profile)
         return profile
+
+    # --- Research shortlist ---------------------------------------------------
+
+    async def research_shortlist(self, profile: StudentProfile) -> dict[str, Any]:
+        """Resolve the student's public-site research against the real catalogue.
+
+        Until the catalogue import, this was impossible: the public site's ids
+        were slugs of invented institutions (`example-metropolitan`) and the
+        backend's were UUIDs of separately seeded ones, with no correspondence
+        between them. The handoff therefore travelled as read-only *research
+        context* and a counsellor retyped everything into a new application.
+
+        There is one catalogue now, and the public site's slugs are that
+        catalogue's slugs, so a shortlist resolves to rows a counsellor can act
+        on. Two things this still refuses to do:
+
+        * **It does not resolve a `v1` payload.** Those carry the fictional
+          slugs and were minted before the import; a `v1` id that happens to
+          collide with a real slug would attach a student to an institution
+          they never looked at.
+        * **It does not open anything.** Resolving a name to a row is not
+          consent to apply there. The counsellor still opens the application,
+          against a course they choose, after talking to the student.
+
+        A slug that no longer exists comes back in `unresolved` rather than
+        being dropped, because "they shortlisted something we no longer list"
+        is information, and a silently shorter list is not.
+        """
+        research = (profile.preferences or {}).get("research")
+        if not isinstance(research, dict):
+            return {"catalogue": "none", "universities": [], "unresolved": []}
+
+        # `catalogue` is stamped by the portal from the payload version. Absent
+        # means it predates the stamp, which means it predates the import.
+        catalogue = research.get("catalogue") or "example"
+
+        slugs: list[str] = []
+        for entry in research.get("universities") or []:
+            if isinstance(entry, dict) and isinstance(entry.get("id"), str):
+                slugs.append(entry["id"])
+        for entry in research.get("compared") or []:
+            if isinstance(entry, str):
+                slugs.append(entry)
+
+        # Order-preserving de-duplication: the order is the student's own, and
+        # the first thing they compared is not the same as the last.
+        ordered = list(dict.fromkeys(slugs))
+        if not ordered:
+            return {"catalogue": catalogue, "universities": [], "unresolved": []}
+
+        if catalogue != "live":
+            return {"catalogue": catalogue, "universities": [], "unresolved": ordered}
+
+        rows = (
+            await self.session.execute(
+                # No soft-delete on the catalogue tables — a university is
+                # withdrawn by unpublishing it, and an unpublished one is still
+                # a real institution a counsellor may apply to.
+                select(University).where(University.slug.in_(ordered))
+            )
+        ).scalars().all()
+        by_slug = {row.slug: row for row in rows}
+
+        count_rows = (
+            await self.session.execute(
+                select(Program.university_id, func.count(Program.id))
+                .where(
+                    Program.university_id.in_([row.id for row in rows]),
+                    Program.is_published.is_(True),
+                )
+                .group_by(Program.university_id)
+            )
+        ).all()
+        counts: dict[UUID, int] = dict(count_rows)  # type: ignore[arg-type]
+
+        universities = [
+            {
+                "slug": slug,
+                "id": by_slug[slug].id,
+                "name": by_slug[slug].name,
+                "city": by_slug[slug].city,
+                "region": by_slug[slug].region,
+                "is_published": by_slug[slug].is_published,
+                "course_count": counts.get(by_slug[slug].id, 0),
+            }
+            for slug in ordered
+            if slug in by_slug
+        ]
+
+        return {
+            "catalogue": catalogue,
+            "universities": universities,
+            "unresolved": [slug for slug in ordered if slug not in by_slug],
+        }
 
     # --- Education history ----------------------------------------------------
 

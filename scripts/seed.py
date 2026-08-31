@@ -424,7 +424,7 @@ WORKFLOW_STAGES = [
     ("apply", "University Application"),
     ("offer", "Offer & Acceptance"),
     ("visa", "Visa Application"),
-    ("predeparture", "Pre-departure"),owner@ignition.example.co
+    ("predeparture", "Pre-departure"),
 ]
 
 

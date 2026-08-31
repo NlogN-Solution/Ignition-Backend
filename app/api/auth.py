@@ -86,6 +86,25 @@ def require_role(*roles: UserRole | str) -> Callable[..., Awaitable[User]]:
     return _marks_auth(dependency, f"roles:{','.join(sorted(allowed))}")
 
 
+async def require_public() -> None:
+    """Declares an endpoint deliberately reachable without a token.
+
+    This grants nothing and checks nothing — it exists so that the public
+    catalogue routes still carry a marker from this module, and
+    `test_every_endpoint_declares_an_auth_dependency` keeps passing
+    structurally rather than being bypassed with an exemption list.
+
+    The second test, `test_public_endpoints_are_exactly_the_declared_set`, is
+    the one that actually holds the line: every route using this must also be
+    named in `PUBLIC_ENDPOINTS`, so a new unauthenticated endpoint cannot be
+    added quietly.
+    """
+    return None
+
+
+_marks_auth(require_public, "public")
+
+
 async def require_owner(user: User = Depends(get_current_user)) -> User:
     """super_admin only, with no role-list bypass.
 

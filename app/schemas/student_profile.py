@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -123,3 +123,37 @@ class StudentWorkExperienceRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class ResearchUniversity(BaseModel):
+    """One shortlisted institution, resolved to a row a counsellor can act on."""
+
+    slug: str
+    id: UUID
+    name: str
+    city: str | None = None
+    region: str | None = None
+    is_published: bool
+    #: Published offerings, so the counsellor knows whether there is anything
+    #: to pick from before opening the application dialog.
+    course_count: int = 0
+
+
+class ResearchShortlist(BaseModel):
+    """A student's public-site shortlist, against the real catalogue.
+
+    `catalogue` says which world the ids came from:
+
+    * ``live`` — the shared catalogue. The slugs resolve and the shortlist is
+      actionable.
+    * ``example`` — a handoff minted before the catalogue import, carrying
+      slugs of the fictional institutions. Nothing is resolved; the names stay
+      readable in the profile as context, and that is all they ever were.
+    * ``none`` — this student did not arrive from the public site.
+    """
+
+    catalogue: Literal["live", "example", "none"]
+    universities: list[ResearchUniversity] = []
+    #: Slugs that did not resolve — either the record is gone, or the handoff
+    #: predates the import. Reported rather than dropped: "they shortlisted
+    #: something we no longer list" is information.
+    unresolved: list[str] = []

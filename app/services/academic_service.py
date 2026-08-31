@@ -121,6 +121,41 @@ class UniversityService(CatalogService[University]):
     model = University
     order_by_field = "name"
 
+    #: What `Ignition-Landing/data/universities/types.ts` declares
+    #: non-optional. Everything else on a university page hides itself when
+    #: absent, so a gap is a missing section; these four are read
+    #: unconditionally, so a gap is a runtime hole on the live site.
+    PUBLISH_REQUIRED: ClassVar[tuple[str, ...]] = ("slug", "name", "city", "region", "tagline", "overview")
+
+    def _guard_publish(self, entity: University | None, data: dict[str, Any]) -> None:
+        """Refuse to publish a record the public site cannot render.
+
+        Checked against the *resulting* state rather than the payload, so a
+        PATCH that only flips `is_published` is still validated against what
+        the row already holds. The admin console enforces the same rule in its
+        zod schema; this is the half that a direct API call cannot skip.
+        """
+        publishing = data.get("is_published", getattr(entity, "is_published", False))
+        if not publishing:
+            return
+        missing = [
+            field
+            for field in self.PUBLISH_REQUIRED
+            if not (data[field] if field in data else getattr(entity, field, None))
+        ]
+        if missing:
+            raise BadRequestException(
+                "Cannot publish a university without: " + ", ".join(missing)
+            )
+
+    async def create(self, data: dict[str, Any]) -> University:
+        self._guard_publish(None, data)
+        return await super().create(data)
+
+    async def update(self, entity: University, data: dict[str, Any]) -> University:
+        self._guard_publish(entity, data)
+        return await super().update(entity, data)
+
     async def list(
         self,
         page: int,

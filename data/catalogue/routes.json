@@ -1,0 +1,2413 @@
+[
+  {
+    "university_slug": "york-st-john",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "Academic Criteria:12th Grade GPA 2.7 or 70% or above Foundation: 12th Grade 2.5 or 65%",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band (Journalism BA (Hons) 7.5) PTE: 59 overall / 59 in each band SELT: B2 DUOLINGO: 105, READING: 100, (SPEAKING, WRITING, LISTENING 95) LANGUAGECERT ACADEMIC COMP 60 OVERALL MIN 65 OXFORD ELLT: 6 overall / 5 in each band",
+    "english_waiver": "N/A",
+    "fee_structure": "LOWER TIER COURSES: £12,100 £2,420 extra for placement year UPPER TIER COURSES:£14,900 Placement Year: £2,980",
+    "scholarship_text": "£1,000 (for the first year only)",
+    "gap_policy": "2023 Onwards",
+    "cas_deposit": "50% of tuition",
+    "enrolment_fee": "Full fee",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        2420.0,
+        2980.0,
+        12100.0,
+        14900.0
+      ],
+      "min": 2420.0,
+      "max": 14900.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "york-st-john",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "Tribhuvan University- 45% OR 2:2 OR Second Division Purbanchal University- 2.5 GPA OR 2:2 OR Second Division Pokhara University- 2.3 GPA OR 2:2 OR Second Division Kathmandu University- 55% OR GPA 2.3 OR Second Division Far Western University- 2.5 CGPA OR 2:2 OR Second Division Midwest University- 2.5 CGPA OR 2:2 OR Second Division Lumbini Buddhist University- 2.7 GPA",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band SELT: B2 DUOLINGO: 105, READING: 100, (SPEAKING, WRITING, LISTENING 95) LANGUAGECERT ACADEMIC COMP 60 OVERALL MIN 65 Apply without Ielts if Graduates from UK Uni / TNE partner OXFORD ELLT: 6 overall / 5 in each band",
+    "english_waiver": "Tribhuvan University - 60 % OR GPA B OR First Division Purbanchal University - 3.0 GPA OR First Division Pokhara University - 3.0 GPA OR First Division Kathmandu University - 3.0 GPA OR 65 % OR First Division Far Western University - 3.0 CGPA OR First Division Mid - West University - 3.0 CGPA OR First Division Lumbini Buddhist University- 3.0 CGPA Graduates from UK Uni / TNE partner MOI VALID FROM 2020 ONWARDS",
+    "fee_structure": "MBA: £12,000 MSc Courses: £11,800 Placement Year: £3,600",
+    "scholarship_text": "5% EARLY PAYMENT DISCOUNT If full fees paid.",
+    "gap_policy": "Considered",
+    "cas_deposit": "50% of tuition",
+    "enrolment_fee": "Installment Payment Plan Provided",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        3600.0,
+        11800.0,
+        12000.0
+      ],
+      "min": 3600.0,
+      "max": 12000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "worcester",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th GRADE: 2.4 GPA OR 60%",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band SELT:B2",
+    "english_waiver": "Grade 12th English overall Grade B",
+    "fee_structure": "£17,200",
+    "scholarship_text": "2.4 GPA or 60% - £1000 per year 2.6 GPA or 65% - £2000 per year 2.8 GPA or 70% - £3000 per year",
+    "gap_policy": "Gap- 2019 Onwards",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17200.0
+      ],
+      "min": 17200.0,
+      "max": 17200.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "worcester",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3 or 4 Year's Bachelor's Degree 55% or above",
+    "english_criteria": "IELTS: 6.5 overall /5.5 in each band PTE: 63 overall /63 in each band SELT:B2 with Merit",
+    "english_waiver": "Grade 12th English overall Grade B",
+    "fee_structure": "£18,400",
+    "scholarship_text": "55% - £2000 60% - £3000",
+    "gap_policy": "Gap- Acceptable",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18400.0
+      ],
+      "min": 18400.0,
+      "max": 18400.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "worcester",
+    "route_key": "mres",
+    "label": "MRES",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "3 or 4 Years Bachelor's: 60% or above",
+    "english_criteria": "IELTS: 6.5 overall /5.5 in each band (Writing 6) PTE: 63 overall /63 in each band SELT:B2 with Merit",
+    "english_waiver": "N/A",
+    "fee_structure": "£18,400",
+    "scholarship_text": "£3000",
+    "gap_policy": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18400.0
+      ],
+      "min": 18400.0,
+      "max": 18400.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "worcester",
+    "route_key": "nursing",
+    "label": "NURSING",
+    "is_published": true,
+    "display_order": 3,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or CGPA 2.4 12th Mathematics: 50% or C+ or Above (If no Math in 12th -> 10th Math: 50% or 2.6 GPA or C+) PCL Nursing: 60% or CGPA 2.4 (10th Mathematics 50% or C+ or above) (Foundation year any background in 12th Grade can apply)",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band SELT:B2",
+    "english_waiver": "N/A",
+    "fee_structure": "£17,200 per year",
+    "scholarship_text": "2.4 GPA or 60% - £1000 per year 2.6 GPA or 65% - £2000 per year 2.8 GPA or 70% - £3000 per year",
+    "gap_policy": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17200.0
+      ],
+      "min": 17200.0,
+      "max": 17200.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "east-london",
+    "route_key": "undergraduate",
+    "label": "DIRECT UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 2.8 or 60% or Above AND, 12th Grade Math: 50% (2.4 GPA or C+) If no Math in 12th-> 10th Grade Math: 60% (2.8 GPA or B)",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band SELT: B2",
+    "english_waiver": "Grade 12th Grade English overall Grade B",
+    "fee_structure": "£16,020/-",
+    "scholarship_text": "£2,000 scholarship for each year (1st, 2nd & 3rd year) Total Scholarship: £6,000",
+    "cas_deposit": "50% for CAS",
+    "enrolment_fee": "60% for enrolment (remaining fees within 3-4 months)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16020.0
+      ],
+      "min": 16020.0,
+      "max": 16020.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "east-london",
+    "route_key": "international_year_one",
+    "label": "INTERNATIONAL YEAR ONE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 2.4 to 2.79 AND 12th Grade Math: 40% (GPA 2.0+) if no maths in 12th, 10th Grade Maths 50% (2.4 GPA or C+)",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band PTE: 59 overall / 59 in each band SELT: B2",
+    "english_waiver": "Grade 12th Grade English overall Grade B",
+    "fee_structure": "£16,020/-",
+    "scholarship_text": "Automatic scholarship of £2,000 each year",
+    "cas_deposit": "50% for CAS",
+    "enrolment_fee": "60% for enrolment (remaining fees within 3-4 months)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16020.0
+      ],
+      "min": 16020.0,
+      "max": 16020.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "east-london",
+    "route_key": "international_foundation_year",
+    "label": "INTERNATIONAL FOUNDATION YEAR",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 2.0 to 2.39 AND 12th Grade Math: 50% (2.4 GPA or C+) If no Math in 12th -> 10th Grade Math: 50% (2.4 GPA or C+)",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band PTE: 59 overall / 59 in each band SELT: B2",
+    "english_waiver": "Grade 12th Grade English overall Grade B",
+    "fee_structure": "£16,020/-",
+    "scholarship_text": "Automatic scholarship of £2,000 each year",
+    "cas_deposit": "50% for CAS",
+    "enrolment_fee": "60% for enrolment (remaining fees within 3-4 months)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16020.0
+      ],
+      "min": 16020.0,
+      "max": 16020.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "east-london",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 3,
+    "applicant_country": "NP",
+    "academic_criteria": "4 years Bachelor’s Degree : 55% or Above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band SELT: B2",
+    "english_waiver": "Grade 12th English overall Grade B OR MOI is also acceptable",
+    "fee_structure": "MBA : £19,500/- MSc Courses: £16,980/- to £18,900/-",
+    "scholarship_text": "£3000/-",
+    "cas_deposit": "50% for CAS",
+    "enrolment_fee": "60% for enrolment (remaining fees within 3-4 months)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16980.0,
+        18900.0,
+        19500.0
+      ],
+      "min": 16980.0,
+      "max": 19500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "west-london",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade:65% or above / GPA 2.6 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 51 overall / 51 in each band DUOLINGO: 105 overal /100 in each band",
+    "fee_structure": "£16,750",
+    "scholarship_text": "Up to £2,000​ for each year",
+    "gap_policy": "Undergraduate: 2022 or later pass out",
+    "cas_deposit": "£10000- £12000",
+    "enrolment_fee": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16750.0
+      ],
+      "min": 16750.0,
+      "max": 16750.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "west-london",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4 Years Bachelor's Degree: At least 55% For MBA: Bachelor’s: First Class or above 60%- No work experience needed Bachelor’s: 55% + Minimum 2 yrs. Work Experience certificates",
+    "english_criteria": "IELTS: 6.5 overall / 5.5 in each band PTE: 58 overall / 51 in each band DUOLINGO: 120 overal / 100 in each band",
+    "fee_structure": "£17250 MBA: £19,000",
+    "scholarship_text": "£3500/- To qualify for scholarship applicants needs to pay £10,000 before 3 July 2026",
+    "gap_policy": "Enhanced / Extended Masters: Up To 10 Years Gap Accepted Postgraduate: Up To 10 Years Gap Accepted with Work Experience",
+    "cas_deposit": "£10000- £12000",
+    "enrolment_fee": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17250.0,
+        19000.0
+      ],
+      "min": 17250.0,
+      "max": 19000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "west-london",
+    "route_key": "extended_masters",
+    "label": "EXTENDED MASTERS / ENHANCED EXTENDED MASTERS",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "EXTENDED MASTERS\n\n3 or 4 Years' Bachelor's Degree: Any %\n\nENHANCED EXTENDED MASTERS\n\n3 or 4 Years Bachelor’s: Any %",
+    "english_criteria": "EXTENDED MASTERS\n\nIELTS: 6.5 overall / 5.5 in each band PTE: 58 overall / 51 in each band DUOLINGO: 120 overal / 100 in each band\n\nENHANCED EXTENDED MASTERS\n\nIELTS: 6 overall / 5.5 in each band PTE: 56 overall / 51 in each band DUOLINGO: 105 overal / 100 in each band",
+    "fee_structure": "EXTENDED MASTERS\n\nEXTENDED MASTERS: £19000\n\nENHANCED EXTENDED MASTERS\n\nENHANCED EXTENDED MASTERS: £21,000 ENHANCED EXTENDED MBA: £21,500",
+    "scholarship_text": "EXTENDED MASTERS\n\n£3500/- To qualify for scholarship applicants needs to pay £10,000 before 3 July 2026\n\nENHANCED EXTENDED MASTERS\n\n£5000/- To qualify for scholarship applicants needs to pay £10,000 before 3 July 2026.",
+    "gap_policy": "EXTENDED MASTERS\n\nUp To 10 Years Gap Accepted with Work Experience\n\nENHANCED EXTENDED MASTERS\n\nUp To 10 Years Gap Accepted with Work Experience",
+    "cas_deposit": "EXTENDED MASTERS\n\n£10000- £12000\n\nENHANCED EXTENDED MASTERS\n\n£10000- £12000",
+    "enrolment_fee": "EXTENDED MASTERS\n\nN/A\n\nENHANCED EXTENDED MASTERS\n\nN/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        19000.0,
+        21000.0,
+        21500.0
+      ],
+      "min": 19000.0,
+      "max": 21500.0,
+      "confidence": "low"
+    },
+    "english_waiver": null,
+    "deadlines": null,
+    "previous_refusal": null
+  },
+  {
+    "university_slug": "university-college-birmingham",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: CGPA 2.8 or Above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Duolingo: 110 overall /100 in each band",
+    "english_waiver": "CGPA 3, is the aggregate of English Theory & Internal. TH + IN = SUM /2 = CGPA 3. ( Accepted Year of Completion 2021 and onwards) Example: Student with 12th Grade English - 2.2 GPA in Theory and 4.0 GPA in Internal Average: (Th + In) / 2 = (2.0+4.0) /2 = 6.0/2 = 3.0 Eligible for English Waiver",
+    "fee_structure": "Undergraduate – Band 1: £16,500/- Undergraduate – Band 3: £19,750/-",
+    "scholarship_text": "Band 1 : £3000/- and additional £500 For full Fee Payment Band 3 : £4000/- and additional £500 For full Fee Payment",
+    "gap_policy": "(Gap Accepted - 5 Years)",
+    "cas_deposit": "50% of the total tuition fee for CAS & enrolment",
+    "enrolment_fee": "Then 2 instalments available",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16500.0,
+        19750.0
+      ],
+      "min": 16500.0,
+      "max": 19750.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "university-college-birmingham",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4-Year Bachelor's Degree: 55% or Above 3-Year Bachelor's Degree: 60% or Above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Duolingo: 110 overall /100 in each band",
+    "english_waiver": "MOI Accepted from: Tribhuwan University Kathmandu University Pokhara University",
+    "fee_structure": "Postgraduate – Band 1: £17,500/- Postgraduate – Band 3: £20,750/- MBA-Band 1 : £17,000/-",
+    "scholarship_text": "Band 1 : £3000/- and additional £500 For full Fee Payment Band 3 : £4000/- and additional £500 For full Fee Payment",
+    "gap_policy": "(Gap Accepted - 10 Years)",
+    "cas_deposit": "50% of the total tuition fee for CAS & enrolment",
+    "enrolment_fee": "Then 2 instalments available For MOI cases: need to make full payment for Enrolment",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17000.0,
+        17500.0,
+        20750.0
+      ],
+      "min": 17000.0,
+      "max": 20750.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "hertfordshire",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade:70% or above / GPA 2.8 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band ( For Nepal specific) PTE: 59 overall / 59 in each band TOEFL: 72 ESOL: B2 SELT: B2 OIETC: B2+ DUOLINGO: 120 overall",
+    "english_waiver": "70% or GPA 2.8 in 12th Grade English",
+    "fee_structure": "£17450/- per year",
+    "scholarship_text": "Up to £2500 Per year £1500 per year + £1000 discount if full tution fee paid",
+    "cas_deposit": "£5000 for CAS",
+    "enrolment_fee": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17450.0
+      ],
+      "min": 17450.0,
+      "max": 17450.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "hertfordshire",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3 Years Bachelor's Degree : 65% or above 4 Years Bachelor's Degree : 60% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band ( For Nepal specific) PTE: 59 overall / 59 in each band TOEFL: 72 ESOL: B2 SELT: B2 OIETC: B2+ DUOLINGO: 120 overall",
+    "english_waiver": "70% or GPA 2.8 in 12th Grade English Medium of Instruction (MOI) Accepted for students who have graduated from selected Indian universities within the last five years, subject to satisfactory communication skills.",
+    "fee_structure": "MBA course: £18,800/- MSc Courses: £19,950/-",
+    "scholarship_text": "Upto £3000 Per year £2000 per year + £1000 discount if full tution fee paid",
+    "cas_deposit": "£5000 for CAS",
+    "enrolment_fee": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18800.0,
+        19950.0
+      ],
+      "min": 18800.0,
+      "max": 19950.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "bedfordshire",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or 2.6 GPA or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band DUOLINGO: 110 overall /100 in each band",
+    "english_waiver": "N/A",
+    "fee_structure": "Standard Undergraduate: £16,900/-",
+    "scholarship_text": "Course Specific £3000/- to £5000/-",
+    "cas_deposit": "65% of the total fee (£3500 to accept the offer)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16900.0
+      ],
+      "min": 16900.0,
+      "max": 16900.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "bedfordshire",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4 Years Bachelor's degree: 55% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band DUOLINGO: 120 overall /105 in each band",
+    "english_waiver": "N/A",
+    "fee_structure": "1 year taught Master's- MA/MSc: £16,900 (total) MBA: £18,000 2 year Master's: £19,900 (total)",
+    "scholarship_text": "Up to £5,000/-",
+    "cas_deposit": "65% of the total fee (£3500 to accept the offer)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16900.0,
+        18000.0,
+        19900.0
+      ],
+      "min": 16900.0,
+      "max": 19900.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "leeds-trinity",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.6 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band DUOLINGO: 105 overall /100 in each band TOEFL IBT - Total (79-89) | Minimum scores: Reading-18, Listening-17, Speaking-20, Writing-17",
+    "english_waiver": "N/A",
+    "fee_structure": "£12,500/- FOR 1 YEAR ; £14,500/- ST FOR 2ND & 3RD YEAR",
+    "scholarship_text": "£2000 for 1st year",
+    "cas_deposit": "50% for CAS letter (25% in 8 weeks and 25% in subsequent 8 weeks)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        12500.0,
+        14500.0
+      ],
+      "min": 12500.0,
+      "max": 14500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "leeds-trinity",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "TRIBHUVAN UNIVERSITY 4 Years Bachelor’s Degree: 45% or above 3 Years Bachelor’s Degree: 50% or above PURBANCHAL UNIVERSITY 4 Years Bachelor’s Degree: 2.5 gpa or 50% or above 3 Years Bachelor’s Degree: 2.7 gpa or 60% or above POKHARA / KATHMANDU UNIVERSITY 4 Years Bachelor’s Degree: 2.3 gpa or 55% or above 3 Years Bachelor’s Degree: 2.5 gpa or 60% or above FAR WESTERN 4 Years Bachelor’s Degree: 2.0 gpa or 50% or above 3 Years Bachelor’s Degree: 2.5 gpa or 60% or above MID- WESTERN UNIVERSITY 4 Years Bachelor’s Degree: 2.0 gpa or 60% or above 3 Years Bachelor’s Degree: 2.5 gpa or 65% or above LUMBINI BUDDHIST UNIVERSITY 4 Years Bachelor’s Degree: 2.7 gpa or above 3 Years Bachelor’s Degree:3.0 gpa or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band DUOLINGO: 105 overall /100 in each band TOEFL IBT - Total (79-89) | Minimum scores: Reading-18, Listening-17, Speaking-20, Writing-17 Oxford Test / Cambridge CI Advanced",
+    "english_waiver": "MOI FROM Far Western University Kathmandu University Lumbini Buddhist University Midwest University Pokhara University Purbanchal University Tribhuvan University \"Please note MOI is not acceptable from affiliated college.”",
+    "fee_structure": "Net Fees: £11,900/- 1 Year Placement Option Avaliable for £3,000/-",
+    "scholarship_text": "£3100",
+    "cas_deposit": "50% for CAS letter (25% in 8 weeks and 25% in subsequent 8 weeks)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        3000.0,
+        11900.0
+      ],
+      "min": 3000.0,
+      "max": 11900.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "arden",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "Level 5 DIPLOMA: 55% OR ABOVE",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "N/A",
+    "fee_structure": "£13,000/- London £12,000/- Manchester",
+    "scholarship_text": "Early Bird Discount of 2500 on top of the available scholarship, if the student is CAS ready by 22 June 2026 (23:59 UK time).",
+    "gap_policy": "4 Years Gap Accepted",
+    "cas_deposit": "UG (Top Up) £7000",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        12000.0,
+        13000.0
+      ],
+      "min": 12000.0,
+      "max": 13000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "arden",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4 Year Bachelor's Degree : 55% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Duolingo: 105 overall / Reading: 100, (Speaking, Writing, Listening 95)",
+    "english_waiver": "MOI Accepted From Tribhuvan University Pokhara University Kathmandu University Mid- Western University Purbanchal University",
+    "fee_structure": "£13,500/- London £12,500/- Manchester Including MBA",
+    "scholarship_text": "Early Bird Discount of 2500 on top of the available scholarship, if the student is CAS ready by 22 June 2026 (23:59 UK time).",
+    "gap_policy": "4 Years Gap Accepted",
+    "cas_deposit": "£7000",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        12500.0,
+        13500.0
+      ],
+      "min": 12500.0,
+      "max": 13500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "creative-arts",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade:65% or above / CGPA 2.6 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "N/A",
+    "fee_structure": "£16,950",
+    "scholarship_text": "£3000 ( £4500 for above 3.2 GPA) £4000 continuation (for 2:2) £1000 EPD if full fees paid before the deadline",
+    "cas_deposit": "50% for CAS",
+    "enrolment_fee": "50% for enrolment",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16950.0
+      ],
+      "min": 16950.0,
+      "max": 16950.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "creative-arts",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3/4 year Bachelor's Degree: 60% or GPA 2.4",
+    "english_criteria": "IELTS: 6.5 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "MOI for Art & Design courses (5 yrs validity) TU, KU. Pokhara Uni only",
+    "fee_structure": "Approx £18,000",
+    "scholarship_text": "£3000 ( £4500 for above 70%) £1000 EPD if full fees paid before the deadline",
+    "cas_deposit": "50% for CAS",
+    "enrolment_fee": "50% for enrolment",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18000.0
+      ],
+      "min": 18000.0,
+      "max": 18000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "buckinghamshire-new",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "Diploma (CTEVT): 60% or above 12th Grade : GPA 2.8 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59/59 (55/51 will also be accepted) TOEFL iBT: 80 overall (L:17, W:17, S:20, R:18) DUOLINGO IS NOT ACCEPTABLE",
+    "english_waiver": "12th English Grade C+ (within last 2 years)",
+    "fee_structure": "£15,910/- per year",
+    "scholarship_text": "1st & 2st Year £1500 each & 3rd year £2000",
+    "gap_policy": "3 years (evidence of relevant work experience will be requested)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        15910.0
+      ],
+      "min": 15910.0,
+      "max": 15910.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "buckinghamshire-new",
+    "route_key": "nursing",
+    "label": "NURSING",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade:70% or above / GPA 3.2 or above PCL / Diploma CTEVT: 70% or above with English, Maths and Science: C+ in Grade 10",
+    "english_criteria": "IELTS: 6.0 overall / 6.0 in each band",
+    "english_waiver": "12th English Grade B (within last 2 years)",
+    "fee_structure": "£15,910/- per year",
+    "scholarship_text": "1st & 2st Year £1500 each & 3rd year £2000",
+    "gap_policy": "3 years (evidence of relevant work experience will be requested)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        15910.0
+      ],
+      "min": 15910.0,
+      "max": 15910.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "buckinghamshire-new",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "4 Years Bachelor’s Degree: 50% or above (Double Master’s accepted)",
+    "english_criteria": "IELTS: 6.5 overall / 6.0 in each band PTE: 59 overall / 59 in each band (55/51 will also be accepted) TOEFL iBT: 88 overall (L:17, W:17, S:20, R:18) DUOLINGO IS NOT ACCEPTABLE.",
+    "english_waiver": "12th English Grade B+ (2016 Onwards) MOI Exemption also available: Tribhuvan University Kathmandu University Pokhara University",
+    "fee_structure": "IMBA: £19,950/- Other PG Courses: £16,280/",
+    "scholarship_text": "IMBA: £5000/- Other PG courses up to £3,000",
+    "gap_policy": "10 years accepted (evidence of relevant work experience will be requested)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16280.0,
+        19950.0
+      ],
+      "min": 16280.0,
+      "max": 19950.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "middlesex",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 55% or above/ CGPA 2.6 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "12th Grade English: CGPA 2.8 or B",
+    "fee_structure": "£17,200/-",
+    "scholarship_text": "Upto £2500",
+    "gap_policy": "Considered with experience",
+    "cas_deposit": "50% for CAS of the gross tuition fee",
+    "enrolment_fee": "(Scholarship is for 2nd term payment)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17200.0
+      ],
+      "min": 17200.0,
+      "max": 17200.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "middlesex",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4 years Bachelor's Degree: 60% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "UK degree studied in Nepal 12th Grade English 2.8 or B",
+    "fee_structure": "MA/MSc: £19,800 MBA: £22,500",
+    "scholarship_text": "Upto £2500",
+    "gap_policy": "Considered with experience",
+    "cas_deposit": "50% for CAS of the gross tuition fee",
+    "enrolment_fee": "(Scholarship is for 2nd term payment)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        19800.0,
+        22500.0
+      ],
+      "min": 19800.0,
+      "max": 22500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "regent-college-london",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 55% or above / GPA 2.6 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Duolingo: 110 overall / 100 in each band ESOL: 33/25",
+    "english_waiver": "12th Grade English 60% or above (GPA 2.8) India: 12th Grade English 70% or above (GPA 2.8)",
+    "fee_structure": "£17500 ( After Bursary £12500 year one only and Y2 and Y3 £13500)",
+    "scholarship_text": "Upto £5000 year one only",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        12500.0,
+        13500.0,
+        17500.0
+      ],
+      "min": 12500.0,
+      "max": 17500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "regent-college-london",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4 years Bachelor’s Degree with 60% or above.",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Duolingo: 110 overall / 100 in each band ESOL: 33/25",
+    "english_waiver": "12th Grade English 60% or above (GPA 2.8) India: 12th Grade English 70% or above (GPA 2.8)",
+    "fee_structure": "£17500 (After Bursary. £12500)",
+    "scholarship_text": "£5000",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        12500.0,
+        17500.0
+      ],
+      "min": 12500.0,
+      "max": 17500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "plymouth",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.8 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band Duolingo: 105 overall / 100 in each band",
+    "fee_structure": "£17,600",
+    "scholarship_text": "Upto GPA 2.8 - £1500/- (1st Year) Above GPA 2.8 - £3500/-",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17600.0
+      ],
+      "min": 17600.0,
+      "max": 17600.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "plymouth",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4 years Bachelor Degree or master's degree with a GPA 3.3 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band Duolingo: 120 overall / 105 in each band",
+    "fee_structure": "£18,150",
+    "scholarship_text": "Upto GPA 3.3 - £1500/- Above GPA 3.3 - £3500/-",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18150.0
+      ],
+      "min": 18150.0,
+      "max": 18150.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "wolverhampton",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 55% or above / CGPA 2.2 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band DUOLINGO: 110 overall / 100 in each band",
+    "english_waiver": "B grade / 65% in Grade 12 English or UK degree",
+    "fee_structure": "£17,600",
+    "scholarship_text": "£1,000 for everyone Up to £4,000 (CGPA 2.9+) £3,000 regional (apply separately) £500 if 50% fee paid 4 weeks before CAS £1,000 for early full fee payment",
+    "gap_policy": "Considered",
+    "cas_deposit": "50% for CAS",
+    "enrolment_fee": "first payment at 8 weeks and next payment at next semester at 8 weeks",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17600.0
+      ],
+      "min": 17600.0,
+      "max": 17600.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "wolverhampton",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3- or 4- Year Bachelor's Degree: 55% or above",
+    "english_criteria": "IELTS: 6.5 overall / 5.5 in each band PTE: 65 overall / 59 in each band DUOLINGO: 120 overall /110 in each band",
+    "english_waiver": "B / 70% in 12th Grade English or UK degree",
+    "fee_structure": "Approx. £18,645",
+    "scholarship_text": "£1,500 (75%) £2,000 (80%) £500 early CAS payment £1,000 full fee payment CAS Deposit: £8,000 (installments available)",
+    "gap_policy": "Considered",
+    "cas_deposit": "N/A",
+    "enrolment_fee": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18645.0
+      ],
+      "min": 18645.0,
+      "max": 18645.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "wolverhampton",
+    "route_key": "nursing",
+    "label": "BNURS(ADULT NURSING)",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade Science Background with 65% or above GCSE Math: Minimum 2.4 (C+)",
+    "english_criteria": "IELTS: 6.5 overall /6 in each band",
+    "english_waiver": "IELTS waiver is not accepted",
+    "fee_structure": "• Total Tuition Fee: £18,000 • Minimum Deposit Required: £8,000 • Remaining Balance: £10,000",
+    "scholarship_text": "N/A",
+    "gap_policy": "Considered",
+    "cas_deposit": "N/A",
+    "enrolment_fee": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        8000.0,
+        10000.0,
+        18000.0
+      ],
+      "min": 8000.0,
+      "max": 18000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "wolverhampton",
+    "route_key": "mres",
+    "label": "MRES - No Longer Available for Sep 2026",
+    "is_published": false,
+    "display_order": 3,
+    "applicant_country": "NP",
+    "academic_criteria": "4 years Bachelor’s Degree 55% or Above",
+    "english_criteria": "IELTS: 6.5 overall /6 in each band PTE: 65 overall / 59 in each band",
+    "english_waiver": "IELTS waiver is not accepted",
+    "fee_structure": "£22,000",
+    "scholarship_text": "£1,000 discount for full-fee payment by the deadline. £500 discount for paying the deposit 4 weeks before the deadline.",
+    "gap_policy": "Considered",
+    "cas_deposit": "Full Fee before CAS",
+    "enrolment_fee": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        22000.0
+      ],
+      "min": 22000.0,
+      "max": 22000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "ravensbourne",
+    "route_key": "international_year_one",
+    "label": "INTERNATIONAL YEAR ONE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 2.2 or above",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "2.8 in 12th Grade English",
+    "fee_structure": "Business Management: £18950 Computer Science: £17500",
+    "scholarship_text": "Buisness - £4950 Computer Science - £3500",
+    "gap_policy": "Upto 4 Years of GAP Accepted (Need to provide evidience & SOP)",
+    "cas_deposit": "60% of Tution fees",
+    "previous_refusal": "Recent UK visa refusal won't be accepted -minimum 12 months above will be considered and need to provide Refusal Letter. Can accept other destinations visa refusal with no time limit but again refusal letter strictly needed.",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17500.0,
+        18950.0
+      ],
+      "min": 17500.0,
+      "max": 18950.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "ravensbourne",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.8 or above",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "Weighted Average Method (from May Intake): 75% Theory + 25% Internal Final calculated GPA must not be below 2.8 Example: If Theory = 2.8 and Internal = 4.0 Calculation: (2.8 × 75%) + (4.0 × 25%) = 3.1",
+    "fee_structure": "Business /Arts/Computer Science/Fashion: £17500",
+    "scholarship_text": "£3850 to £5000",
+    "gap_policy": "Upto 4 Years of GAP Accepted (Need to provide evidience & SOP)",
+    "cas_deposit": "60% of Tution fees",
+    "previous_refusal": "Recent UK visa refusal won't be accepted -minimum 12 months above will be considered and need to provide Refusal Letter. Can accept other destinations visa refusal with no time limit but again refusal letter strictly needed.",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17500.0
+      ],
+      "min": 17500.0,
+      "max": 17500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "ravensbourne",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "3 Years Bachelor's Degree: 60% or above 4 Years Bachelor's Degree: 55% or above",
+    "english_criteria": "IELTS: 6.5 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "MOI Waiver for Nepalese and Indian Universities",
+    "fee_structure": "Arts/Computer Science/Management/ Architechture: £18500 , MBA: £19500/-",
+    "scholarship_text": "Scholarships: £4500 to £6000 / MBA: £4000",
+    "gap_policy": "Upto 7 Years of GAP Accepted (Need to provide evidience & SOP)",
+    "cas_deposit": "60% of Tution fees",
+    "previous_refusal": "Recent UK visa refusal won't be accepted -minimum 12 months above will be considered and need to provide Refusal Letter. Can accept other destinations visa refusal with no time limit but again refusal letter strictly needed.",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18500.0,
+        19500.0
+      ],
+      "min": 18500.0,
+      "max": 19500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "roehampton",
+    "route_key": "international_year_one",
+    "label": "International Year One",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: GPA 2.2 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Oxford ELLT: 6.0 overall / 5.0 in each band TOEFL: 80 not less than 17 Oxford test accepted",
+    "english_waiver": "IELTS waiver minimum B in grade 12 English",
+    "fee_structure": "£17628",
+    "scholarship_text": "£4000",
+    "gap_policy": "Upto 2 Years of GAP Accepted (Need to provide evidence & SOP)",
+    "cas_deposit": "£10,500 CAS deposit, remaining before enrollment",
+    "previous_refusal": "More than 1 year case accepted",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17628.0
+      ],
+      "min": 17628.0,
+      "max": 17628.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "roehampton",
+    "route_key": "undergraduate",
+    "label": "Undergraduate",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.8 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Oxford ELLT:6.0 overall / 5.0 in each band TOEFL: 80 not less than 17 Oxford test accepted",
+    "english_waiver": "IELTS waiver minimum B in grade 12 English",
+    "fee_structure": "Law/Arts/Management/Science £17628 - £20280",
+    "scholarship_text": "Below GPA 3.0: £2500/- GPA 3.0 or above: £4000",
+    "gap_policy": "Upto 2 Years of GAP Accepted (Need to provide evidience & SOP)",
+    "cas_deposit": "£10,500 CAS deposit, remaining before enrollment",
+    "previous_refusal": "More than 1 year case accepted",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17628.0,
+        20280.0
+      ],
+      "min": 17628.0,
+      "max": 20280.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "roehampton",
+    "route_key": "postgraduate",
+    "label": "Postgraduate",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "3 Years Bachelor's Degree: 60% or above 4 Years Bachelor's Degree: 55% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Oxford ELLT: 6.0 overall / 5.0 in each band TOEFL: 80 not less than 17 Oxford test accepted",
+    "english_waiver": "Waiver to UK, USA, Aus,NZ, CAN affiliated degree and Indian degree",
+    "fee_structure": "Science /Management: £18,980 MBA £20,020",
+    "scholarship_text": "GPA 2.8 and below 3 GPA: £2500 GPA 3.0 and above: £4000",
+    "gap_policy": "Upto 5 Years of GAP Accepted (Need to provide evidience & SOP)",
+    "cas_deposit": "£8500 CAS deposit, remaining before enrollment",
+    "previous_refusal": "More than 1 year case accepted",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18980.0,
+        20020.0
+      ],
+      "min": 18980.0,
+      "max": 20020.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "health-science",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "3 years Bachelor degree: 60 % or above 4 years Bachelor degree: 55 % or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "Waiver with MOI from Nepal & India",
+    "fee_structure": "£15,000/-",
+    "scholarship_text": "£2,000 /-",
+    "gap_policy": "Upto 9 Years of GAP Accepted (Need to provide evidence & SOP)",
+    "cas_deposit": "50% for CAS and Remaining before enrollment",
+    "previous_refusal": "Recent UK visa refusal won't be accepted -minimum 12 months above will be considered and need to provide Refusal Letter. Can accept other destinations visa refusal with no time limit but again refusal letter strictly needed.",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        15000.0
+      ],
+      "min": 15000.0,
+      "max": 15000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "winchester",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 2.8 GPA and above, C+ in 10th Mathematics",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "B and above in English waiver ( validity 5 Years)",
+    "fee_structure": "£16,700/-",
+    "scholarship_text": "£4,000 each year",
+    "gap_policy": "Upto 9 Years of GAP Accepted (Need to provide evidence & SOP)",
+    "cas_deposit": "£7,000",
+    "previous_refusal": "Recent UK visa refusal won't be accepted -minimum 12 months above will be considered and need to provide Refusal Letter. Can accept other destinations visa refusal with no time limit but again refusal letter strictly needed.",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16700.0
+      ],
+      "min": 16700.0,
+      "max": 16700.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "winchester",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3-year bachelor’s degrees: 60% or above but MOI not accepted. 4-year bachelor’s degrees: 55%, with either MOI or formal English language test.",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "MOI Accepted for 4 Years degree only with validity of max 5 years",
+    "fee_structure": "£17450/-",
+    "scholarship_text": "£5,000/-",
+    "gap_policy": "Upto 9 years of GAP Accepted",
+    "cas_deposit": "£7,000",
+    "previous_refusal": "Recent UK visa refusal won't be accepted -minimum 12 months above will be considered and need to provide Refusal Letter. Can accept other destinations visa refusal with no time limit but again refusal letter strictly needed.",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17450.0
+      ],
+      "min": 17450.0,
+      "max": 17450.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "portsmouth",
+    "route_key": "undergraduate",
+    "label": "UDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 2.8 GPA or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 62 overall / 59 in each band DUOLINGO:105 overall /95 in each band",
+    "english_waiver": "UK Affiliated Degrees – 2020 Onwards",
+    "fee_structure": "RANGES FROM £16200/- to 19200/",
+    "scholarship_text": "CGAM Merit Scholarship: £5,000 Vice Chancellor’s Global Dev. Scholarship (Guaranteed): £2,500 Faculty of Science & Health (PGT Merit): £2,000",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16200.0
+      ],
+      "min": 16200.0,
+      "max": 16200.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "portsmouth",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "Most Postgraduate Courses: 3-Year Bachelor’s Degree: 65% or above 4-Year Bachelor’s Degree: 60% or above Health and Science Courses 3-Year Bachelor’s Degree: 70% or above 4-Year Bachelor’s Degree: 65% or above",
+    "english_criteria": "Most Postgraduate Courses: IELTS: 6.5 overall / 6.0 in each band PTE: 65 overall / 62 in each band Health and Science Courses IELTS: 6.5 overall / 6.0 in each band PTE: 65 overall / 62 in each band",
+    "english_waiver": "UK Affiliated Degrees – 2020 Onwards",
+    "fee_structure": "RANGES FROM £16200/- to 19200/",
+    "scholarship_text": "CGAM Merit Scholarship: £5,000 Vice Chancellor’s Global Dev. Scholarship (Guaranteed): £2,500 Faculty of Science & Health (PGT Merit): £2,000",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16200.0
+      ],
+      "min": 16200.0,
+      "max": 16200.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "lancashire",
+    "route_key": "top_up",
+    "label": "TOP-UP",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "Academic Requirement: 60% in Diploma",
+    "english_criteria": "IELTS: 6.0/overall / 5.5 in each band PTE: 61/overall / 59 in each band Oxford: 6/5 Duolingo 105/100",
+    "fee_structure": "Tuition Fee (Approx) from: £18,750 Tuition Fee for Nursing: £17,750",
+    "scholarship_text": "Up to £5000",
+    "gap_policy": "Considered",
+    "cas_deposit": "50% for CAS & Installments available",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17750.0,
+        18750.0
+      ],
+      "min": 17750.0,
+      "max": 18750.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "lancashire",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4-Year Bachelor's Degree: 55% or above",
+    "english_criteria": "IELTS: 6.0/overall / 5.5 in each band PTE: 61/overall / 59 in each band Oxford: 6/5 Duolingo 105/100",
+    "fee_structure": "19250.0",
+    "scholarship_text": "Up to £5000",
+    "gap_policy": "Considered",
+    "cas_deposit": "50% for CAS & Installments available",
+    "extras": null,
+    "fee_proposal": null
+  },
+  {
+    "university_slug": "salford",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade:65% or above / GPA 2.5 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band SELT: B2",
+    "english_waiver": "B+ in 12th Grade English 7 years validity",
+    "fee_structure": "UG: £16,500 to £17,500",
+    "scholarship_text": "For Every Year 12th Grade 2.6 or 67% CGPA and above - £3000 12th Grade 2.8 or 70% CGPA and above - £3500",
+    "gap_policy": "Accepted if they have relevant experience",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16500.0,
+        17500.0
+      ],
+      "min": 16500.0,
+      "max": 17500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "salford",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3 or 4 Years Bachelor's Degree: 2.4 GPA OR 60% OR above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band SELT:B2",
+    "english_waiver": "B+ in 12th Grade English 7 years validity",
+    "fee_structure": "Ranges form:£14,400 to £21,540",
+    "scholarship_text": "Bachelor's 2.5 or 62% - £2500 Bachelor's 2.8 or 70% - £3000",
+    "gap_policy": "Accepted if they have relevant experience",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        14400.0,
+        21540.0
+      ],
+      "min": 14400.0,
+      "max": 21540.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "essex",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 2.6 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band and above PTE: 60 overall / 59 in each band",
+    "fee_structure": "£24,360",
+    "scholarship_text": "£4,000/- per year",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        24360.0
+      ],
+      "min": 24360.0,
+      "max": 24360.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "essex",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4-Year Bachelor's Degree: 55% or above / CGPA 2.3 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band (depending on course) PTE: 62 overall / 60 in each band (depending on course)",
+    "fee_structure": "MBA - £28,000 / Other - £24,675",
+    "scholarship_text": "Upto GPA 3.3 - £1500/- Above GPA 3.3 - £3500/",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        24675.0,
+        28000.0
+      ],
+      "min": 24675.0,
+      "max": 28000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "cardiff-metropolitan",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 55% or above / GPA 2.8 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band TOEFL: 72",
+    "english_waiver": "12th Grade English - 70% / B+",
+    "fee_structure": "£16,000 per year- Undergraduate and Top up",
+    "scholarship_text": "£2,500​",
+    "cas_deposit": "50% of fee",
+    "enrolment_fee": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16000.0
+      ],
+      "min": 16000.0,
+      "max": 16000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "cardiff-metropolitan",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4-Year Bachelor's Degree: 55% or above / GPA 2.6 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band TOEFL: 72",
+    "english_waiver": "12th Grade English - 70% / B+",
+    "fee_structure": "​£17,600-Postgraduate £19,500-MBA",
+    "scholarship_text": "Up to £4000/-",
+    "cas_deposit": "50% of fee",
+    "enrolment_fee": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17600.0,
+        19500.0
+      ],
+      "min": 17600.0,
+      "max": 19500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "birmingham-city",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.8 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band",
+    "english_waiver": "12th Grade English score: 65%/ Grade B/ GPA 2.8 or above - For courses requiring IELTS 6.0 overall 70%/ Grade B+/ GPA 3.2 - For courses requiring IELTS 6.5 overall 80%/ Grade A/ GPA 3.6 - For courses requiring IELTS 7.0 overall",
+    "fee_structure": "£18,750",
+    "scholarship_text": "£5,000 1st Year: £3,000 2nd Year: £2,000",
+    "gap_policy": "Upto 5 years.",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18750.0
+      ],
+      "min": 18750.0,
+      "max": 18750.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "birmingham-city",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "Completed 4 years of undergraduate- 55% overall with no subject below 40% Faculty of Computing Engineering and the Built Environment - 60% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band",
+    "english_waiver": "MOI FROM Kathmandu University Pokhara University Tribhuvan University Purbanchal University",
+    "fee_structure": "STARTING FROM:£18,970 (1year) £20,865 -(2 years with professional placement)",
+    "scholarship_text": "£3,000",
+    "gap_policy": "Upto 8 years",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18970.0,
+        20865.0
+      ],
+      "min": 18970.0,
+      "max": 20865.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "bath-spa",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.8 or above plus a recognised foundation year.",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band TOEFL: 72",
+    "fee_structure": "Band 1 - £16,460 classroom based fields Band 2 - £17,670 laboratory / studio based fields Band 3 - £18,380 School of Art, Film and Media and School of Design Band 4 - £17,430 combined Band 1 and 2 courses",
+    "scholarship_text": "£2000/-",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16460.0,
+        17430.0,
+        17670.0,
+        18380.0
+      ],
+      "min": 16460.0,
+      "max": 18380.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "bath-spa",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4-year bachelor degree with a final GPA or 3.0 or above.",
+    "english_criteria": "IELTS: 6.5-7.0 (Depending upon Course) PTE: 59-67 (Depending upon Course) TOEFL: 75",
+    "fee_structure": "Band 1 - £16,625 classroom based fields Band 2 - £17,835 laboratory/studio based fields Band 3 - £18,560 Bath School of Art, Film and Media, and Bath School of Design",
+    "scholarship_text": "£2000/-",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16625.0,
+        17835.0,
+        18560.0
+      ],
+      "min": 16625.0,
+      "max": 18560.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "brighton",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 65% or above Relevant Diplomas/HNDs may be considered for advanced entry subject to admissions assessment.",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band DUOLINGO: 110 overall with 100 in Speaking, Writing and Listening, and 105 in Reading. TOEFL iBT:72 overall, 18 in writing, 10 in Reading, 10 in Listening and 17 in Speaking",
+    "english_waiver": "N/A",
+    "fee_structure": "From £18,108 - £ 19,692",
+    "scholarship_text": "For First Year:£2,500 For Second Year:£1,500 For Third Year: £1,500",
+    "gap_policy": "Considered",
+    "cas_deposit": "£5000",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18108.0,
+        19692.0
+      ],
+      "min": 18108.0,
+      "max": 19692.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "brighton",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3-Year Bachelor's Degree: 65% or above / GPA 2.6 or above 4-Year Bachelor's Degree: 60% or above / GPA 2.2 or above",
+    "english_criteria": "IELTS: 6.5 overall / 6.0 in each band PTE: 59 overall / 59 in each band DUOLINGO: 125 overall with 100 in Speaking, Writing and Listening, and 105 in Reading. TOEFL iBT:85 overall, 18 in writing, 10 in Reading, 10 in Listening and 17 in Speaking.",
+    "english_waiver": "N/A",
+    "fee_structure": "From £18,792 - £19,854 For MSc Psychology Conversion: £15,500 For Health Courses: £17,748",
+    "scholarship_text": "up to £4,000",
+    "gap_policy": "Considered",
+    "cas_deposit": "£5000",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        15500.0,
+        17748.0,
+        18792.0,
+        19854.0
+      ],
+      "min": 15500.0,
+      "max": 19854.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "brighton",
+    "route_key": "mres",
+    "label": "MRes",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "Bachelor’s degree: 80–89% GPA 3.8 Research Proposal Required",
+    "english_criteria": "IELTS: 6.5 overall / 5.5 in each band - 7.0 overall / 6.5 in each band TOEFL iBT: 85(W 18 , R 10 , L 10 and S 17 97 (W 25 ,R 21 ,L 22 and S 21) SELT: 70-75 overall, minimum of 60-70 in all components. Duolingo: 135 overall with 125 in all component scores.",
+    "english_waiver": "N/A",
+    "fee_structure": "£18,792/-",
+    "scholarship_text": "N/A",
+    "gap_policy": "Considered",
+    "cas_deposit": "£5000",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        18792.0
+      ],
+      "min": 18792.0,
+      "max": 18792.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "chester",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.6 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "75% marks in 12th English from HSEB B+ / 3 GPA in English from NEB IELTS remains mandatory for following courses: BN Nursing (all pathways) BSc Nutrition and Dietetics BA Primary/Early Years with QTS",
+    "fee_structure": "£14,950/-",
+    "scholarship_text": "£1250 for everyone £2250 (Merit basis) - For merit scholarship: 65% / 2.7 GPA in Grade 12 & for diploma: 70%",
+    "gap_policy": "up to 5 years gap accepted with gap explanation",
+    "cas_deposit": "£5000 for CAS",
+    "enrolment_fee": "£3000 plus for Enrolment",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        14950.0
+      ],
+      "min": 14950.0,
+      "max": 14950.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "chester",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3-Year Bachelor's Degree: 60% or above 4-Year Bachelor's Degree: 50% or above MBBS/B Pharm/Doctor of Physiotherapy/Dentistry/ Vet from recognised institution with 55% or above. Master’s degree from a recognised institution with 50% or above.",
+    "english_criteria": "IELTS: 6.5 overall / 5.5 in each band PTE: 62 overall / 59 in each band",
+    "english_waiver": "75% marks in 12th English from HSEB B+ / 3 GPA in English from NEB IELTS remains mandatory for following courses: MSc Nutrition and Dietetics MSc Pre-registration Adult Nursing MSc Pre-registration Mental Health Nursing MA Social Work MA Art Therapy MA TESOL PGCE (Primary and Secondary) MBChB",
+    "fee_structure": "£15,500 MBA: £15,700",
+    "scholarship_text": "£1250 for everyone £2500 (Merit basis) - For merit scholarship, 3 yrs: 65%/2.7, 4 yrs (55%/2.3)",
+    "gap_policy": "STEM Subjects – consider up to 10 year gap Non-STEM Subjects – consider up to a 7 year gap",
+    "cas_deposit": "£5000 for CAS",
+    "enrolment_fee": "£3000 plus for Enrolment",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        15500.0,
+        15700.0
+      ],
+      "min": 15500.0,
+      "max": 15700.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "aston",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.8 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band Oxford ELLT - Equivalent to IELTS 6.5",
+    "english_waiver": "12th Grade 80%+ IELTS 6.5 equivalent 12th Grade 75%+ IELTS 6.0 equivalent",
+    "fee_structure": "£23,500 per year",
+    "scholarship_text": "Up to £9000/- (Yr1: £5,000 | Yr2: £2,000 | Yr3: £2,000)",
+    "gap_policy": "2017 Onwards",
+    "cas_deposit": "£5,350",
+    "enrolment_fee": "-",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        23500.0
+      ],
+      "min": 23500.0,
+      "max": 23500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "aston",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "POSTGRADUATE\n\nBachelor's Degree: 60% or above (2.4 GPA or above)\n\nPOSTGRADUATE\n\n4 years' Bachelor's Degree: 55% or above 3 Years can also be accepted with min 3 years of work experience",
+    "english_criteria": "POSTGRADUATE\n\nIELTS: 6.0 overall / 5.5 in each band Oxford ELLT - Equivalent to IELTS 6.5\n\nPOSTGRADUATE\n\nIELTS: 6.0 overall / 5.5 in each band Oxford ELLT - Equivalent to IELTS 6.5",
+    "english_waiver": "POSTGRADUATE\n\n12th Grade 80%+ for IELTS 6.5 equivalent courses 12th Grade 75%+ for IELTS 6.0 equivalent courses Direct MOI: Kathmandu University Tribhuvan University Pokhara University\n\nPOSTGRADUATE\n\n12th Grade 80%+ for IELTS 6.5 equivalent courses 12th Grade 75%+ for IELTS 6.0 equivalent courses Direct MOI: Kathmandu University Tribhuvan University Pokhara University",
+    "fee_structure": "POSTGRADUATE\n\n£24,800\n\nPOSTGRADUATE\n\n£24,800 [Net Fees: £16,500/- after scholarship]",
+    "scholarship_text": "POSTGRADUATE\n\nUp to £4000/-\n\nPOSTGRADUATE\n\n£8300/- to £9000/-",
+    "gap_policy": "POSTGRADUATE\n\nN/A\n\nPOSTGRADUATE\n\nN/A",
+    "cas_deposit": "POSTGRADUATE\n\n£5,350\n\nPOSTGRADUATE\n\n£5,350",
+    "enrolment_fee": "POSTGRADUATE\n\n50% of net tuition fee for enrolment\n\nPOSTGRADUATE\n\n50% of net tuition fee for enrolment",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16500.0,
+        24800.0
+      ],
+      "min": 16500.0,
+      "max": 24800.0,
+      "confidence": "low"
+    },
+    "deadlines": null,
+    "previous_refusal": null
+  },
+  {
+    "university_slug": "hull",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "Bachelor’s (3 years) : 45% or above with at least 5 years of Experience Bachelor’s (4 years) : 45% or above with at least 3 years of Experience",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 51 in each band MSc AI and Data Science IELTS: 6.5 overall / 6.0 in each band PTE: 61 overall / 54 in each band",
+    "fee_structure": "MSc AI and Data Science : £18,500 /- Other MSc Courses: £17,450/-",
+    "scholarship_text": "Up to £3000/-",
+    "gap_policy": "Upto 9 years",
+    "cas_deposit": "£6350 for CAS",
+    "enrolment_fee": "50% of net tuition fee for enrolment",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17450.0,
+        18500.0
+      ],
+      "min": 17450.0,
+      "max": 18500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "northumbria",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.8 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 55 overall / 51 in each band",
+    "fee_structure": "£19,750",
+    "scholarship_text": "30% of total fees every year",
+    "cas_deposit": "£5500 for CAS",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        19750.0
+      ],
+      "min": 19750.0,
+      "max": 19750.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "northumbria",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3-Year Bachelor's Degree: 55% or above 4-Year Bachelor's Degree: 60% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 55 overall / 51 in each band",
+    "fee_structure": "£17,750 - £22,750",
+    "scholarship_text": "30% of total fees every year",
+    "cas_deposit": "£5500 for CAS",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17750.0,
+        22750.0
+      ],
+      "min": 17750.0,
+      "max": 22750.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "sunderland",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.4 or above TOP UP COURSE PCL Nursing degree with Nursing License HA Degree needs another 12th degree to qualify for top-up degree",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "70+/B in 12th English Free Internal Test Available Students with Grade A in both theory and practical in Grade 12 English do not need to take EST. Students with an overall Grade B in Grade 12 English must pass PCI first, and then take EST by paying £300.",
+    "fee_structure": "£17,500",
+    "scholarship_text": "Up to £6000 (Each Year)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17500.0
+      ],
+      "min": 17500.0,
+      "max": 17500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "sunderland",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4-Year Bachelor's Degree: 1st Division GPA 3.2 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "70+/B in 12th English Free Internal Test Available Students with Grade A in both theory and practical in Grade 12 English do not need to take EST. Students with an overall Grade B in Grade 12 English must pass PCI first, and then take EST by paying £300.",
+    "fee_structure": "£17,000 - £21,000",
+    "scholarship_text": "Up to £5500",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17000.0,
+        21000.0
+      ],
+      "min": 17000.0,
+      "max": 21000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "london-metropolitan",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 55% or above / GPA 2.6 or above CTEVT: minimum grade 55%",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "NEB (Grade 12th) English min Grade B+",
+    "fee_structure": "£19,500/-",
+    "scholarship_text": "Tiered Based Scholarship Up To £5500",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        19500.0
+      ],
+      "min": 19500.0,
+      "max": 19500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "london-metropolitan",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "Bachelor's Degree: 55% or above / GPA 2.6 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "english_waiver": "NEB (Grade 12th) English min Grade B+",
+    "fee_structure": "£20,000/-",
+    "scholarship_text": "Tiered Based Scholarship Up To £5500",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        20000.0
+      ],
+      "min": 20000.0,
+      "max": 20000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "coventry",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above overall and 65% in Maths and Physics",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band TOEFL iBT: 79 and a minimum component score of 18.",
+    "fee_structure": "Fees frozen for most UG courses at a £16,800, £18,300 or £19,850",
+    "scholarship_text": "Vice Chancellor Undergraduate Scholarship of £4000 in 3 year Year 1 - £2000 Year 2 - £1000 Year 3 - £1000",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16800.0,
+        18300.0,
+        19850.0
+      ],
+      "min": 16800.0,
+      "max": 19850.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "coventry",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3-Year Bachelor's Degree: 60% or above 4-Year Bachelor's Degree: 55% or above",
+    "english_criteria": "IELTS: 6.5 overall / 5.5 in each band TOEFL iBT: 88 and a minimum component score of 19.",
+    "fee_structure": "All PG MSc/MA fees £18,600(EPP +£1,800) and MBAs £20,350",
+    "scholarship_text": "Vice-Chancellor Postgraduate Scholarship – Sep/Nov 2025 : £2500",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        1800.0,
+        18600.0,
+        20350.0
+      ],
+      "min": 1800.0,
+      "max": 20350.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "law",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "Law Undergraduate 12th Grade: GPA 3.2 or above GCSE Mathematics Grade C/4 or equivalent Business – Undergraduate 12th Grade: GPA 3 or above GCSE Mathematics Grade C/4 or equivalent",
+    "english_criteria": "Law Undergraduate IELTS: 6.5 overall / 6.0 in each band Business – Undergraduate IELTS: 6.5 overall / 6.0 in each band",
+    "english_waiver": "IELTS will be waived off for students who have obtained a UK affiliated Degree.",
+    "fee_structure": "£17,550/-",
+    "cas_deposit": "£8000",
+    "enrolment_fee": "2 installment (£3500 each)",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17550.0
+      ],
+      "min": 17550.0,
+      "max": 17550.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "law",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "Bachelor’s degree from Nepal - 60% or a 2:2 or above at a UK Bachelor’s degree in any discipline Business – Postgraduate 4 years bachelor’s degree from Nepal - 60% or a 2:2 or above at a UK Bachelor’s degree in any discipline",
+    "english_criteria": "IELTS: 6.5 overall / 5.5 in each band Business – Postgraduate IELTS 6.5 overall / 5.5 in each band",
+    "english_waiver": "IELTS will be waived off for students who have obtained a UK affiliated Degree.",
+    "fee_structure": "MBA: London Campus: £16,100 Non London Campus: £14,600 MBA with Professional Practice: London Campus: £18,150 Non London Campus: £16,650",
+    "cas_deposit": "£8000 for CAS & enrolment",
+    "enrolment_fee": "3 installments available",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        14600.0,
+        16100.0,
+        16650.0,
+        18150.0
+      ],
+      "min": 14600.0,
+      "max": 18150.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "ulster",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.8 or above / and C+ in Grade 10",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Duolingo: 110 overall / 100 in each band FREE QA ENGLISH LANGUAGE TEST",
+    "fee_structure": "London: £13,350 Birmingham: £12,750",
+    "scholarship_text": "15% of the total fees",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        12750.0,
+        13350.0
+      ],
+      "min": 12750.0,
+      "max": 13350.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "ulster",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3-Year Bachelor's Degree: 60% or above 4-Year Bachelor's Degree: 55% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Duolingo: 110 overall / 100 in each band FREE QA ENGLISH LANGUAGE TEST",
+    "fee_structure": "London MBA: £16,750 Advance MBA : £21,350 MSc: £16,200 Extended Msc AP: £25,800 (24 Months) Extended Msc: £21,200 (15 Months) Advance MSc: £20,800 Birmingham & Manchester MBA: £15,100 Advance MBA : £19,800 MSc: £14,550 Extended MSc: £19,250(15 Months) Extended Msc AP: £23,950 (24 Months) Advance MSc: £19,250",
+    "scholarship_text": "15% of the total fees",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        14550.0,
+        15100.0,
+        16200.0,
+        16750.0,
+        19250.0,
+        19800.0,
+        20800.0,
+        21200.0,
+        21350.0,
+        23950.0,
+        25800.0
+      ],
+      "min": 14550.0,
+      "max": 25800.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "west-of-scotland",
+    "route_key": "undergraduate",
+    "label": "Undergraduate",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above / GPA 2.6 or above\n\nSCOTLAND CAMPUS\n\n12th Grade: 60% or above / GPA 2.6 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Oxford ELLT: 6/5\n\nSCOTLAND CAMPUS\n\nIELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Oxford ELLT: 6/5",
+    "english_waiver": "N/A\n\nSCOTLAND CAMPUS\n\nN/A",
+    "fee_structure": "For NON-IT Courses £16,275 (After scholarship £13,000) For IT Courses £18,900(After scholarship £15,000)\n\nSCOTLAND CAMPUS\n\n£15,500",
+    "scholarship_text": "£3,275 for NON-IT Courses £3,900 for IT Courses\n\nSCOTLAND CAMPUS\n\nUPTO 20% of total tuition fees",
+    "cas_deposit": "75% for CAS",
+    "enrolment_fee": "25% before the start of 2nd term",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        13000.0,
+        15000.0,
+        15500.0,
+        16275.0,
+        18900.0
+      ],
+      "min": 13000.0,
+      "max": 18900.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "west-of-scotland",
+    "route_key": "postgraduate",
+    "label": "Postgraduate",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "3-Year Bachelor's Degree: 55% or above 4-Year Bachelor's Degree: 55% or above\n\nSCOTLAND CAMPUS\n\n4-Year Bachelor's Degree: 55% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Oxford ELLT: 6/5\n\nSCOTLAND CAMPUS\n\nIELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band Oxford ELLT: 6/5",
+    "english_waiver": "4 Years Bachelor's Degree CGPA: 3.0 based on MOI- Passout year 2022 Accepted For British Degree Taught in Nepal\n\nSCOTLAND CAMPUS\n\nN/A",
+    "fee_structure": "£16,275 (After scholarship £13,000) MSc Courses, MPA and MEd £16,275 (After scholarship £14,275) MBA Variants £18,900 (After scholarship £15,000) MSc IT Courses\n\nSCOTLAND CAMPUS\n\n£15,500",
+    "scholarship_text": "£3,275 for MSc Courses, MPA and MEd £2000 for MBA Variants £3,900 for MSc IT Courses\n\nSCOTLAND CAMPUS\n\nUPTO 20% of total tuition fees",
+    "cas_deposit": "75% for CAS",
+    "enrolment_fee": "25% before the start of 2nd term",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        13000.0,
+        14275.0,
+        15000.0,
+        15500.0,
+        16275.0,
+        18900.0
+      ],
+      "min": 13000.0,
+      "max": 18900.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "canterbury-christ-church",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: 60% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band PTE- Professional health UG: 76/76 TOEFL: 60 ( R: 8, L:7, S:16, W: 18)",
+    "fee_structure": "£15,500",
+    "scholarship_text": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        15500.0
+      ],
+      "min": 15500.0,
+      "max": 15500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "canterbury-christ-church",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "Bachelor’s degree or equivalent with a minimum of a 2:2 (with Honours)",
+    "english_criteria": "IELTS: 6.5 overall / 5.5 in each band PTE: 59 overall / 59 in each band",
+    "fee_structure": "Full time: £15,500 Extended Master's:£15,500+£3,500",
+    "scholarship_text": "N/A",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        3500.0,
+        15500.0
+      ],
+      "min": 3500.0,
+      "max": 15500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "edinburgh-napier",
+    "route_key": "undergraduate",
+    "label": "UNDERGRADUATE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade:70% or above / GPA 2.7 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 56 overall / 51 in each band",
+    "fee_structure": "£17,520 - £20,310",
+    "scholarship_text": "Up to £2,000",
+    "gap_policy": "Gap Accepted up to 3 years",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17520.0,
+        20310.0
+      ],
+      "min": 17520.0,
+      "max": 20310.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "edinburgh-napier",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4-Year Bachelor's Degree: 60% or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 56 overall / 51 in each band",
+    "fee_structure": "£19,750 (May vary)",
+    "scholarship_text": "Up to £2,000",
+    "gap_policy": "Gap Accepted based on profile",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        19750.0
+      ],
+      "min": 19750.0,
+      "max": 19750.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "wales-trinity-saint-david",
+    "route_key": "undergraduate",
+    "label": "Undergraduate",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade: GPA 2.8 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band TOEFL iBT: 72 (R-18, L-17, W-17, S-20)",
+    "english_waiver": "N/A",
+    "fee_structure": "£15,600 per year",
+    "scholarship_text": "£1,500 per year",
+    "gap_policy": "Considered",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        15600.0
+      ],
+      "min": 15600.0,
+      "max": 15600.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "wales-trinity-saint-david",
+    "route_key": "postgraduate",
+    "label": "POSTGRADUATE",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "4 year Bachelor degree: 60% or above / GPA of 3.0 out of 4 or above",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band TOEFL iBT: 72 (R-18, L-17, W-17, S-20)",
+    "english_waiver": "MOI accepted for students with gap up to 5 years",
+    "fee_structure": "£17,500/-",
+    "scholarship_text": "£3,000/-",
+    "gap_policy": "Considered",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17500.0
+      ],
+      "min": 17500.0,
+      "max": 17500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "wales-trinity-saint-david",
+    "route_key": "dba",
+    "label": "Doctor of Business Administration(DBA)",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "Successful completion of Master’s Degree with 60% or above / GPA 3.0 or above (based on Master’s Degree)",
+    "english_criteria": "IELTS: 6.0 overall / 5.5 in each band PTE: 59 overall / 59 in each band TOEFL iBT: 72 (R-18, L-17, W-17, S-20)",
+    "english_waiver": "MOI accepted for students with gap up to 5 years",
+    "fee_structure": "£16,800 per year",
+    "scholarship_text": "N/A",
+    "gap_policy": "Considered",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16800.0
+      ],
+      "min": 16800.0,
+      "max": 16800.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "london-metropolitan-isc",
+    "route_key": "international_year_one",
+    "label": "INTERNATIONAL YEAR ONE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 2.2 or C or Above",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band PTE: 52 overall / 46 in each band PTE: 52/46",
+    "english_waiver": "12th Grade : English: 2.4 or 60% or C+ in Theory",
+    "fee_structure": "£19,500/-",
+    "scholarship_text": "Scholarships upto £5000, PCI Discount £1000, Full Deposit Discount: £400",
+    "gap_policy": "Minimum 5 years for High Risk",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        19500.0
+      ],
+      "min": 19500.0,
+      "max": 19500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "london-metropolitan-isc",
+    "route_key": "international_foundation_year",
+    "label": "INTERNATIONAL FOUNDATION YEAR",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 1.8 AND 12th Math: 55% (2.4 GPA or C + ) If no Math in 12th -> 10th Math: 55% (2.4 GPA or C+)",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band PTE: 52 overall / 46 in each band",
+    "english_waiver": "12th Grade : English: 2.4 or 60% or C+ in Theory",
+    "fee_structure": "£19,500/-",
+    "scholarship_text": "Scholarships upto £5000, PCI Discount £1000, Full Deposit Discount: £400",
+    "gap_policy": "Minimum 5 years for High Risk",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        19500.0
+      ],
+      "min": 19500.0,
+      "max": 19500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "wolverhampton-isc",
+    "route_key": "international_year_one",
+    "label": "INTERNATIONAL YEAR ONE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade:50% or above / GPA 2.0 or above AND 10th Math: 2.4 (Only for Engineering, Science & Computer Science Program)",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band PTE: 52 overall / 46 in each band OIETC: 5/5 TOEFL: Overall 46+ with( 7-L, 8-R, 16-S, 18-W)",
+    "english_waiver": "12th Grade: English: 2.4 / C+",
+    "fee_structure": "£17,600/-",
+    "scholarship_text": "upto £2,500/-",
+    "gap_policy": "Minimum 5 years for High Risk",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17600.0
+      ],
+      "min": 17600.0,
+      "max": 17600.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "wolverhampton-isc",
+    "route_key": "international_foundation_year",
+    "label": "INTERNATIONAL FOUNDATION YEAR",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 1.8 AND 10th Math: 2.4 (Only for Engineering, Science & Computer Science Program)",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band PTE: 52 overall / 46 in each band OIETC: 5/5 TOEFL: Overall 46+ with( 7-L, 8-R, 16-S, 18-W)",
+    "english_waiver": "12th Grade: English: 2.4 / C+",
+    "fee_structure": "£17,600/-",
+    "scholarship_text": "upto £2,500/-",
+    "gap_policy": "Minimum 5 years for High Risk",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        17600.0
+      ],
+      "min": 17600.0,
+      "max": 17600.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "wolverhampton-isc",
+    "route_key": "pre_masters",
+    "label": "PRE-MASTERS",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "2 Term Pre Masters: 3-year Bachelor Degree with a minimum of 40% 1 Term Pre Masters: 4-year Bachelor Degree with a minimum of 45%",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band",
+    "english_waiver": "N/A",
+    "fee_structure": "Pre-Masters Programme (1 term) - £9,500/-",
+    "scholarship_text": "upto £1,000/-",
+    "gap_policy": "Considered",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        9500.0
+      ],
+      "min": 9500.0,
+      "max": 9500.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "liverpool-hope-isc",
+    "route_key": "international_year_one",
+    "label": "INTERNATIONAL YEAR ONE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 2.0 or CTEVT Diploma with 50% AND 10th Math: 2.4",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band",
+    "english_waiver": "Grade 12th English: 2.4",
+    "fee_structure": "£15,225/-",
+    "scholarship_text": "£2000, along with an additional conversion discount of £1,000 and an early payment discount of £400 for students who meet the payment deadlines mentioned",
+    "gap_policy": "Minimum 5 years for High Risk",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        15225.0
+      ],
+      "min": 15225.0,
+      "max": 15225.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "liverpool-hope-isc",
+    "route_key": "international_foundation_year",
+    "label": "INTERNATIONAL FOUNDATION YEAR",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 1.8 or CTEVT Diploma with 40% AND 10th Math: 2.4",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band",
+    "english_waiver": "Grade 12th English: 2.4",
+    "fee_structure": "£15,225/-",
+    "scholarship_text": "£2000, along with an additional conversion discount of £1,000 and an early payment discount of £400 for students who meet the payment deadlines mentioned",
+    "gap_policy": "Minimum 5 years for High Risk",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        15225.0
+      ],
+      "min": 15225.0,
+      "max": 15225.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "cumbria-isc",
+    "route_key": "international_year_one",
+    "label": "INTERNATIONAL YEAR ONE",
+    "is_published": true,
+    "display_order": 0,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade:50% or above / GPA 2.4 or above AND 12th Math: 50% (2.4 GPA or C+) If no Math in 12th -> 10th Math: 60% (2.8 GPA or C+)",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band",
+    "english_waiver": "N/A",
+    "fee_structure": "£16,000/-",
+    "scholarship_text": "upto £3,000/-",
+    "gap_policy": "Minimum 5 years for High Risk",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16000.0
+      ],
+      "min": 16000.0,
+      "max": 16000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "cumbria-isc",
+    "route_key": "international_foundation_year",
+    "label": "INTERNATIONAL FOUNDATION YEAR",
+    "is_published": true,
+    "display_order": 1,
+    "applicant_country": "NP",
+    "academic_criteria": "12th Grade : GPA 2.0 or 40% or above AND 10th Math: 2.4 GPA/ C+/ 50%",
+    "english_criteria": "IELTS: 5.5 overall / 5.5 in each band",
+    "english_waiver": "N/A",
+    "fee_structure": "£16,000/-",
+    "scholarship_text": "upto £3,000/-",
+    "gap_policy": "Minimum 5 years for High Risk",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        16000.0
+      ],
+      "min": 16000.0,
+      "max": 16000.0,
+      "confidence": "low"
+    }
+  },
+  {
+    "university_slug": "cumbria-isc",
+    "route_key": "pre_masters",
+    "label": "PRE-MASTERS",
+    "is_published": true,
+    "display_order": 2,
+    "applicant_country": "NP",
+    "academic_criteria": "3 Term Pre Masters: Completed Bachelor Degree with a minimum grade of 45%. 2 Term Pre Masters: Completed Bachelor Degree with a minimum grade of 50% 1 Term Pre Masters: Completed Bachelor Degree with a minimum grade of 55%",
+    "english_criteria": "3 Term PMP Academic IELTS 5.5 no subtest below 5.5 or equivalent 2 Term PMP Academic IELTS 5.5 no subtest below 5.5 or equivalent 1 Term PMP Academic IELTS 6.0 no subtest below 5.5 or equivalent",
+    "english_waiver": "Medium from one of the following institutions: Tribhuvan University Kathmandu University Pokhara University",
+    "fee_structure": "Pre-Masters Programme (3 terms) - £14,500/- Pre-Masters Programme (2 terms) - £12,000/- Pre-Masters Programme (1 term) - £9,500/-",
+    "scholarship_text": "Pre-Masters Programme (3 terms) - upto £3,000/- Pre-Masters Programme (2 terms) - upto £2,000/- Pre-Masters Programme (1 term) - upto £1,000/-",
+    "gap_policy": "Considered",
+    "extras": null,
+    "fee_proposal": {
+      "amounts": [
+        9500.0,
+        12000.0,
+        14500.0
+      ],
+      "min": 9500.0,
+      "max": 14500.0,
+      "confidence": "low"
+    }
+  }
+]

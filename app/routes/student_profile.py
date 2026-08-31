@@ -9,6 +9,7 @@ from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundEx
 from ..models import StudentProfile, User
 from ..models.enums import UserRole
 from ..schemas.student_profile import (
+    ResearchShortlist,
     StudentEducationHistoryRead,
     StudentEducationHistoryUpsert,
     StudentProfileRead,
@@ -85,6 +86,32 @@ async def upsert_student_profile(
     except ValueError as exc:
         raise BadRequestException(str(exc)) from exc
     return StudentProfileRead.model_validate(profile)
+
+
+@router.get(
+    "/{user_id}/research",
+    response_model=ResearchShortlist,
+    summary="The student's public-site shortlist, resolved against the catalogue",
+)
+async def get_research_shortlist(
+    user_id: UUID,
+    service: StudentProfileService = Depends(get_student_profile_service),
+    current_user: User = Depends(get_current_user),
+) -> ResearchShortlist:
+    """What the student shortlisted on the public site, as catalogue rows.
+
+    Resolving is all this does. Opening an application against any of these is
+    still a counsellor's act, in the applications API, against a course they
+    pick — a shortlist is where a conversation starts, not its conclusion.
+    """
+    _assert_can_access(current_user, user_id)
+    profile = await service.get_by_user_id(user_id)
+    if profile is None:
+        # Not an error: a student who has not been through onboarding has no
+        # profile and therefore no research, which is an empty shortlist rather
+        # than a missing resource.
+        return ResearchShortlist(catalogue="none")
+    return ResearchShortlist.model_validate(await service.research_shortlist(profile))
 
 
 # --- Education history ---------------------------------------------------------

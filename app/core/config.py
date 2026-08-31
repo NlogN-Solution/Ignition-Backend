@@ -32,6 +32,13 @@ class Settings(BaseSettings):
 
     ENVIRONMENT: Literal["development", "test", "production"] = "development"
 
+    #: No payment gateway is integrated yet. While this is true, the portal's
+    #: access-fee checkout completes without money moving, and every surface
+    #: that touches it says so in as many words. Setting it to False without
+    #: wiring a real gateway simply makes the checkout refuse — it must never
+    #: be possible to take a payment silently.
+    SIMULATED_PAYMENTS: bool = True
+
     # ── Database ──────────────────────────────────────────────────────────────
     # Local dev composes a URL from the individual fields below. A hosted
     # Postgres (Neon, Render Postgres, ...) instead hands out one connection
@@ -78,16 +85,35 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: str = ""
 
     # ── HTTP ──────────────────────────────────────────────────────────────────
-    # 5174 = admin dashboard (Vite), 3000 = student portal (CRA).
-    # ED360's own stack occupies 5173/8000 on this machine, hence the offsets.
+    # 5174 = admin dashboard (Vite), 3000 = student portal (CRA),
+    # 3100 = Ignition-Landing (Next). ED360's own stack occupies 5173/8000 on
+    # this machine, hence the offsets.
+    #
+    # The landing origin is here because the public catalogue routes are read
+    # by the browser as well as by Next's server-side fetches, and a
+    # server-side fetch is not subject to CORS while a client-side one is.
     CORS_ORIGINS: list[str] = Field(
         default=[
             "http://localhost:5174",
             "http://127.0.0.1:5174",
             "http://localhost:3000",
             "http://127.0.0.1:3000",
+            "http://localhost:3100",
+            "http://127.0.0.1:3100",
         ]
     )
+
+    # ── Landing site ──────────────────────────────────────────────────────────
+    # Where Ignition-Landing is served from, and the secret it shares with this
+    # API. Both sides need it: the admin publishes a page and the Next cache
+    # has to be told, and an editor wants to see a draft before anyone else
+    # can. Left empty — the default — publishing simply does not call out, so
+    # a developer with no landing running is not spammed with failures.
+    LANDING_BASE_URL: str = "http://localhost:3100"
+    LANDING_REVALIDATE_SECRET: str = ""
+    #: How long an editor's preview link stays good for. Short: the link
+    #: unlocks unpublished content to anyone holding it.
+    PREVIEW_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Attendance is measured in local wall-clock time — "did they check in
     # before 09:00" is meaningless in UTC. ED360 read this from

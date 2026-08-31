@@ -22,6 +22,7 @@ PAYROLL_RUNS = "/api/v1/payroll-runs"
 SALARY = "/api/v1/salary-structures"
 USERS = "/api/v1/users"
 ATTENDANCE = "/api/v1/attendance"
+AUTH_REGISTER = "/api/v1/auth/register"
 
 
 @pytest_asyncio.fixture
@@ -99,6 +100,59 @@ async def test_conversion_can_issue_portal_access(client: AsyncClient, admin_hea
     assert body["portal_account_created"] is True
     # Returned exactly once, at creation.
     assert body["generated_password"]
+
+
+async def test_self_registration_creates_a_lead(client: AsyncClient, admin_headers) -> None:
+    """Every student is reachable from the pipeline, including one nobody worked."""
+    registered = await client.post(
+        AUTH_REGISTER,
+        json={
+            "email": "walked.in@example.com",
+            "password": "portal-password",
+            "first_name": "Nabin",
+            "last_name": "Thapa",
+            "phone": "9811111111",
+        },
+    )
+    assert registered.status_code == 200, registered.text
+
+    leads = await client.get(LEADS, params={"search": "walked.in@example.com"}, headers=admin_headers)
+    items = leads.json()["items"]
+    assert len(items) == 1, items
+    assert items[0]["status"] == "converted"
+    assert items[0]["converted_user_id"] is not None
+    assert items[0]["conversion_source"] == "registration_completed"
+
+
+async def test_registering_with_a_known_email_links_the_existing_lead(
+    client: AsyncClient, admin_headers
+) -> None:
+    """`leads.email` is unique where not null — and one person is one record.
+
+    Someone who enquired and later signed up themselves must end up on the lead
+    a counsellor has already been working, not on a second one beside it.
+    """
+    lead_id = (
+        await client.post(LEADS, json=_lead_payload(email="both@example.com"), headers=admin_headers)
+    ).json()["id"]
+
+    registered = await client.post(
+        AUTH_REGISTER,
+        json={
+            "email": "both@example.com",
+            "password": "portal-password",
+            "first_name": "Sita",
+            "last_name": "Rai",
+        },
+    )
+    assert registered.status_code == 200, registered.text
+
+    leads = await client.get(LEADS, params={"search": "both@example.com"}, headers=admin_headers)
+    items = leads.json()["items"]
+    assert len(items) == 1, items
+    assert items[0]["id"] == lead_id
+    assert items[0]["status"] == "converted"
+    assert items[0]["converted_user_id"] is not None
 
 
 async def test_students_cannot_touch_the_crm(client: AsyncClient, user_factory, auth_headers) -> None:

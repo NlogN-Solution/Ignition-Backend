@@ -41,6 +41,11 @@ _IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 AVATAR_FOLDER = "ignition/avatars"
 DOCUMENT_FOLDER = "ignition/documents"
 LEAVE_ATTACHMENT_FOLDER = "ignition/leave-attachments"
+#: Public site media — the one folder uploaded with `private=False`, because a
+#: university logo or a guide's hero image has to be fetchable by anyone
+#: reading the page. Everything else here is private and served only through a
+#: short-lived signed URL.
+CONTENT_FOLDER = "ignition/content"
 
 #: How long a signed document-download URL stays valid. Short: it's handed
 #: straight to the browser as a redirect target, never stored or shared.

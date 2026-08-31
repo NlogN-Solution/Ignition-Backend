@@ -4,10 +4,10 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Lead, LeadActivity, LeadFollowUp, Notification, StudentProfile, User
+from ..models import EligibilityAssessment, Lead, LeadActivity, LeadFollowUp, Notification, StudentProfile, User
 from ..models.enums import (
     ConversionSource,
     FollowUpOutcome,
@@ -304,6 +304,18 @@ class LeadService:
         if conversion_source is not None:
             lead.conversion_source = conversion_source
 
+        # The assessment model documents user_id as "set when a signed-in student
+        # submits, or when the lead is later converted" — this is that second half.
+        if converted_user_id is not None:
+            await self.session.execute(
+                update(EligibilityAssessment)
+                .where(
+                    EligibilityAssessment.lead_id == lead.id,
+                    EligibilityAssessment.user_id.is_(None),
+                )
+                .values(user_id=converted_user_id)
+            )
+
         await self.session.commit()
         await self.session.refresh(lead)
         await self._log_activity(
@@ -319,8 +331,8 @@ class LeadService:
             lead,
             LeadActivityType.CONVERTED,
             performed_by=performed_by,
-            title="Moved to Student module",
-            description="A student record was created and the lead left Lead Management.",
+            title="Student record created",
+            description="They stay on this lead as a client — applications start from here.",
         )
         await self._notify(
             lead.assigned_to,

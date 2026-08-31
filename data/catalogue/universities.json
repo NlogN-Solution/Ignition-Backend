@@ -1,0 +1,794 @@
+[
+  {
+    "slug": "york-st-john",
+    "name": "York St John University",
+    "sheet": "YSJU",
+    "sheet_title": "YORK ST JOHN UNIVERSITY",
+    "city": "York",
+    "region": "England — North",
+    "flyer_url": "https://drive.google.com/file/d/1F7Gk6J4sTgXxvKAdQ4846POTdShWWKfD/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 178,
+    "route_count": 2,
+    "stats": {
+      "rejected": 7,
+      "headings": 0,
+      "collapsed": 1
+    }
+  },
+  {
+    "slug": "worcester",
+    "name": "University of Worcester",
+    "sheet": "WORCESTER",
+    "sheet_title": "UNIVERSITY OF WORCESTER",
+    "city": "Worcester",
+    "region": "England — Midlands",
+    "flyer_url": "https://drive.google.com/file/d/1u5cdpOg49I5GmGDZfzWm8Uneel-fxKM2/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 84,
+    "route_count": 4,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "east-london",
+    "name": "University of East London",
+    "sheet": "UEL",
+    "sheet_title": "",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1lytJ4yJGfv2tTA7v5g2Qc3Ict6qo71kT/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 301,
+    "route_count": 4,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 3
+    }
+  },
+  {
+    "slug": "west-london",
+    "name": "University of West London",
+    "sheet": "UWL",
+    "sheet_title": "UNIVERSITY OF WEST LONDON",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1WJRaFN6P904YWGVpO5ROIK6UW9kin06A/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 201,
+    "route_count": 4,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "university-college-birmingham",
+    "name": "University College Birmingham",
+    "sheet": "UCB",
+    "sheet_title": "UNIVERSITY COLLEGE BIRMINGHAM",
+    "city": "Birmingham",
+    "region": "England — Midlands",
+    "flyer_url": "https://drive.google.com/file/d/1w4N-JqI_kDmK5wpFqVQNL2vXOcsv24Ea/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 79,
+    "route_count": 2,
+    "stats": {
+      "rejected": 7,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "hertfordshire",
+    "name": "University of Hertfordshire",
+    "sheet": "HERTS",
+    "sheet_title": "UNIVERSITY OF HERTFORDSHIRE",
+    "city": "Hatfield",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1ahF8DX2PzrtC7aLNe8007_K07DMVXJyI/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 255,
+    "route_count": 2,
+    "stats": {
+      "rejected": 7,
+      "headings": 0,
+      "collapsed": 7
+    }
+  },
+  {
+    "slug": "bedfordshire",
+    "name": "University of Bedfordshire",
+    "sheet": "BEDFORDSHIRE",
+    "sheet_title": "UNIVERSITY OF BEDFORDSHIRE",
+    "city": "Luton",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1dz-Ol4ljmOhMcymHGVTaG6y5QqdSP7ak/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 116,
+    "route_count": 2,
+    "stats": {
+      "rejected": 7,
+      "headings": 0,
+      "collapsed": 4
+    }
+  },
+  {
+    "slug": "leeds-trinity",
+    "name": "Leeds Trinity University",
+    "sheet": "LTU",
+    "sheet_title": "LEEDS TRINITY UNIVERSITY",
+    "city": "Leeds",
+    "region": "England — North",
+    "flyer_url": "https://drive.google.com/file/d/16cKoP1kV3rfv-wi4ASmu2c5c_5nvaX0_/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 64,
+    "route_count": 2,
+    "stats": {
+      "rejected": 4,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "arden",
+    "name": "Arden University",
+    "sheet": "ARDEN",
+    "sheet_title": "ARDEN UNIVERSITY",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1EUJc_ydcjyaHC0PA0-RMS8tWnxl8oq7D/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 14,
+    "route_count": 2,
+    "stats": {
+      "rejected": 6,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "creative-arts",
+    "name": "University for the Creative Arts",
+    "sheet": "UCA",
+    "sheet_title": "UNIVERSITY FOR THE CREATIVE ARTS",
+    "city": "Farnham",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1N1OoS01BkVMnDCH4WfR1Y8xjsGMSFWwF/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 84,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "buckinghamshire-new",
+    "name": "Buckinghamshire New University",
+    "sheet": "BNU",
+    "sheet_title": "BUCKINGHAMSHIRE NEW UNIVERSITY",
+    "city": "High Wycombe",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1H992iCe1euVXW2edvC-HrN6HT8N8XkPd/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 107,
+    "route_count": 3,
+    "stats": {
+      "rejected": 15,
+      "headings": 0,
+      "collapsed": 1
+    }
+  },
+  {
+    "slug": "middlesex",
+    "name": "Middlesex University",
+    "sheet": "MDX",
+    "sheet_title": "MIDDLESEX UNIVERSITY",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1xbzy7m617shhVdtSiAYRrM5yXu3yIsGk/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 52,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 1
+    }
+  },
+  {
+    "slug": "regent-college-london",
+    "name": "Regent College London",
+    "sheet": "REGENT ",
+    "sheet_title": "REGENT COLLEGE LONDON",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/14bysdEW5_1b_Zw11NiyE1cQk4U3jZMi0/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 9,
+    "route_count": 2,
+    "stats": {
+      "rejected": 6,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "plymouth",
+    "name": "University of Plymouth",
+    "sheet": "PLYMOUTH",
+    "sheet_title": "UNIVERSITY OF PLYMOUTH",
+    "city": "Plymouth",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1IfGn18HHEC6vh2oJRvjqBMmygyhQEw6L/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 34,
+    "route_count": 2,
+    "stats": {
+      "rejected": 7,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "wolverhampton",
+    "name": "University of Wolverhampton",
+    "sheet": "WOLVERHAMPTON",
+    "sheet_title": "UNIVERSITY OF WOLVERHAMPTON",
+    "city": "Wolverhampton",
+    "region": "England — Midlands",
+    "flyer_url": "https://drive.google.com/file/d/16TtXcFILJSo7CF3zKzIAm8FpXfk0kEUr/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 138,
+    "route_count": 4,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "ravensbourne",
+    "name": "Ravensbourne University London",
+    "sheet": "RAVENSBOURNE",
+    "sheet_title": "UNIVERSITY OF RAVENSBOURNE",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1H4nfane8Fd3LMPo2ujo0lPAboJnZQ_rF/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 52,
+    "route_count": 3,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "roehampton",
+    "name": "University of Roehampton",
+    "sheet": "ROEHAMPTON",
+    "sheet_title": "UNIVERSITY OF ROEHAMPTON",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1DpNPaUaOvFcg0BFl81mAjNE2eU3EmeMj/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 127,
+    "route_count": 3,
+    "stats": {
+      "rejected": 15,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "health-science",
+    "name": "Health Science University",
+    "sheet": "HSU",
+    "sheet_title": "HEALTH SCIENCE UNIVERSITY",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1lEKx7Qv2g4-0xHidf244vzwmIyXXRHdt/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 1,
+    "route_count": 1,
+    "stats": {
+      "rejected": 2,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "winchester",
+    "name": "University of Winchester",
+    "sheet": "WINCHESTER",
+    "sheet_title": "WINCHESTER UNIVERSITY",
+    "city": "Winchester",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1WjBwyjj326QetzvpS0L2IQNy_6zNfLHn/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 84,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "portsmouth",
+    "name": "University of Portsmouth",
+    "sheet": "PORTSMOUTH",
+    "sheet_title": "UNIVERSITY OF PORTSMOUTH",
+    "city": "Portsmouth",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1T-fhhR7PZsl9uKnf0CfWyERIoBTogamW/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 259,
+    "route_count": 2,
+    "stats": {
+      "rejected": 10,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "lancashire",
+    "name": "University of Lancashire",
+    "sheet": "UCLAN",
+    "sheet_title": "UNIVERSITY OF LANCASHIRE",
+    "city": "Preston",
+    "region": "England — North",
+    "flyer_url": "https://drive.google.com/file/d/1gN1Qx33FqT8Lzelcdghfn0Q3dWSRdv8x/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 163,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "salford",
+    "name": "University of Salford",
+    "sheet": "SALFORD",
+    "sheet_title": "UNIVERSITY OF SALFORD",
+    "city": "Manchester",
+    "region": "England — North",
+    "flyer_url": "https://drive.google.com/file/d/1Y6fOB0KTz-tkzc2hJVpcTXQa0SoonH1_/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 89,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "essex",
+    "name": "University of Essex",
+    "sheet": "ESSEX",
+    "sheet_title": "UNIVERSITY OF ESSEX",
+    "city": "Colchester",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1iDD42g7hy7-FIcygI5WhXD0WTjuc4Bld/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 264,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "cardiff-metropolitan",
+    "name": "Cardiff Metropolitan University",
+    "sheet": "CARDIFF",
+    "sheet_title": "CARDIFF METROPOLITAN UNIVERSITY",
+    "city": "Cardiff",
+    "region": "Wales",
+    "flyer_url": "https://drive.google.com/file/d/1SZtVbSNX9HREID2omxoQfBD5WcLcJxoM/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 109,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 2
+    }
+  },
+  {
+    "slug": "birmingham-city",
+    "name": "Birmingham City University",
+    "sheet": "BCU",
+    "sheet_title": "BIRMINGHAM CITY UNIVERSITY",
+    "city": "Birmingham",
+    "region": "England — Midlands",
+    "flyer_url": "https://drive.google.com/file/d/1L0Bc8hImXpHBeE-X3MAA7BbhERUlm_Sn/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 77,
+    "route_count": 2,
+    "stats": {
+      "rejected": 9,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "bath-spa",
+    "name": "Bath Spa University",
+    "sheet": "BATHSPA",
+    "sheet_title": "BATH SPA UNIVERSITY",
+    "city": "Bath",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1_3G3Xb5VypdPD89hM45TFPKnC6bHYpYi/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 71,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "brighton",
+    "name": "University of Brighton",
+    "sheet": "BRIGHTON",
+    "sheet_title": "UNIVERSITY OF BRIGHTON",
+    "city": "Brighton",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1BlEyXqG70yS5c2WzFOU8M5j6YDM2B85g/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 211,
+    "route_count": 3,
+    "stats": {
+      "rejected": 6,
+      "headings": 1,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "chester",
+    "name": "University of Chester",
+    "sheet": "CHESTER",
+    "sheet_title": "UNIVERSITY OF CHESTER",
+    "city": "Chester",
+    "region": "England — North",
+    "flyer_url": "https://drive.google.com/file/d/1y6-nFUb8QiE9h4GsA-baKC44PETLSlQQ/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 191,
+    "route_count": 2,
+    "stats": {
+      "rejected": 28,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "aston",
+    "name": "Aston University",
+    "sheet": "ASTON",
+    "sheet_title": "ASTON UNIVERSITY",
+    "city": "Birmingham",
+    "region": "England — Midlands",
+    "flyer_url": "https://drive.google.com/file/d/1hTNdimZ0xRof3SlGAsATfH6cMYGD21fE/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": true,
+    "offering_count": 89,
+    "route_count": 3,
+    "stats": {
+      "rejected": 9,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "hull",
+    "name": "University of Hull",
+    "sheet": "HULL",
+    "sheet_title": "UNIVERSITY OF HULL",
+    "city": "Hull",
+    "region": "England — North",
+    "flyer_url": "https://drive.google.com/file/d/1r0gcq5KW2HGET3-9ZTsU8k1PyEMoHh6M/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": true,
+    "offering_count": 5,
+    "route_count": 1,
+    "stats": {
+      "rejected": 5,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "northumbria",
+    "name": "Northumbria University",
+    "sheet": "NORTHUMBRIA",
+    "sheet_title": "NORTHUMBRIA UNIVERSITY",
+    "city": "Newcastle",
+    "region": "England — North",
+    "flyer_url": "https://drive.google.com/file/d/1vgEZuXx__EcA6UzyRBSLvEbh0JA2TFV3/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 227,
+    "route_count": 2,
+    "stats": {
+      "rejected": 16,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "sunderland",
+    "name": "University of Sunderland",
+    "sheet": "SUNDERLAND",
+    "sheet_title": "UNIVERSITY OF SUNDERLAND",
+    "city": "Sunderland",
+    "region": "England — North",
+    "flyer_url": "https://drive.google.com/file/d/1YdK_5rI1_Ik-cIWPZrBYZVS3YOy06ePv/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 40,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "london-metropolitan",
+    "name": "London Metropolitan University",
+    "sheet": "LMU",
+    "sheet_title": "LONDON METROPOLITAN UNIVERSITY",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1U48zWkIsyWJJV9uAbIrZt3vHczpT3Oqb/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 93,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "coventry",
+    "name": "Coventry University",
+    "sheet": " COVENTRY",
+    "sheet_title": "COVENTRY UNIVERSITY",
+    "city": "Coventry",
+    "region": "England — Midlands",
+    "flyer_url": "https://drive.google.com/file/d/1zXc-autBvbzWcfKLqzlmD29XvIxt3ev2/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": true,
+    "offering_count": 435,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "law",
+    "name": "University of Law",
+    "sheet": " LAW",
+    "sheet_title": "UNIVERSITY OF LAW",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1neP2E8u0B5xOIuSqi-2wupvNpD-tyqGM/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": true,
+    "offering_count": 52,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "ulster",
+    "name": "Ulster University",
+    "sheet": "ULSTER",
+    "sheet_title": "ULSTER UNIVERSITY",
+    "city": "Belfast",
+    "region": "Northern Ireland",
+    "flyer_url": "https://drive.google.com/file/d/1i_uJZofBVyG_NZZq9_DMgtsaCa5--Duf/view?usp=drive_link",
+    "is_pathway_centre": false,
+    "branch_campus_warning": true,
+    "offering_count": 28,
+    "route_count": 2,
+    "stats": {
+      "rejected": 6,
+      "headings": 0,
+      "collapsed": 40
+    }
+  },
+  {
+    "slug": "west-of-scotland",
+    "name": "University of the West of Scotland",
+    "sheet": "UWS",
+    "sheet_title": "UNIVERSITY OF WEST OF SCOTLAND",
+    "city": "Paisley",
+    "region": "Scotland",
+    "flyer_url": "https://drive.google.com/file/d/1E8hd_GjW8Cwo_YhhptiqdWHLvtSn-sRl/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": true,
+    "offering_count": 32,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "canterbury-christ-church",
+    "name": "Canterbury Christ Church University",
+    "sheet": "CCCU",
+    "sheet_title": "CANTERBURY CHRIST CHURCH UNIVERSITY",
+    "city": "Canterbury",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/1Zuq-0L9agUFIY9CvzYLwfCIb00yiHIBW/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 114,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "edinburgh-napier",
+    "name": "Edinburgh Napier University",
+    "sheet": "EDINBURGH",
+    "sheet_title": "EDINBURGH NAPIER UNIVERSITY",
+    "city": "Edinburgh",
+    "region": "Scotland",
+    "flyer_url": "https://drive.google.com/file/d/1XDH3XSvq620zxXrpCjMemb33KCCMOj3h/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 47,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 8
+    }
+  },
+  {
+    "slug": "wales-trinity-saint-david",
+    "name": "University of Wales Trinity Saint David",
+    "sheet": "UWTSD",
+    "sheet_title": "UNIVERSITY OF WALES TRINITY SAINT DAVID",
+    "city": "Swansea",
+    "region": "Wales",
+    "flyer_url": "https://drive.google.com/file/d/1GlcXGCHIvV1JswCOMcrviXdN2dkBT3Kk/view?usp=sharing",
+    "is_pathway_centre": false,
+    "branch_campus_warning": false,
+    "offering_count": 33,
+    "route_count": 3,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "london-metropolitan-isc",
+    "name": "London Metropolitan University ISC",
+    "sheet": "LMUISC",
+    "sheet_title": "LONDON METROPOLITAN UNIVERSITY ISC (Progression Degree for Pathway)",
+    "city": "London",
+    "region": "England — South",
+    "flyer_url": "https://drive.google.com/file/d/12hY8sKxxg6ULZT1ZnjQU83kbjG7AHGsz/view?usp=sharing",
+    "is_pathway_centre": true,
+    "branch_campus_warning": false,
+    "offering_count": 34,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  },
+  {
+    "slug": "wolverhampton-isc",
+    "name": "University of Wolverhampton ISC",
+    "sheet": "UOWISC",
+    "sheet_title": "UNIVERSITY OF WOLVERHAMPTON ISC (Progression Degree for Pathway)",
+    "city": "Wolverhampton",
+    "region": "England — Midlands",
+    "flyer_url": "https://drive.google.com/file/d/1qVTGAxmZ16CXzdUD4DTIhLIGllZTDFmj/view?usp=sharing",
+    "is_pathway_centre": true,
+    "branch_campus_warning": false,
+    "offering_count": 78,
+    "route_count": 3,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 2
+    }
+  },
+  {
+    "slug": "liverpool-hope-isc",
+    "name": "Liverpool Hope University ISC",
+    "sheet": "LHUISC",
+    "sheet_title": "LIVERPOOL HOPE UNIVERSITY ISC (Progression Degree for Pathway)",
+    "city": "Liverpool",
+    "region": "England — North",
+    "flyer_url": "https://drive.google.com/file/d/1A5AY_IcC2k4o5IzS9fhuIhdonM1-kBkz/view?usp=sharing",
+    "is_pathway_centre": true,
+    "branch_campus_warning": false,
+    "offering_count": 53,
+    "route_count": 2,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 1
+    }
+  },
+  {
+    "slug": "cumbria-isc",
+    "name": "University of Cumbria ISC",
+    "sheet": "UCIC",
+    "sheet_title": "UNIVERSITY OF CUMBRIA ISC (Progression Degree for Pathway)",
+    "city": "Carlisle",
+    "region": "England — North",
+    "flyer_url": "https://drive.google.com/file/d/1yCaQ9Y5f0eOohJzwbkcwZvDOZRh4qnVR/view?usp=sharing",
+    "is_pathway_centre": true,
+    "branch_campus_warning": false,
+    "offering_count": 23,
+    "route_count": 3,
+    "stats": {
+      "rejected": 0,
+      "headings": 0,
+      "collapsed": 0
+    }
+  }
+]

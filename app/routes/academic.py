@@ -48,6 +48,14 @@ router = APIRouter(tags=["Academic"])
 # wrong.
 _MANAGE_CATALOG = require_role(UserRole.ADMIN)
 
+# Universities and programs are also the *public* catalogue: they carry the
+# marketing copy the website module edits, and that module's centrepiece is the
+# university editor. `MODULE_ROLES` in the admin console lists marketing for
+# `website`, and the two sets have to agree or the nav offers a page the API
+# refuses. Countries and intakes stay admin-only — they are operational
+# reference data with no public surface.
+_MANAGE_PUBLIC_CATALOG = require_role(UserRole.ADMIN, UserRole.MARKETING)
+
 
 # --- Countries ---------------------------------------------------------------
 
@@ -152,7 +160,7 @@ async def get_university(
 async def create_university(
     payload: UniversityCreate,
     service: UniversityService = Depends(get_university_service),
-    _: object = Depends(_MANAGE_CATALOG),
+    _: object = Depends(_MANAGE_PUBLIC_CATALOG),
 ) -> UniversityRead:
     return UniversityRead.model_validate(await service.create(payload.model_dump()))
 
@@ -162,7 +170,7 @@ async def update_university(
     university_id: UUID,
     payload: UniversityUpdate,
     service: UniversityService = Depends(get_university_service),
-    _: object = Depends(_MANAGE_CATALOG),
+    _: object = Depends(_MANAGE_PUBLIC_CATALOG),
 ) -> UniversityRead:
     university = await service.get(university_id)
     if university is None:
@@ -174,7 +182,7 @@ async def update_university(
 async def delete_university(
     university_id: UUID,
     service: UniversityService = Depends(get_university_service),
-    _: object = Depends(_MANAGE_CATALOG),
+    _: object = Depends(_MANAGE_PUBLIC_CATALOG),
 ) -> UniversityRead:
     university = await service.get(university_id)
     if university is None:
@@ -223,7 +231,7 @@ async def get_program(
 async def create_program(
     payload: ProgramCreate,
     service: ProgramService = Depends(get_program_service),
-    _: object = Depends(_MANAGE_CATALOG),
+    _: object = Depends(_MANAGE_PUBLIC_CATALOG),
 ) -> ProgramRead:
     return ProgramRead.model_validate(await service.create(payload.model_dump()))
 
@@ -233,7 +241,7 @@ async def update_program(
     program_id: UUID,
     payload: ProgramUpdate,
     service: ProgramService = Depends(get_program_service),
-    _: object = Depends(_MANAGE_CATALOG),
+    _: object = Depends(_MANAGE_PUBLIC_CATALOG),
 ) -> ProgramRead:
     program = await service.get(program_id)
     if program is None:
@@ -245,7 +253,7 @@ async def update_program(
 async def delete_program(
     program_id: UUID,
     service: ProgramService = Depends(get_program_service),
-    _: object = Depends(_MANAGE_CATALOG),
+    _: object = Depends(_MANAGE_PUBLIC_CATALOG),
 ) -> ProgramRead:
     program = await service.get(program_id)
     if program is None:

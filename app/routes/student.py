@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 from typing import Any, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.orm import selectinload
 
-from ..api.exceptions import BadRequestException, NotFoundException
-from ..api.student import StudentScopedRepository, get_current_student, get_student_repository
+from ..api.exceptions import BadRequestException, ConflictException, NotFoundException
+from ..api.student import (
+    StudentScopedRepository,
+    get_current_student,
+    get_student_repository,
+    require_paid_portal_access,
+)
+from ..core.config import get_settings
 from ..models import (
     Application,
     ApplicationChecklistItem,
@@ -87,6 +93,7 @@ from ..schemas.interview import (
 from ..schemas.message import MessageCreate, MessageList, MessageRead, MessageSenderSummary
 from ..schemas.notification import NotificationList, NotificationRead
 from ..schemas.payment import PaymentList, PaymentRead
+from ..schemas.portal_access import AccessFeeRead, PortalAccessCheckout, PortalAccessRead
 from ..schemas.preferences import DashboardSettingsRead, DashboardSettingsUpdate
 from ..schemas.progress import MilestoneRead, PointsEntryRead, PointsRead, ProgressRead
 from ..schemas.student_portal import (
@@ -97,7 +104,7 @@ from ..schemas.student_portal import (
     SavedUniversityRead,
     SaveItemRequest,
 )
-from ..schemas.student_profile import StudentProfileRead, StudentProfileUpsert
+from ..schemas.student_profile import ResearchShortlist, StudentProfileRead, StudentProfileUpsert
 from ..schemas.task import TaskList, TaskRead
 from ..schemas.user import UserRead
 from ..schemas.visa import (
@@ -135,6 +142,11 @@ from ..services.finance_service import (
 )
 from ..services.interview_service import InterviewService, get_interview_service
 from ..services.notification_service import NotificationService, get_notification_service
+from ..services.portal_access_service import (
+    SELF_SERVICE_METHODS,
+    PortalAccessService,
+    get_portal_access_service,
+)
 from ..services.preferences_service import PreferencesService, get_preferences_service
 from ..services.progress_service import (
     PointsService,
@@ -144,6 +156,8 @@ from ..services.progress_service import (
 )
 from ..services.student_profile_service import StudentProfileService, get_student_profile_service
 from ..services.visa_service import VisaService, get_visa_service
+
+settings = get_settings()
 
 router = APIRouter(prefix="/student", tags=["Student Portal"])
 
@@ -164,6 +178,27 @@ async def get_me(student: User = Depends(get_current_student)) -> UserRead:
 @router.get("/me/profile", response_model=StudentProfileRead, summary="My student profile")
 async def get_my_profile(repo: StudentScopedRepository = Depends(get_student_repository)) -> StudentProfileRead:
     return StudentProfileRead.model_validate(await repo.profile_or_404())
+
+
+@router.get(
+    "/me/research",
+    response_model=ResearchShortlist,
+    summary="My shortlist from the public site, resolved",
+)
+async def get_my_research(
+    student: User = Depends(get_current_student),
+    service: StudentProfileService = Depends(get_student_profile_service),
+) -> ResearchShortlist:
+    """The same resolution the staff console gets, scoped to "me".
+
+    The student sees institution names rather than the slugs their browser
+    carried across — the names live in the catalogue, and asking the student's
+    own browser to remember them would only mean showing a stale one back.
+    """
+    profile = await service.get_by_user_id(student.id)
+    if profile is None:
+        return ResearchShortlist(catalogue="none")
+    return ResearchShortlist.model_validate(await service.research_shortlist(profile))
 
 
 @router.patch("/me/profile", response_model=StudentProfileRead, summary="Update my student profile")
@@ -1266,3 +1301,84 @@ async def get_my_dashboard(
     service: DashboardService = Depends(get_dashboard_service),
 ) -> DashboardRead:
     return await service.get_dashboard(student)
+
+
+# --- Portal access fee ------------------------------------------------------------------
+
+# Ignition's portal is paid: a one-time fee, priced per country. These two
+# endpoints are deliberately NOT behind `require_paid_portal_access` — a
+# student has to be able to see and settle the fee in order to get past it.
+
+
+@router.get("/me/access", response_model=PortalAccessRead, summary="My portal access")
+async def get_my_portal_access(
+    student: User = Depends(get_current_student),
+    access: PortalAccessService = Depends(get_portal_access_service),
+) -> PortalAccessRead:
+    state = await access.state_for(student.id)
+    return PortalAccessRead(
+        has_access=state.has_access,
+        fee=AccessFeeRead(**vars(state.fee)) if state.fee else None,
+        paid_at=state.paid_at,
+        payment_id=state.payment_id,
+        methods=list(SELF_SERVICE_METHODS),
+        simulated=settings.SIMULATED_PAYMENTS,
+    )
+
+
+@router.post(
+    "/me/access/checkout",
+    response_model=PortalAccessRead,
+    summary="Pay the portal access fee",
+    description=(
+        "Completes the one-time portal access fee and opens the application "
+        "workflow. While SIMULATED_PAYMENTS is set no money moves and no "
+        "gateway is contacted — the response's `simulated` flag says so, and "
+        "the recorded payment is marked as a simulation in its reference and "
+        "remarks so it can never be mistaken for a real receipt."
+    ),
+)
+async def checkout_my_portal_access(
+    payload: PortalAccessCheckout,
+    student: User = Depends(get_current_student),
+    access: PortalAccessService = Depends(get_portal_access_service),
+) -> PortalAccessRead:
+    if not settings.SIMULATED_PAYMENTS:
+        # There is no gateway integration yet. Refusing is the only honest
+        # behaviour: the alternative is recording a payment that never
+        # happened while claiming it was real.
+        raise BadRequestException(
+            "Online payment is not available yet. Contact Ignition to pay your access fee."
+        )
+
+    state = await access.state_for(student.id)
+    if state.has_access:
+        raise ConflictException("Your portal access fee has already been paid.")
+
+    if payload.payment_method not in SELF_SERVICE_METHODS:
+        raise BadRequestException("That payment method is not available for the access fee.")
+
+    if state.fee is None:
+        raise BadRequestException(
+            "No access fee is configured for your country yet. Contact Ignition."
+        )
+
+    payment = await access.record_access_payment(
+        student.id,
+        payload.payment_method,
+        state.fee,
+        transaction_reference=f"SIMULATED-{uuid4().hex[:12].upper()}",
+        remarks=(
+            "SIMULATED PAYMENT — no gateway was contacted and no money changed "
+            "hands. Recorded by the portal's demo checkout."
+        ),
+    )
+
+    return PortalAccessRead(
+        has_access=True,
+        fee=AccessFeeRead(**vars(state.fee)),
+        paid_at=payment.payment_date,
+        payment_id=payment.id,
+        methods=list(SELF_SERVICE_METHODS),
+        simulated=True,
+    )

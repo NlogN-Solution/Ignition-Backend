@@ -24,6 +24,19 @@ class ForbiddenException(HTTPException):
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
+class PaymentRequiredException(HTTPException):
+    """The student is authenticated but has not paid the portal access fee.
+
+    402 rather than 403: the caller is who they say they are and the request is
+    well formed — the only thing missing is the payment. The portal branches on
+    this status to send them to the activation screen instead of showing them a
+    generic "forbidden".
+    """
+
+    def __init__(self, detail: str = "Portal access fee required") -> None:
+        super().__init__(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=detail)
+
+
 class ConflictException(HTTPException):
     def __init__(self, detail: str = "Conflict") -> None:
         super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)

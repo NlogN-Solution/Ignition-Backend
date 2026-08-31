@@ -436,3 +436,196 @@ async def test_ordinary_staff_cannot_browse_the_directory(
 ) -> None:
     counsellor = await user_factory(UserRole.COUNSELLOR)
     assert (await client.get(EMPLOYEES, headers=await auth_headers(counsellor))).status_code == 403
+
+
+# ── The research shortlist (CATALOGUE-CMS-PLAN.md Phase 7) ───────────────────
+
+RESEARCH = "/api/v1/users/{user_id}/research"
+
+
+async def _country(client: AsyncClient, headers: dict[str, str]) -> str:
+    """The UK, created once. Countries are unique by name and several of these
+    tests need two universities in the same one."""
+    existing = await client.get("/api/v1/countries", params={"search": "United Kingdom"}, headers=headers)
+    assert existing.status_code == 200, existing.text
+    for row in existing.json()["items"]:
+        if row["name"] == "United Kingdom":
+            return row["id"]
+
+    created = await client.post(
+        "/api/v1/countries", json={"name": "United Kingdom", "iso2": "GB"}, headers=headers
+    )
+    assert created.status_code == 200, created.text
+    return created.json()["id"]
+
+
+async def _catalogue_university(client: AsyncClient, headers: dict[str, str], **overrides) -> dict:
+    """A published university with a slug, as the public site would link to."""
+    payload = {
+        "country_id": await _country(client, headers),
+        "name": "University of Essex",
+        "slug": "essex",
+        "city": "Colchester",
+        "region": "England — South",
+        "tagline": "A university in Colchester",
+        "overview": "A campus university.",
+        "is_published": True,
+    }
+    payload.update(overrides)
+    response = await client.post("/api/v1/universities", json=payload, headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+async def _with_research(client: AsyncClient, user, headers: dict[str, str], research: dict) -> None:
+    response = await client.patch(
+        _profile_url(user.id),
+        json={"education_level": "bachelor", "preferences": {"research": research}},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+
+
+async def test_a_live_shortlist_resolves_to_catalogue_rows(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """The whole point of Phase 7: the slug a student shortlisted on the public
+    site is `universities.slug`, so a counsellor gets a row rather than a
+    string."""
+    admin = await user_factory(UserRole.ADMIN)
+    admin_headers = await auth_headers(admin)
+    university = await _catalogue_university(client, admin_headers)
+
+    student = await user_factory(UserRole.STUDENT)
+    await _with_research(
+        client,
+        student,
+        await auth_headers(student),
+        {"catalogue": "live", "compared": ["essex"], "universities": []},
+    )
+
+    response = await client.get(RESEARCH.format(user_id=student.id), headers=admin_headers)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assert body["catalogue"] == "live"
+    assert [entry["slug"] for entry in body["universities"]] == ["essex"]
+    assert body["universities"][0]["id"] == university["id"]
+    assert body["universities"][0]["name"] == "University of Essex"
+    assert body["unresolved"] == []
+
+
+async def test_a_pre_import_shortlist_is_never_resolved(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """A `v1` handoff names institutions that never existed. If one of its
+    slugs happens to collide with a real one, resolving it would attach a
+    student to a university they never looked at."""
+    admin = await user_factory(UserRole.ADMIN)
+    admin_headers = await auth_headers(admin)
+    await _catalogue_university(client, admin_headers)
+
+    student = await user_factory(UserRole.STUDENT)
+    await _with_research(
+        client,
+        student,
+        await auth_headers(student),
+        {"catalogue": "example", "compared": ["essex"], "universities": []},
+    )
+
+    body = (await client.get(RESEARCH.format(user_id=student.id), headers=admin_headers)).json()
+    assert body["catalogue"] == "example"
+    assert body["universities"] == []
+    assert body["unresolved"] == ["essex"]
+
+
+async def test_research_without_a_catalogue_stamp_is_treated_as_pre_import(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """Records written before the stamp existed all predate the import."""
+    admin_headers = await auth_headers(await user_factory(UserRole.ADMIN))
+    student = await user_factory(UserRole.STUDENT)
+    await _with_research(
+        client, student, await auth_headers(student), {"compared": ["essex"], "universities": []}
+    )
+
+    body = (await client.get(RESEARCH.format(user_id=student.id), headers=admin_headers)).json()
+    assert body["catalogue"] == "example"
+    assert body["universities"] == []
+
+
+async def test_a_withdrawn_shortlist_entry_is_reported_not_dropped(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """"They shortlisted something we no longer list" is information, and a
+    silently shorter list is not."""
+    admin_headers = await auth_headers(await user_factory(UserRole.ADMIN))
+    await _catalogue_university(client, admin_headers)
+
+    student = await user_factory(UserRole.STUDENT)
+    await _with_research(
+        client,
+        student,
+        await auth_headers(student),
+        {"catalogue": "live", "compared": ["essex", "gone-away"], "universities": []},
+    )
+
+    body = (await client.get(RESEARCH.format(user_id=student.id), headers=admin_headers)).json()
+    assert [entry["slug"] for entry in body["universities"]] == ["essex"]
+    assert body["unresolved"] == ["gone-away"]
+
+
+async def test_the_shortlist_keeps_the_students_own_order(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """The first thing they compared is not the same as the last."""
+    admin_headers = await auth_headers(await user_factory(UserRole.ADMIN))
+
+    await _catalogue_university(client, admin_headers)
+    second = await _catalogue_university(
+        client,
+        admin_headers,
+        name="Aston University",
+        slug="aston",
+        city="Birmingham",
+        region="England — Midlands",
+        tagline="A university in Birmingham",
+        overview="A city university.",
+    )
+    assert second["slug"] == "aston"
+
+    student = await user_factory(UserRole.STUDENT)
+    await _with_research(
+        client,
+        student,
+        await auth_headers(student),
+        {"catalogue": "live", "compared": ["aston", "essex"], "universities": []},
+    )
+
+    body = (await client.get(RESEARCH.format(user_id=student.id), headers=admin_headers)).json()
+    assert [entry["slug"] for entry in body["universities"]] == ["aston", "essex"]
+
+
+async def test_a_student_with_no_profile_has_an_empty_shortlist(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """Not a 404: a student who has not been through onboarding has no
+    research, which is an empty shortlist rather than a missing resource."""
+    admin_headers = await auth_headers(await user_factory(UserRole.ADMIN))
+    student = await user_factory(UserRole.STUDENT)
+
+    response = await client.get(RESEARCH.format(user_id=student.id), headers=admin_headers)
+    assert response.status_code == 200
+    assert response.json() == {"catalogue": "none", "universities": [], "unresolved": []}
+
+
+async def test_a_student_cannot_read_another_students_shortlist(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    owner = await user_factory(UserRole.STUDENT)
+    intruder = await user_factory(UserRole.STUDENT)
+
+    response = await client.get(
+        RESEARCH.format(user_id=owner.id), headers=await auth_headers(intruder)
+    )
+    assert response.status_code == 403

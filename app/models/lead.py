@@ -34,6 +34,7 @@ from .enums import (
 
 if TYPE_CHECKING:
     from .appointment import Appointment
+    from .eligibility import EligibilityAssessment
     from .task import Task
     from .user import User
 
@@ -106,6 +107,11 @@ class Lead(Base, UUIDPKMixin, TimestampMixin):
         back_populates="lead",
         cascade="all, delete-orphan",
         order_by="LeadFollowUp.attempt_number",
+    )
+    eligibility_assessments: Mapped[list[EligibilityAssessment]] = relationship(
+        back_populates="lead",
+        cascade="all, delete-orphan",
+        order_by="EligibilityAssessment.submitted_at.desc()",
     )
     appointments: Mapped[list[Appointment]] = relationship(back_populates="lead")
     tasks: Mapped[list[Task]] = relationship(back_populates="lead")

@@ -11,9 +11,10 @@ from sqlalchemy.orm import selectinload
 from ..db.base import Base
 from ..models import StudentProfile, User
 from ..models.enums import UserRole
+from ..services.portal_access_service import PortalAccessService
 from .auth import AUTH_MARKER, get_current_user
 from .deps import get_db_session
-from .exceptions import ForbiddenException, NotFoundException
+from .exceptions import ForbiddenException, NotFoundException, PaymentRequiredException
 
 ModelT = TypeVar("ModelT", bound=Base)
 
@@ -38,6 +39,33 @@ async def get_current_student(
 
 
 setattr(get_current_student, AUTH_MARKER, "roles:student")
+
+
+async def require_paid_portal_access(
+    student: User = Depends(get_current_student),
+    session: AsyncSession = Depends(get_db_session),
+) -> User:
+    """Gate for the parts of the portal covered by the access fee.
+
+    Enforced here rather than in the frontend, because a route that is only
+    hidden by a redirect is not gated at all — the endpoints are reachable with
+    a valid token and curl.
+
+    Deliberately NOT applied to everything under `/student`. A student has to
+    be able to reach their account, their profile and the fee itself in order
+    to pay it, and the catalogue stays as open as the public site it mirrors.
+    The application workflow — applications, documents, messages, appointments,
+    offers, visa, finance, interviews — is what the fee buys.
+    """
+    service = PortalAccessService(session)
+    if not await service.has_access(student.id):
+        raise PaymentRequiredException(
+            "Your Ignition portal access fee has not been paid yet."
+        )
+    return student
+
+
+setattr(require_paid_portal_access, AUTH_MARKER, "roles:student")
 
 
 class StudentScopedRepository:
