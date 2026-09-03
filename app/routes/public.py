@@ -181,6 +181,7 @@ async def public_university(
             "milestones": university.milestones,
             "rankings": university.rankings,
             "awards": university.awards,
+            "recognition": university.recognition,
             "employability": university.employability,
             "interview_profile": university.interview_profile,
             "flyer_url": university.flyer_url,

@@ -104,6 +104,7 @@ class UniversityBase(BaseModel):
     milestones: list[dict[str, Any]] | None = None
     rankings: list[dict[str, Any]] | None = None
     awards: list[dict[str, Any]] | None = None
+    recognition: list[dict[str, Any]] | None = None
     employability: dict[str, Any] | None = None
     interview_profile: dict[str, Any] | None = None
     imagery: dict[str, Any] | None = None
@@ -164,6 +165,7 @@ class UniversityUpdate(BaseModel):
     milestones: list[dict[str, Any]] | None = None
     rankings: list[dict[str, Any]] | None = None
     awards: list[dict[str, Any]] | None = None
+    recognition: list[dict[str, Any]] | None = None
     employability: dict[str, Any] | None = None
     interview_profile: dict[str, Any] | None = None
     imagery: dict[str, Any] | None = None

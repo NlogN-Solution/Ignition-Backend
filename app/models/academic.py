@@ -135,6 +135,12 @@ class University(Base, UUIDPKMixin, TimestampMixin):
     # columns above already settled that argument for this table.
     rankings: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     awards: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    #: The source document's own sections, verbatim: a placing belongs in
+    #: `rankings` and an accreditation in `awards`, but most of what an
+    #: institution publishes about itself is neither, and flattening it into
+    #: one of those shapes would misrepresent it. Ordered list of
+    #: {heading, items: [{label, detail?, sub?}]}.
+    recognition: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     employability: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     interview_profile: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     imagery: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

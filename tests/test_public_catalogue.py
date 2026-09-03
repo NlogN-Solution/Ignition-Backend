@@ -87,11 +87,51 @@ async def test_absent_fields_are_omitted_not_nulled(client: AsyncClient, user_fa
 
     assert "rankings" not in body, "a university with no rankings must return no `rankings` key"
     assert "awards" not in body
+    assert "recognition" not in body
     assert "employability" not in body
     assert "routes" not in body, "no published routes means no requirements section at all"
     # What *is* set still comes through.
     assert body["tagline"] == "A university in York"
     assert body["region"] == "England — North"
+
+
+async def test_recognition_reaches_the_public_detail(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """A stored field is not a served one.
+
+    `recognition` is declared on the response model *and* assembled by hand
+    into the payload dict in `routes/public.py`. Adding the column and the
+    Pydantic field is not enough — miss the dict and the endpoint returns 200
+    with the section silently absent, which looks exactly like a university
+    that has no recognition data. This asserts the whole path.
+    """
+    admin = await user_factory(UserRole.ADMIN)
+    headers = await auth_headers(admin)
+    university = await _seed(client, headers)
+
+    sections = [
+        {
+            "heading": "Sustainability progress & targets",
+            "items": [
+                {"label": "Carbon emissions", "detail": "Reduced carbon footprint by 50% since 2009."},
+                {"label": "Waste", "sub": ["Reusable cup discounts.", "Furniture reuse schemes."]},
+            ],
+        }
+    ]
+    patch = await client.patch(
+        f"{UNIVERSITIES}/{university['id']}", json={"recognition": sections}, headers=headers
+    )
+    assert patch.status_code == 200, patch.text
+
+    body = (await client.get(f"{PUBLIC}/universities/york-st-john")).json()
+    assert body["recognition"] == sections, "recognition must survive the hand-built payload dict"
+    # Nested bullets are the shape the source document uses most, so the
+    # round-trip has to keep them rather than flattening to a string.
+    assert body["recognition"][0]["items"][1]["sub"] == [
+        "Reusable cup discounts.",
+        "Furniture reuse schemes.",
+    ]
 
 
 async def test_the_list_omits_absent_fields_too(client: AsyncClient, user_factory, auth_headers) -> None:

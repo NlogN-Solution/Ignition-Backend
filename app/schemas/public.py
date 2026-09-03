@@ -115,6 +115,7 @@ class UniversityDetail(UniversitySummary):
     milestones: list[dict[str, Any]] | None = None
     rankings: list[dict[str, Any]] | None = None
     awards: list[dict[str, Any]] | None = None
+    recognition: list[dict[str, Any]] | None = None
     employability: dict[str, Any] | None = None
     interview_profile: dict[str, Any] | None = None
     flyer_url: str | None = None

@@ -1,0 +1,1482 @@
+{
+  "source_document": "university-rankings.pdf",
+  "note": "Curated by hand from the PDF, not parsed. The document is 23 irregular free-text sections with no stable structure, so a regex parser would be more fragile than a reviewed file. Each bullet is routed to exactly one destination: a placing that carries BOTH a source and a year becomes a `rankings` entry; an award, rating or accreditation becomes an `awards` entry; a list of graduate employers becomes `employability.employers`; everything else is kept verbatim under its own PDF heading in `recognition`. Nothing is duplicated and nothing is dropped.",
+  "skipped": [
+    {
+      "pdf_heading": "University of Ulster",
+      "slug": "ulster",
+      "reason": "The section's content is not about Ulster University. Its bullets describe a student guardianship and homestay agency ('Guardianship Clients: 5,004', 'Homestay in UK', 'Minor students are required to have a homestay and guardian to study in school'). Seeding it against a real institution would publish plainly false information, so it is reported rather than imported."
+    },
+    {
+      "pdf_heading": "Aston University § 3. Website Policies & Navigation Links",
+      "slug": "aston",
+      "reason": "Accessibility / Cookies / Disclaimer / Publication Scheme / Modern Slavery Act / Privacy is a scraped page footer, not institutional recognition. The rest of the Aston section is imported."
+    }
+  ],
+  "universities": [
+    {
+      "slug": "york-st-john",
+      "pdf_heading": "YSJU",
+      "rankings": [
+        {
+          "title": "Postgraduate overall satisfaction",
+          "position": "10th of 102",
+          "scope": "UK",
+          "category": "Student satisfaction",
+          "source": "Postgraduate Taught Experience Survey (PTES)",
+          "year": 2025
+        },
+        {
+          "title": "York named the most popular city in the UK",
+          "position": "1st",
+          "scope": "UK",
+          "category": "Location",
+          "source": "YouGov",
+          "year": 2025
+        }
+      ],
+      "awards": [
+        {
+          "title": "TEF 2023: Silver",
+          "organisation": "Teaching Excellence Framework",
+          "year": 2023,
+          "detail": "Overall rating Silver, with Gold for Student Experience and Silver for Student Outcomes."
+        }
+      ],
+      "recognition": [
+        {
+          "heading": "Student satisfaction & teaching quality",
+          "items": [
+            {
+              "label": "National Student Survey (NSS 2026)",
+              "sub": [
+                "Overall Positivity Score: 85%",
+                "Teaching Staff Quality: 94% positivity score for how good teaching staff are at explaining concepts."
+              ]
+            },
+            {
+              "label": "International Student Barometer (2024)",
+              "sub": [
+                "London Campus Satisfaction: 91% overall student satisfaction rate."
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "Postgraduate experience",
+          "items": [
+            {
+              "label": "Postgraduate Research Experience Survey (PRES 2024)",
+              "sub": [
+                "Research Postgraduate Satisfaction: 84% overall satisfaction."
+              ]
+            }
+          ]
+        },
+        {
+          "heading": "Academic initiatives & access",
+          "items": [
+            {
+              "label": "Research opportunities",
+              "detail": "Students engage directly in active research via the Students as Researchers scheme."
+            },
+            {
+              "label": "Inclusivity & access",
+              "detail": "Access to higher education is expanded through:",
+              "sub": [
+                "Contextual Offer Scheme",
+                "Mature Student Entry Scheme"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "east-london",
+      "pdf_heading": "UEL",
+      "rankings": [
+        {
+          "title": "Top 40 in the UK",
+          "position": "33rd",
+          "scope": "UK",
+          "category": "Overall",
+          "source": "The Guardian University Guide",
+          "year": 2026
+        },
+        {
+          "title": "Fastest-rising university in England",
+          "scope": "England",
+          "category": "Graduate outcomes",
+          "source": "Graduate Outcomes Survey",
+          "year": 2025
+        },
+        {
+          "title": "Overall Positivity",
+          "position": "1st",
+          "scope": "England",
+          "category": "Student satisfaction",
+          "source": "National Student Survey (NSS)",
+          "year": 2026,
+          "note": "Based on Times Higher Education methodology for institutions with over 1,000 survey responses."
+        }
+      ],
+      "awards": [
+        {
+          "title": "TEF: Silver",
+          "organisation": "Teaching Excellence Framework",
+          "detail": "Silver awarded for high-quality teaching and positive student outcomes."
+        }
+      ],
+      "recognition": []
+    },
+    {
+      "slug": "west-london",
+      "pdf_heading": "UWL",
+      "rankings": [
+        {
+          "title": "Developing the knowledge and skills students need for the future",
+          "position": "1st",
+          "scope": "London",
+          "category": "Student development",
+          "source": "National Student Survey (NSS)",
+          "year": 2025
+        },
+        {
+          "title": "Developing the knowledge and skills students need for the future",
+          "position": "5th",
+          "scope": "England",
+          "category": "Student development",
+          "source": "National Student Survey (NSS)",
+          "year": 2025
+        }
+      ],
+      "awards": [
+        {
+          "title": "TEF 2023: Silver",
+          "organisation": "Teaching Excellence Framework",
+          "year": 2023,
+          "detail": "Silver overall for high-quality teaching and student outcomes, with a Gold award for Student Experience and a Bronze award for Student Outcomes."
+        }
+      ],
+      "recognition": []
+    },
+    {
+      "slug": "west-of-scotland",
+      "pdf_heading": "UWS",
+      "rankings": [
+        {
+          "title": "Universities globally for societal and environmental impact",
+          "position": "Top 300",
+          "scope": "Global",
+          "category": "Impact & sustainability",
+          "source": "Times Higher Education (THE) Impact Rankings",
+          "year": 2025
+        },
+        {
+          "title": "Scottish University of the Year for Social Inclusion",
+          "position": "1st",
+          "scope": "Scotland",
+          "category": "Social inclusion",
+          "source": "The Times & The Sunday Times Good University Guide",
+          "year": 2026
+        }
+      ],
+      "awards": [],
+      "recognition": []
+    },
+    {
+      "slug": "roehampton",
+      "pdf_heading": "Rohempton",
+      "rankings": [
+        {
+          "title": "Student satisfaction",
+          "position": "Top 3",
+          "scope": "London",
+          "category": "Student satisfaction",
+          "source": "Complete University Guide",
+          "year": 2026
+        },
+        {
+          "title": "Student life",
+          "position": "1st",
+          "scope": "London",
+          "category": "Student life",
+          "source": "WhatUni Student Choice Awards",
+          "year": 2026
+        }
+      ],
+      "awards": [
+        {
+          "title": "TEF 2023: Silver",
+          "organisation": "Teaching Excellence Framework",
+          "year": 2023,
+          "detail": "Awarded Silver for delivering high quality teaching and learning."
+        }
+      ],
+      "recognition": [
+        {
+          "heading": "Graduate outcomes",
+          "items": [
+            {
+              "label": "Longitudinal Education Outcomes (LEO 2026 — Department for Education)",
+              "detail": "Graduates' salaries grow faster than the UK average."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "arden",
+      "pdf_heading": "Arden",
+      "rankings": [
+        {
+          "title": "Student satisfaction",
+          "position": "5th",
+          "scope": "UK",
+          "category": "Student satisfaction",
+          "source": "National Student Survey",
+          "year": 2025,
+          "note": "Named 5th best university in the UK for student satisfaction."
+        },
+        {
+          "title": "UK Higher Education Institution for commitment to investment in higher education",
+          "position": "1st",
+          "scope": "UK",
+          "source": "EducationInvestor Awards",
+          "year": 2026
+        },
+        {
+          "title": "UK Executive MBA programme",
+          "position": "1st",
+          "scope": "UK",
+          "category": "Business",
+          "source": "CEO Magazine",
+          "year": 2024
+        }
+      ],
+      "awards": [
+        {
+          "title": "QS Stars: 5 Stars for Online Learning",
+          "organisation": "QS Stars Rating",
+          "detail": "Awarded 5 Stars for Online Learning."
+        },
+        {
+          "title": "Rated a Good Provider",
+          "organisation": "Ofsted"
+        }
+      ],
+      "recognition": [
+        {
+          "heading": "Rankings & key highlights",
+          "items": [
+            {
+              "label": "Trustpilot rating",
+              "detail": "Holds a 4.6 / 5-star score based on 842 user reviews."
+            },
+            {
+              "label": "Global study locations",
+              "detail": "8 physical study locations (including 3 in London and 1 in Berlin) alongside flexible online learning options."
+            }
+          ]
+        },
+        {
+          "heading": "Accreditations & industry partners",
+          "items": [
+            {
+              "label": "AACSB",
+              "detail": "Business Education Alliance Member"
+            },
+            {
+              "label": "BPS",
+              "detail": "British Psychological Society Accredited"
+            },
+            {
+              "label": "CMI",
+              "detail": "Chartered Management Institute HE Partner"
+            },
+            {
+              "label": "ACCA",
+              "detail": "Accredited Programme"
+            },
+            {
+              "label": "APHEA",
+              "detail": "Agency for Public Health Education Accreditation (Validated Curriculum)"
+            },
+            {
+              "label": "APM",
+              "detail": "Association for Project Management Academic Accreditation"
+            },
+            {
+              "label": "CIPD",
+              "detail": "Chartered Institute of Personnel and Development"
+            },
+            {
+              "label": "CIMA",
+              "detail": "Chartered Institute of Management Accountants University Partner"
+            },
+            {
+              "label": "DMI",
+              "detail": "Digital Marketing Institute Partner"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "wolverhampton",
+      "pdf_heading": "Wolverhempton",
+      "rankings": [
+        {
+          "title": "The UK's Fastest Growing University",
+          "scope": "UK",
+          "category": "Growth",
+          "source": "UCAS acceptance data",
+          "year": 2025,
+          "note": "Recognised as the UK's fastest growing university for UCAS acceptances, 2024–2025."
+        }
+      ],
+      "awards": [
+        {
+          "title": "QS Stars: 5 Stars (Excellent)",
+          "organisation": "QS Stars Rating",
+          "detail": "Awarded 5 QS Stars — overall rating Excellent."
+        },
+        {
+          "title": "Athena SWAN Bronze Award",
+          "organisation": "Athena SWAN",
+          "detail": "For commitment to gender equality in higher education."
+        },
+        {
+          "title": "Stonewall Top 100 Employer",
+          "organisation": "Stonewall",
+          "year": 2018,
+          "detail": "Named a Stonewall Top 100 Employer for LGBTQ+ inclusion."
+        },
+        {
+          "title": "Fairtrade institution accreditation",
+          "organisation": "Fairtrade",
+          "detail": "Holds official Fairtrade institution accreditation."
+        }
+      ],
+      "recognition": [
+        {
+          "heading": "Growth, rankings & placements",
+          "items": [
+            {
+              "label": "WhatUni Student Choice Awards",
+              "detail": "Ranked as a Top 10 University in the University of the Year category."
+            },
+            {
+              "label": "Career support",
+              "detail": "Guaranteed placements for every student across every course."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "sunderland",
+      "pdf_heading": "Sunderland",
+      "rankings": [
+        {
+          "title": "Top 30 UK University",
+          "position": "Top 30",
+          "scope": "UK",
+          "category": "Overall",
+          "source": "Guardian University Guide",
+          "year": 2026,
+          "note": "Ranked as a Top 30 UK University for the first time."
+        },
+        {
+          "title": "Student satisfaction",
+          "position": "7th",
+          "scope": "UK",
+          "category": "Student satisfaction",
+          "source": "National Student Survey",
+          "year": 2026,
+          "note": "Based on Times Higher Education analysis."
+        },
+        {
+          "title": "Course quality",
+          "position": "3rd",
+          "scope": "UK",
+          "category": "Course quality",
+          "source": "Uni Compare Rankings",
+          "year": 2027
+        }
+      ],
+      "awards": [],
+      "recognition": [
+        {
+          "heading": "Institutional rankings & growth",
+          "items": [
+            {
+              "label": "Ranking progression",
+              "detail": "Achieved a top 40 position in the previous year and a top 50 position the year before."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "london-metropolitan",
+      "pdf_heading": "LMU",
+      "rankings": [
+        {
+          "title": "Student satisfaction",
+          "position": "14th of 140",
+          "scope": "UK",
+          "category": "Student satisfaction",
+          "source": "National Student Survey",
+          "year": 2026,
+          "note": "Based on Times Higher Education analysis."
+        },
+        {
+          "title": "Student value added",
+          "position": "1st",
+          "scope": "UK",
+          "category": "Teaching",
+          "source": "Guardian University Guide",
+          "year": 2026,
+          "note": "Students make more progress relative to entry grades than at any other UK university."
+        }
+      ],
+      "awards": [],
+      "employability": {
+        "employers": [
+          {
+            "name": "Arsenal Football Club",
+            "sector": "Sport"
+          },
+          {
+            "name": "Bank of England",
+            "sector": "Finance"
+          },
+          {
+            "name": "BBC",
+            "sector": "Media"
+          },
+          {
+            "name": "Ernst & Young",
+            "sector": "Professional services"
+          },
+          {
+            "name": "Google",
+            "sector": "Technology"
+          },
+          {
+            "name": "GlaxoSmithKline",
+            "sector": "Pharmaceuticals"
+          },
+          {
+            "name": "Ministry of Justice",
+            "sector": "Government"
+          },
+          {
+            "name": "Tesla Motors",
+            "sector": "Automotive"
+          },
+          {
+            "name": "United Nations",
+            "sector": "International"
+          }
+        ],
+        "services": []
+      },
+      "recognition": [
+        {
+          "heading": "Rankings & student satisfaction",
+          "items": [
+            {
+              "label": "Student support",
+              "detail": "A Top 10 position across the UK for student support."
+            },
+            {
+              "label": "Art course",
+              "detail": "Ranked as the best in London for its art course."
+            }
+          ]
+        },
+        {
+          "heading": "Scholarships",
+          "items": [
+            {
+              "label": "Rising Star Scholarships",
+              "detail": "£9,790 per year for selected creative courses, including subjects from journalism to music."
+            }
+          ]
+        },
+        {
+          "heading": "Featured news & projects",
+          "items": [
+            {
+              "label": "Sports leadership",
+              "detail": "Graduate Valdas Dambrauskas (Sports Science and Coaching) coaches Champions League team Sabah FK in the Azerbaijan Premier League."
+            },
+            {
+              "label": "Design showcase",
+              "detail": "Students and alumni showcase work at the London Design Festival via the Shoreditch Campus."
+            },
+            {
+              "label": "Community science",
+              "detail": "Project collaboration between London Met scientists and an Islington primary school allowing pupils to act as 'co-researchers'."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "university-college-birmingham",
+      "pdf_heading": "university college birmingham",
+      "rankings": [
+        {
+          "title": "Career prospects and facilities",
+          "position": "1st",
+          "scope": "Birmingham",
+          "category": "Careers",
+          "source": "WhatUni Student Choice Awards",
+          "year": 2026
+        },
+        {
+          "title": "Overall student satisfaction",
+          "position": "3rd",
+          "scope": "UK",
+          "category": "Student satisfaction",
+          "source": "National Student Survey",
+          "year": 2026
+        }
+      ],
+      "awards": [
+        {
+          "title": "Rated a Good Provider",
+          "organisation": "Ofsted"
+        }
+      ],
+      "recognition": [
+        {
+          "heading": "Financial support, investment & industry links",
+          "items": [
+            {
+              "label": "Cost of Living Allowance",
+              "detail": "£6,000 completely free (no repayment required) for UK full-time undergraduate students starting in September 2026, to cover expenses like food, bills and transport."
+            },
+            {
+              "label": "Campus investment",
+              "detail": "£300m invested in outstanding facilities and learning environments across university campuses."
+            },
+            {
+              "label": "Employer network",
+              "detail": "1,000 employer contacts providing valuable placements and careers guidance."
+            },
+            {
+              "label": "Career support",
+              "detail": "Focus on moving graduates from \"UCB to industry\" into careers as founders and future leaders."
+            }
+          ]
+        },
+        {
+          "heading": "Accreditations & charters",
+          "items": [
+            {
+              "label": "European Social Fund",
+              "detail": "European Union funded partnership badge."
+            },
+            {
+              "label": "Skills West Midlands + Warwickshire",
+              "detail": "Regional skills network badge."
+            },
+            {
+              "label": "The Disabled Student Commitment",
+              "detail": "Signed Up member."
+            },
+            {
+              "label": "University Mental Health Charter",
+              "detail": "Programme Member."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "regent-college-london",
+      "pdf_heading": "Regent College London",
+      "rankings": [],
+      "awards": [],
+      "recognition": [
+        {
+          "heading": "Milestone & student body",
+          "items": [
+            {
+              "label": "Anniversary",
+              "detail": "Celebrating 25 years of success in higher education."
+            },
+            {
+              "label": "Current students",
+              "detail": "10,000+ current students."
+            },
+            {
+              "label": "Student diversity",
+              "detail": "85+ student nationalities."
+            }
+          ]
+        },
+        {
+          "heading": "National Student Survey (NSS 2025) scores",
+          "items": [
+            {
+              "label": "Teaching quality",
+              "detail": "90% of students are satisfied with teaching quality."
+            },
+            {
+              "label": "Assessment & feedback",
+              "detail": "90% of RCL students are satisfied with assessment and feedback."
+            }
+          ]
+        },
+        {
+          "heading": "Campus & study features",
+          "items": [
+            {
+              "label": "Locations",
+              "detail": "5 locations across London."
+            },
+            {
+              "label": "Study options",
+              "detail": "Full-time and part-time study options available."
+            },
+            {
+              "label": "Additional offerings",
+              "detail": "Complimentary access to growth mindset programmes."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "ravensbourne",
+      "pdf_heading": "Ravensbourne university london",
+      "rankings": [],
+      "awards": [
+        {
+          "title": "TEF: Silver",
+          "organisation": "Teaching Excellence Framework",
+          "detail": "Holds a Silver rating."
+        },
+        {
+          "title": "RIBA accreditation for both Architecture and Interiors",
+          "organisation": "Royal Institute of British Architects (RIBA)",
+          "detail": "Recognised as the only university worldwide to receive RIBA accreditation for both Architecture and Interiors courses."
+        }
+      ],
+      "employability": {
+        "employers": [
+          {
+            "name": "BBC",
+            "sector": "Media"
+          },
+          {
+            "name": "Sony",
+            "sector": "Media & technology"
+          },
+          {
+            "name": "Burberry",
+            "sector": "Fashion"
+          },
+          {
+            "name": "QVC",
+            "sector": "Retail"
+          },
+          {
+            "name": "Barclays",
+            "sector": "Finance"
+          },
+          {
+            "name": "Givenchy",
+            "sector": "Fashion"
+          },
+          {
+            "name": "Framestore",
+            "sector": "Visual effects"
+          }
+        ],
+        "services": []
+      },
+      "recognition": [
+        {
+          "heading": "Rankings & accreditations",
+          "items": [
+            {
+              "label": "StudentCrowd",
+              "detail": "Ranked among the top 5 universities in London."
+            }
+          ]
+        },
+        {
+          "heading": "Postgraduate discount & tuition support",
+          "items": [
+            {
+              "label": "Alumni discount",
+              "detail": "Up to 20% discount on postgraduate tuition fees for home students who completed their undergraduate qualification at Ravensbourne University London."
+            },
+            {
+              "label": "Conditions",
+              "detail": "The alumni discount cannot be used in conjunction with another discount or scholarship offer."
+            },
+            {
+              "label": "Overseas support",
+              "detail": "Support for overseas students is accessible via the bursaries and scholarships page."
+            }
+          ]
+        },
+        {
+          "heading": "Alumni network & mentorship opportunities",
+          "items": [
+            {
+              "label": "Ravensbourne Mentors Program opportunities",
+              "sub": [
+                "Introduce yourself and act as a mentor to creative and talented students and graduates.",
+                "Connect and reminisce with fellow graduates.",
+                "Expand your professional network."
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "worcester",
+      "pdf_heading": "UNIVERSITY OF WORCESTER",
+      "rankings": [
+        {
+          "title": "Multi-subject university for sustained employment, further study, or both",
+          "position": "1st",
+          "scope": "UK",
+          "category": "Graduate outcomes",
+          "source": "Longitudinal Education Outcomes (LEO)",
+          "year": 2026,
+          "note": "LEO 2017–2026."
+        }
+      ],
+      "awards": [],
+      "employability": {
+        "employedRate": "95%",
+        "employedSource": "Graduate Outcomes Survey 2026 — in work or further study within 15 months of graduating.",
+        "employers": [],
+        "services": []
+      },
+      "recognition": [
+        {
+          "heading": "Graduate outcomes & employability metrics",
+          "items": [
+            {
+              "label": "On-campus employment",
+              "detail": "500+ students are employed on campus while completing their studies."
+            },
+            {
+              "label": "Employer network",
+              "detail": "1,000+ active partnerships with employers."
+            }
+          ]
+        },
+        {
+          "heading": "Alumni awards overview",
+          "items": [
+            {
+              "label": "Purpose",
+              "detail": "Recognises and celebrates the impact made by alumni across a range of fields."
+            },
+            {
+              "label": "Structure",
+              "detail": "Features 10 award categories."
+            },
+            {
+              "label": "Status (2026)",
+              "detail": "Submissions for the 2026 Alumni Awards are closed; winners will be announced later in the summer."
+            }
+          ]
+        },
+        {
+          "heading": "Eligibility & award restrictions",
+          "items": [
+            {
+              "label": "Eligibility",
+              "detail": "Open to all graduates of the University of Worcester or its predecessor institutions (such as Worcester College of Higher Education). Student Records verifies all nominee details."
+            },
+            {
+              "label": "Ineligibility",
+              "detail": "Awards will not be granted:",
+              "sub": [
+                "Posthumously",
+                "To politicians who currently hold an elective office",
+                "To any member of the selection panel"
+              ]
+            },
+            {
+              "label": "Withdrawal policy",
+              "detail": "The University reserves the right to withdraw an award at any time if an individual's actions bring the institution into disrepute, with recipients expected to remove public references to the award."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "wales-trinity-saint-david",
+      "pdf_heading": "university of wales trinity saint david",
+      "rankings": [
+        {
+          "title": "Architecture",
+          "position": "1st",
+          "scope": "UK",
+          "category": "Architecture",
+          "source": "Unifresher Student Rankings — Best Universities for Architecture in the UK",
+          "year": 2027
+        }
+      ],
+      "awards": [
+        {
+          "title": "UK Quality Assured / Sicrwydd Ansawdd y DU",
+          "organisation": "QAA Cymru"
+        },
+        {
+          "title": "Cyber Essentials Plus",
+          "organisation": "Cyber Essentials",
+          "detail": "Certified Plus."
+        },
+        {
+          "title": "Disability Confident Employer",
+          "organisation": "Disability Confident"
+        },
+        {
+          "title": "Living Wage Employer",
+          "organisation": "Living Wage Foundation"
+        },
+        {
+          "title": "Race Equality Charter — Bronze Award",
+          "organisation": "ECU Race Equality Charter",
+          "detail": "Member and Bronze Award holder."
+        },
+        {
+          "title": "Customer Service Excellence certified",
+          "organisation": "Customer Service Excellence (CSE)",
+          "detail": "Rhagoriaeth mewn Gwasanaeth i Gwsmeriaid / Customer Service Excellence certified."
+        }
+      ],
+      "recognition": [
+        {
+          "heading": "Subject areas & learning experience",
+          "items": [
+            {
+              "label": "Subject choice",
+              "detail": "Offers 20 subject areas with a comprehensive range of courses."
+            },
+            {
+              "label": "Personalised learning",
+              "detail": "Focuses on small class sizes, engaging lectures and high student involvement for interactive discussions."
+            },
+            {
+              "label": "Expert instruction",
+              "detail": "Courses taught by subject experts to provide practical skills and knowledge."
+            }
+          ]
+        },
+        {
+          "heading": "Rankings & identity",
+          "items": [
+            {
+              "label": "Positioning",
+              "detail": "Self-described as \"A connected University\", leveraging regional, national and international partnerships across public, private and voluntary sectors to boost job growth and regional investment."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "middlesex",
+      "pdf_heading": "MiddleSex University",
+      "rankings": [
+        {
+          "title": "Career prospects",
+          "position": "1st",
+          "scope": "London",
+          "category": "Careers",
+          "source": "Whatuni Student Choice Awards",
+          "year": 2026,
+          "note": "Voted 1st in London for Career Prospects by students."
+        },
+        {
+          "title": "Course quality and employability",
+          "position": "1st",
+          "scope": "London",
+          "category": "Course quality",
+          "source": "Uni Compare Rankings",
+          "year": 2027,
+          "note": "Ranked 1st in London for both categories."
+        },
+        {
+          "title": "Facilities",
+          "position": "1st",
+          "scope": "London",
+          "category": "Facilities",
+          "source": "Whatuni Student Choice Awards",
+          "year": 2026,
+          "note": "Campus and learning resources ranked the best in London."
+        }
+      ],
+      "awards": [],
+      "recognition": []
+    },
+    {
+      "slug": "hull",
+      "pdf_heading": "University of Hull",
+      "rankings": [],
+      "awards": [],
+      "recognition": [
+        {
+          "heading": "Core pillars & objectives",
+          "items": [
+            {
+              "label": "Innovation",
+              "detail": "Focuses on transforming the quality of life for individuals impacted by chronic wounds."
+            },
+            {
+              "label": "Facilities",
+              "detail": "Provides world-class research and innovation facilities equipped with cutting-edge technology."
+            },
+            {
+              "label": "Research",
+              "detail": "Drives high-quality, interdisciplinary discovery and applied research."
+            },
+            {
+              "label": "Partnerships",
+              "detail": "Developed in close collaboration with a consortium of industry, academic and clinical partners."
+            }
+          ]
+        },
+        {
+          "heading": "Academic & institutional partners",
+          "items": [
+            {
+              "label": "Hull York Medical School"
+            },
+            {
+              "label": "King's College London"
+            },
+            {
+              "label": "University of York"
+            }
+          ]
+        },
+        {
+          "heading": "Academic & NHS collaborations",
+          "items": [
+            {
+              "label": "NHS Hull University Teaching Hospitals (NHS Trust)"
+            },
+            {
+              "label": "University of Kent"
+            },
+            {
+              "label": "Humber NHS Foundation Trust"
+            }
+          ]
+        },
+        {
+          "heading": "Key industry & clinical partnerships",
+          "items": [
+            {
+              "label": "Polaroid Therapeutics"
+            },
+            {
+              "label": "Reckitt"
+            },
+            {
+              "label": "NHS Hull University Teaching Hospitals (NHS Trust)"
+            },
+            {
+              "label": "Hull York Medical School"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "winchester",
+      "pdf_heading": "University of winchester",
+      "rankings": [
+        {
+          "title": "Employability",
+          "position": "Top 10",
+          "scope": "UK",
+          "category": "Careers",
+          "source": "UniCompare",
+          "year": 2026
+        },
+        {
+          "title": "Winchester named the safest area to live and work in the UK",
+          "position": "1st",
+          "scope": "UK",
+          "category": "Location",
+          "source": "Anubis",
+          "year": 2025
+        },
+        {
+          "title": "Student Happiness",
+          "position": "15th",
+          "scope": "UK",
+          "category": "Student satisfaction",
+          "source": "UniFresher Guide",
+          "year": 2027
+        }
+      ],
+      "awards": [],
+      "recognition": []
+    },
+    {
+      "slug": "portsmouth",
+      "pdf_heading": "university of portsmouth",
+      "rankings": [
+        {
+          "title": "Best Universities for Value for Money",
+          "position": "Top 20",
+          "scope": "UK",
+          "category": "Value for money",
+          "source": "Student Crowd",
+          "year": 2025
+        },
+        {
+          "title": "Work experience",
+          "position": "1st",
+          "scope": "Region",
+          "category": "Careers",
+          "source": "RateMyPlacement's Best Universities 2025/26",
+          "year": 2025,
+          "note": "Highest-ranked university in the region for work experience."
+        }
+      ],
+      "awards": [
+        {
+          "title": "TEF 2023: Gold",
+          "organisation": "Teaching Excellence Framework",
+          "year": 2023,
+          "detail": "Rated Gold in the latest Teaching Excellence Framework."
+        }
+      ],
+      "recognition": [
+        {
+          "heading": "Key reasons to choose Portsmouth",
+          "items": [
+            {
+              "label": "Connected Degree",
+              "detail": "The only UK university offering the Connected Degree — a 3-year course featuring a 4th-year placement."
+            }
+          ]
+        },
+        {
+          "heading": "Affordability & living costs (\"More for your money\")",
+          "items": [
+            {
+              "label": "Rent savings",
+              "detail": "Rent in Portsmouth is 54% lower than in London and 25% lower than in Brighton (Numbeo, 2025)."
+            },
+            {
+              "label": "Transport savings",
+              "detail": "All university buildings are accessible within a 15-minute walk, supplemented by a free university bus service connecting popular student spots."
+            }
+          ]
+        },
+        {
+          "heading": "Sustainability progress & targets",
+          "items": [
+            {
+              "label": "Carbon emissions",
+              "detail": "Reduced carbon footprint by 50% since 2009."
+            },
+            {
+              "label": "Recycling improvement",
+              "detail": "Increased campus recycling rates from 40% to 70% since 2011."
+            },
+            {
+              "label": "Renewable energy",
+              "detail": "100% renewable electricity backed by traceable REGO certificates, supported by on-site solar panels, solar thermal systems and air source heat pumps."
+            },
+            {
+              "label": "Eco-friendly facilities",
+              "detail": "The Ravelin Sports Centre is rated BREEAM 'Outstanding', featuring energy-efficient designs, pool water recycling, green roofs and wildflower planting."
+            },
+            {
+              "label": "Building & energy standards",
+              "detail": "All new buildings are designed fully electric to achieve a BREEAM 'Outstanding' rating, with major refurbishments targeting an 'Excellent' rating. Includes motion-sensor LED lighting and Building Management System (BMS) energy tracking."
+            },
+            {
+              "label": "Fleet electrification",
+              "detail": "Campus services fleet includes 24 fully electric vans, with longer-distance vehicles upgraded to low-emission hybrids."
+            }
+          ]
+        },
+        {
+          "heading": "Waste, recycling & sustainable travel initiatives",
+          "items": [
+            {
+              "label": "Waste & circular economy",
+              "sub": [
+                "Reusable cup discounts at campus cafés.",
+                "Internal furniture reuse schemes.",
+                "Campus Repair Cafés operated in partnership with SHARE Portsmouth.",
+                "End-of-tenancy move-out donation points supporting the British Heart Foundation.",
+                "Graduation gowns crafted from recycled materials.",
+                "Non-recyclable waste directed to Energy from Waste facilities to prevent landfill use."
+              ]
+            },
+            {
+              "label": "Transport initiatives",
+              "sub": [
+                "Member of Portsmouth City Council's Air Quality and Active Travel Board.",
+                "Campus cycle storage, parking, showers, and a dedicated Cycle Hub with over 300 secure spaces.",
+                "Electric vehicle (EV) charging infrastructure and employee salary sacrifice schemes for EV adoption.",
+                "Public transport staff discounts (buses, ferries, trains) and season ticket loan options."
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "hertfordshire",
+      "pdf_heading": "university of hertfordshire",
+      "rankings": [
+        {
+          "title": "Top 50 UK University",
+          "position": "Top 50",
+          "scope": "UK",
+          "category": "Overall",
+          "source": "Guardian University Guide",
+          "year": 2026,
+          "note": "For teaching quality, student satisfaction and graduate success."
+        },
+        {
+          "title": "Overall student satisfaction",
+          "position": "14th",
+          "scope": "UK",
+          "category": "Student satisfaction",
+          "source": "National Student Survey",
+          "year": 2026
+        },
+        {
+          "title": "Campus facilities",
+          "position": "6th",
+          "scope": "UK",
+          "category": "Facilities",
+          "source": "Whatuni Student Choice Awards",
+          "year": 2025
+        },
+        {
+          "title": "Research partnerships, local growth and regional regeneration",
+          "position": "Highest ranking",
+          "scope": "UK",
+          "category": "Research & knowledge exchange",
+          "source": "Knowledge Exchange Framework (KEF)",
+          "year": 2025
+        },
+        {
+          "title": "Research impact",
+          "position": "Top 25%",
+          "scope": "UK",
+          "category": "Research",
+          "source": "Research Excellence Framework (REF)",
+          "year": 2021,
+          "note": "90% of research impact rated as outstanding or very considerable."
+        }
+      ],
+      "awards": [
+        {
+          "title": "King's Award for Enterprise",
+          "organisation": "King's Award for Enterprise",
+          "year": 2024,
+          "detail": "The only university to win a King's Award for Enterprise, recognised for outstanding global growth and strategic internationalisation."
+        },
+        {
+          "title": "Shortlisted for University of the Year",
+          "organisation": "Times Higher Education (THE) Awards",
+          "year": 2025,
+          "detail": "For excellence, innovation and higher education impact."
+        },
+        {
+          "title": "QS Stars: 5 Stars (Excellent)",
+          "organisation": "QS Stars Rating",
+          "detail": "Rated 5 Stars (Excellent) for teaching, employability, facilities and social impact."
+        },
+        {
+          "title": "TEF 2023: Silver",
+          "organisation": "Teaching Excellence Framework",
+          "year": 2023,
+          "detail": "Awarded Silver for excellent teaching, learning and strong student outcomes."
+        },
+        {
+          "title": "Small Business Charter",
+          "organisation": "Small Business Charter",
+          "detail": "Accredited for outstanding support of SMEs, entrepreneurs and local economic growth."
+        }
+      ],
+      "recognition": [
+        {
+          "heading": "Student satisfaction & facilities",
+          "items": [
+            {
+              "label": "Postgraduate Taught Experience Survey",
+              "detail": "Ranked 7th out of 105 UK universities for postgraduate student satisfaction."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "creative-arts",
+      "pdf_heading": "University for the creative arts",
+      "rankings": [],
+      "awards": [],
+      "recognition": [
+        {
+          "heading": "Types of academic collaborations",
+          "items": [
+            {
+              "label": "Validated Provision",
+              "detail": "A new course designed by a partner institution using UCA protocols (often collaboratively), which is approved by UCA to lead to a UCA award."
+            },
+            {
+              "label": "Franchised Provision",
+              "detail": "An existing or modified UCA course approved for delivery by an external partner."
+            },
+            {
+              "label": "Articulation Agreement",
+              "detail": "Formal agreement recognising credit ratings from partner institutions, allowing automatic credit transfer and advanced standing entry without a separate application or interview (subject to UKVI requirements)."
+            },
+            {
+              "label": "Dual / Double Award",
+              "detail": "Granting of separate degree certificates from both UCA and the partner institution for a shared programme."
+            },
+            {
+              "label": "Joint Degrees & PhDs",
+              "detail": "Collaborative degree programmes with joint delivery models established via formal written agreements."
+            },
+            {
+              "label": "Global Mobility",
+              "detail": "Reciprocal staff and student exchanges (fee waiver basis) and non-reciprocal study abroad or visiting scholar schemes. Contact: exchange@uca.ac.uk."
+            }
+          ]
+        },
+        {
+          "heading": "Current partner institutions",
+          "items": [
+            {
+              "label": "Berlin School of Business & Innovation (BSBI)"
+            },
+            {
+              "label": "Cyprus Academy of Art"
+            },
+            {
+              "label": "Future Education University College"
+            },
+            {
+              "label": "London College of Contemporary Arts (LCCA)"
+            },
+            {
+              "label": "London School of Business & Finance (Singapore Campus)"
+            },
+            {
+              "label": "Singapore Raffles Music College"
+            },
+            {
+              "label": "The Hong Kong Management Association (HKMA)"
+            },
+            {
+              "label": "London College of Contemporary Music (LCCM)"
+            },
+            {
+              "label": "London School of Design and Marketing (LSDM)"
+            },
+            {
+              "label": "The Millennium Universal College (TMUC)"
+            }
+          ]
+        },
+        {
+          "heading": "Featured community stories (\"Two Minute Stories\")",
+          "items": [
+            {
+              "label": "TV Production students",
+              "detail": "Worked on a Wild West Game Show."
+            },
+            {
+              "label": "Bri Chartrand",
+              "detail": "Created a mural makeover for Zizzi."
+            },
+            {
+              "label": "Oluwafemi Babalola",
+              "detail": "Project highlighting Colouring the UCA campus."
+            },
+            {
+              "label": "Kota Ishida",
+              "detail": "MFA graduate featured in the Royal Photographic Society exhibition."
+            },
+            {
+              "label": "Diversity & inclusion feature",
+              "detail": "Everyone is Welcome at UCA."
+            },
+            {
+              "label": "Animal life drawing",
+              "detail": "Please Don't Eat The Art feature on life drawing sessions at UCA."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "aston",
+      "pdf_heading": "Aston University",
+      "rankings": [],
+      "awards": [
+        {
+          "title": "QAA Member (2023–24)",
+          "organisation": "QAA",
+          "year": 2023,
+          "detail": "Recognised quality assurance status, 2023–24."
+        },
+        {
+          "title": "University of the Year",
+          "organisation": "The Guardian",
+          "year": 2020
+        },
+        {
+          "title": "TEF 2023: Gold",
+          "organisation": "Teaching Excellence Framework",
+          "year": 2023,
+          "detail": "Highest rating in the Teaching Excellence Framework."
+        },
+        {
+          "title": "Athena SWAN Gold Award",
+          "organisation": "Athena SWAN",
+          "detail": "Recognised for commitment to advancing gender equality."
+        },
+        {
+          "title": "University of the Year (Student Success)",
+          "organisation": "Daily Mail",
+          "year": 2025,
+          "detail": "Awarded for student outcomes and success."
+        }
+      ],
+      "recognition": [
+        {
+          "heading": "Graduate earnings & ranking",
+          "items": [
+            {
+              "label": "National ranking",
+              "detail": "Ranked 21st in the UK for graduate earnings."
+            },
+            {
+              "label": "Percentile performance",
+              "detail": "Placed in the top 14% nationwide for median graduate earnings five years after graduation."
+            }
+          ]
+        },
+        {
+          "heading": "Identity",
+          "items": [
+            {
+              "label": "4th Generation University",
+              "detail": "Strategic branding emphasising its position in the Fourth Industrial Revolution and enterprise."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "lancashire",
+      "pdf_heading": "university of lancashire",
+      "rankings": [
+        {
+          "title": "World ranking",
+          "position": "Top 7%",
+          "scope": "Global",
+          "category": "Overall",
+          "source": "Center for World University Rankings",
+          "year": 2024,
+          "note": "Ranked in the top 7% of universities worldwide."
+        },
+        {
+          "title": "Most Affordable University in the UK",
+          "position": "1st",
+          "scope": "UK",
+          "category": "Cost of living",
+          "source": "The Times",
+          "year": 2023,
+          "note": "Ranked as having the lowest cost of living for students in the UK."
+        }
+      ],
+      "awards": [
+        {
+          "title": "University of the Year 2023",
+          "organisation": "Edufuturists",
+          "year": 2023,
+          "detail": "Named University of the Year 2023 for its innovation and progressive approach to education."
+        },
+        {
+          "title": "TEF 2023: Silver",
+          "organisation": "Teaching Excellence Framework",
+          "year": 2023,
+          "detail": "Awarded Silver in the Teaching Excellence Framework (TEF) 2023."
+        }
+      ],
+      "recognition": [
+        {
+          "heading": "Key recognition & awards",
+          "items": [
+            {
+              "label": "Northern Powerhouse Partner",
+              "detail": "Associated with the UK Government's Northern Powerhouse initiative."
+            }
+          ]
+        },
+        {
+          "heading": "Global profile & rankings",
+          "items": [
+            {
+              "label": "Global community",
+              "detail": "Home to students from more than 100 countries worldwide."
+            },
+            {
+              "label": "International partnerships",
+              "detail": "Partnered with 123 institutions across the globe."
+            }
+          ]
+        },
+        {
+          "heading": "Student support & campus living",
+          "items": [
+            {
+              "label": "Affordable accommodation",
+              "detail": "On-campus halls start at almost half the national average rent."
+            },
+            {
+              "label": "Support services",
+              "detail": "Comprehensive financial support services and teams dedicated to keeping university study affordable and stress-free."
+            },
+            {
+              "label": "Comprehensive student assistance",
+              "detail": "Tailored support for students regardless of their personal circumstances."
+            }
+          ]
+        },
+        {
+          "heading": "Strategic outlook",
+          "items": [
+            {
+              "label": "Strategic Plan (2021–2028)",
+              "detail": "Focused on executing a clear vision for the university's future and student involvement."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

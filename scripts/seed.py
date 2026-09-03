@@ -233,7 +233,7 @@ INTERVIEW_QUESTIONS = {
             25,
         ),
         (
-            "Where do you see yourself five years aowner@ignition.example.cofter graduating?",
+            "Where do you see yourself five years after graduating?",
             "Tie the answer back to the skills the programme actually teaches.",
             25,
         ),
@@ -400,7 +400,7 @@ COUNTRY_COST_OF_LIVING = {
             ("Application Fees", 300, True, "pre-arrival"),
             ("IELTS / PTE", 260, True, "pre-arrival"),
             ("Initial Settlement Cost", 1500, False, "arrival"),
-            ("Miscellaneous Buffer", 1800, False, "owner@ignition.example.coongoing"),
+            ("Miscellaneous Buffer", 1800, False, "ongoing"),
         ],
     },
 }
