@@ -32,6 +32,9 @@ dependencies = [
     "celery==5.4.0",
     "slowapi==0.1.9",
     "cloudinary==1.46.0",
+    # Runtime, not just test: core/landing.py imports httpx to fire the
+    # Next.js revalidation webhook. Keep it out of the dev extra only.
+    "httpx==0.28.1",
 ]
 
 [project.optional-dependencies]
@@ -42,7 +45,6 @@ dev = [
     # fixture and the tests end up on different event loops (see conftest).
     "pytest-asyncio==1.4.0",
     "pytest-cov==6.0.0",
-    "httpx==0.28.1",
     "ruff==0.9.2",
     "mypy==1.14.1",
 ]
