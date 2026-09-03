@@ -42,6 +42,7 @@ from ..schemas.public import (
     CourseUniversity,
     PostListPublic,
     PostPublic,
+    CourseDetailPublic,
     RoutePublic,
     ScholarshipListPublic,
     ScholarshipPublic,
@@ -305,6 +306,61 @@ async def public_course_facets(
         q=q, route=route, level=level, subject=subject, university=university, placement=placement, duration=duration
     )
     return CourseFacets(**await service.course_facets(filters))
+
+
+@router.get(
+    "/courses/{slug}",
+    response_model=CourseDetailPublic,
+    response_model_exclude_none=True,
+    summary="One published course offering",
+)
+async def public_course(
+    slug: str,
+    response: Response,
+    service: PublicCatalogueService = Depends(get_public_service),
+    _: None = Depends(require_public),
+) -> CourseDetailPublic:
+    """One of the ~4,800 offerings, on its own URL.
+
+    **Declared after `/courses/facets` on purpose.** Starlette matches in
+    declaration order, so putting this first would make `{slug}` swallow
+    `facets` and break the explorer's filter counts with a 404 for a course
+    called "facets".
+    """
+    _cache(response)
+    program = await service.course(slug)
+    if program is None:
+        raise NotFoundException("Course not found")
+
+    payload = _course_payload(program, await service.course_intake(program.id))
+    payload["university_city"] = program.university.city if program.university else None
+
+    # The criteria this course is admitted under. Unpublished routes are
+    # withheld exactly as they are on the university page — a course must not
+    # become the back door to a requirement staff have not signed off.
+    route = program.route
+    if route is not None and route.is_published:
+        payload["route"] = RoutePublic(
+            route_key=route.route_key.value,
+            label=route.label,
+            academic_criteria=route.academic_criteria,
+            english_criteria=route.english_criteria,
+            english_waiver=route.english_waiver,
+            fee_structure=route.fee_structure,
+            scholarship_text=route.scholarship_text,
+            gap_policy=route.gap_policy,
+            cas_deposit=route.cas_deposit,
+            enrolment_fee=route.enrolment_fee,
+            deadlines=route.deadlines,
+            previous_refusal=route.previous_refusal,
+            extras=route.extras,
+        )
+
+    related = await service.related_courses(program)
+    if related:
+        payload["related"] = [CoursePublic(**_course_payload(item)) for item in related]
+
+    return CourseDetailPublic(**payload)
 
 
 # --- course profiles ---------------------------------------------------------

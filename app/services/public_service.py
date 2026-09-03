@@ -213,6 +213,57 @@ class PublicCatalogueService:
         result = await self.session.execute(query)
         return list(result.scalars().unique().all()), total
 
+    async def course(self, slug: str) -> Program | None:
+        """One published offering, with everything its own page needs.
+
+        `route` is eager-loaded because it is the whole reason this page is
+        worth having. An offering row carries almost no prose of its own — no
+        tuition, no requirements, no outcomes — but 4,575 of the 4,797 point at
+        a `university_routes` row, and that carries the real entry criteria,
+        English requirements and fee structure for exactly this course's route.
+        Without the join the page would be a title and a duration.
+
+        The university must be published too, not just the offering. A course
+        reachable at a university that is not is a page with a broken parent.
+        """
+        return await self.session.scalar(
+            self._base()
+            .where(Program.slug == slug)
+            .options(
+                selectinload(Program.university),
+                selectinload(Program.course_profile),
+                selectinload(Program.route),
+            )
+        )
+
+    async def related_courses(self, program: Program, limit: int = 6) -> list[Program]:
+        """Other courses in the same subject at the same university.
+
+        Same university rather than same subject everywhere: a student on this
+        page has already chosen the institution, and the useful next question
+        is "what else could I study here", not "who else teaches this". The
+        second question is what the explorer's filters are for.
+
+        Returns nothing when the offering has no subject — 225 of them do not,
+        and a "related courses" strip built on a NULL match would list the
+        other unclassified courses, which have nothing to do with this one.
+        """
+        if program.subject is None:
+            return []
+
+        result = await self.session.execute(
+            self._base()
+            .where(
+                Program.university_id == program.university_id,
+                Program.subject == program.subject,
+                Program.id != program.id,
+            )
+            .options(selectinload(Program.university), selectinload(Program.course_profile))
+            .order_by(Program.name)
+            .limit(limit)
+        )
+        return list(result.scalars().unique().all())
+
     async def course_facets(self, filters: CourseFilters) -> dict[str, Any]:
         """Leave-one-out facet counts.
 

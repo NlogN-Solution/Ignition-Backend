@@ -134,6 +134,96 @@ async def test_recognition_reaches_the_public_detail(
     ]
 
 
+async def test_course_detail_serves_one_offering_with_its_route(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """The offering page's whole reason to exist is the inherited criteria.
+
+    An offering row carries a title, a level and a duration and nothing else a
+    student can act on. What makes the page worth having is the
+    `university_routes` row it was imported under, so this asserts the join and
+    the criteria coming back through it — not merely a 200.
+    """
+    admin = await user_factory(UserRole.ADMIN)
+    headers = await auth_headers(admin)
+    university = await _seed(client, headers)
+
+    route = (
+        await client.post(
+            "/api/v1/university-routes",
+            json={
+                "university_id": university["id"],
+                "route_key": "undergraduate",
+                "label": "UNDERGRADUATE",
+                "academic_criteria": "12th Grade GPA 2.7 or 70%",
+                "english_criteria": "IELTS 6.0 overall / 5.5 each band",
+                "fee_structure": "£12,100",
+                "is_published": True,
+            },
+            headers=headers,
+        )
+    ).json()
+
+    programs = (await client.get(f"{PROGRAMS}?limit=100", headers=headers)).json()["items"]
+    target = programs[0]
+    patch = await client.patch(
+        f"{PROGRAMS}/{target['id']}", json={"route_id": route["id"]}, headers=headers
+    )
+    assert patch.status_code == 200, patch.text
+
+    body = (await client.get(f"{PUBLIC}/courses/{target['slug']}")).json()
+    assert body["slug"] == target["slug"]
+    assert body["university"]["slug"] == "york-st-john"
+    assert body["route"]["academic_criteria"] == "12th Grade GPA 2.7 or 70%"
+    assert body["route"]["fee_structure"] == "£12,100"
+
+    assert (await client.get(f"{PUBLIC}/courses/no-such-course")).status_code == 404
+
+
+async def test_course_detail_omits_an_unpublished_route(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """A course must not be the back door to criteria staff have not signed off.
+
+    The university page already withholds unpublished routes. If this endpoint
+    did not, the same unapproved requirement would be one URL away.
+    """
+    admin = await user_factory(UserRole.ADMIN)
+    headers = await auth_headers(admin)
+    university = await _seed(client, headers)
+
+    route = (
+        await client.post(
+            "/api/v1/university-routes",
+            json={
+                "university_id": university["id"],
+                "route_key": "undergraduate",
+                "academic_criteria": "Not signed off yet",
+                "is_published": False,
+            },
+            headers=headers,
+        )
+    ).json()
+    target = (await client.get(f"{PROGRAMS}?limit=100", headers=headers)).json()["items"][0]
+    await client.patch(f"{PROGRAMS}/{target['id']}", json={"route_id": route["id"]}, headers=headers)
+
+    body = (await client.get(f"{PUBLIC}/courses/{target['slug']}")).json()
+    assert body["slug"] == target["slug"], "the course itself still resolves"
+    assert "route" not in body, "an unpublished route must not reach the public course page"
+
+
+async def test_course_facets_is_not_swallowed_by_the_slug_route(client: AsyncClient) -> None:
+    """`/courses/facets` is a literal path sharing a prefix with `/courses/{slug}`.
+
+    Starlette matches in declaration order, so if the slug route is ever moved
+    above it the explorer's filter counts start 404ing as "no course called
+    facets" — a failure that looks like a data problem and is a routing one.
+    """
+    response = await client.get(f"{PUBLIC}/courses/facets")
+    assert response.status_code == 200
+    assert "subject" in response.json()
+
+
 async def test_the_list_omits_absent_fields_too(client: AsyncClient, user_factory, auth_headers) -> None:
     admin = await user_factory(UserRole.ADMIN)
     await _seed(client, await auth_headers(admin))

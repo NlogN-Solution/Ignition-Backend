@@ -38,6 +38,7 @@ PUBLIC_ENDPOINTS: set[tuple[str, str]] = {
     ("GET", "/api/v1/public/universities/{slug}"),
     ("GET", "/api/v1/public/courses"),
     ("GET", "/api/v1/public/courses/facets"),
+    ("GET", "/api/v1/public/courses/{slug}"),
     ("GET", "/api/v1/public/course-profiles"),
     ("GET", "/api/v1/public/course-profiles/{slug}"),
     ("GET", "/api/v1/public/scholarships"),

@@ -162,6 +162,27 @@ class CoursePublic(BaseModel):
     model_config = _FROM_ORM
 
 
+class CourseDetailPublic(CoursePublic):
+    """One offering, on its own page.
+
+    Extends the search result rather than replacing it so the card and the page
+    cannot drift apart on the fields they share.
+
+    `route` is the offering's inherited entry criteria — the `university_routes`
+    row it was imported under. It is the same shape the university detail
+    serves, deliberately: a student comparing the course page against the
+    university's "Entry criteria by route" tab must see the same words, because
+    they are the same row.
+    """
+
+    university_city: str | None = None
+    #: The entry criteria this course is admitted under. Absent for the 222
+    #: offerings the import could not attribute to a route.
+    route: RoutePublic | None = None
+    #: Other offerings at the same university in the same subject.
+    related: list[CoursePublic] | None = None
+
+
 class CourseSearchResult(BaseModel):
     items: list[CoursePublic]
     total: int
