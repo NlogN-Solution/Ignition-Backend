@@ -85,9 +85,10 @@ class Settings(BaseSettings):
     CLOUDINARY_API_SECRET: str = ""
 
     # ── HTTP ──────────────────────────────────────────────────────────────────
-    # 5174 = admin dashboard (Vite), 3000 = student portal (CRA),
+    # 5174 = admin dashboard (Vite), 3001 = student portal (CRA),
     # 3100 = Ignition-Landing (Next). ED360's own stack occupies 5173/8000 on
-    # this machine, hence the offsets.
+    # this machine, hence the offsets. 3000 stays allowed because a plain
+    # `next dev` lands the landing site there.
     #
     # The landing origin is here because the public catalogue routes are read
     # by the browser as well as by Next's server-side fetches, and a
@@ -98,6 +99,8 @@ class Settings(BaseSettings):
             "http://127.0.0.1:5174",
             "http://localhost:3000",
             "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
             "http://localhost:3100",
             "http://127.0.0.1:3100",
         ]
@@ -109,7 +112,7 @@ class Settings(BaseSettings):
     # has to be told, and an editor wants to see a draft before anyone else
     # can. Left empty — the default — publishing simply does not call out, so
     # a developer with no landing running is not spammed with failures.
-    LANDING_BASE_URL: str = "http://localhost:3100"
+    LANDING_BASE_URL: str = "http://localhost:3000"
     LANDING_REVALIDATE_SECRET: str = ""
     #: How long an editor's preview link stays good for. Short: the link
     #: unlocks unpublished content to anyone holding it.

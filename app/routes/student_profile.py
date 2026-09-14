@@ -14,6 +14,7 @@ from ..schemas.student_profile import (
     StudentEducationHistoryUpsert,
     StudentProfileRead,
     StudentProfileUpsert,
+    StudentShortlist,
     StudentWorkExperienceRead,
     StudentWorkExperienceUpsert,
 )
@@ -112,6 +113,31 @@ async def get_research_shortlist(
         # than a missing resource.
         return ResearchShortlist(catalogue="none")
     return ResearchShortlist.model_validate(await service.research_shortlist(profile))
+
+
+@router.get(
+    "/{user_id}/shortlist",
+    response_model=StudentShortlist,
+    summary="The courses and universities the student saved in the portal",
+)
+async def get_portal_shortlist(
+    user_id: UUID,
+    service: StudentProfileService = Depends(get_student_profile_service),
+    current_user: User = Depends(get_current_user),
+) -> StudentShortlist:
+    """What the student saved while signed in.
+
+    The sibling of `/research`, and the counterpart it was missing: that one is
+    anonymous browsing on the public site, carried across an origin boundary
+    and resolved against the catalogue on a best-effort basis. This one is a
+    signed-in student pointing at rows in the same catalogue staff work in, so
+    there is nothing to resolve and nothing that can fail to.
+
+    Reading is all it does. Opening an application against a shortlisted course
+    is still a counsellor's act in the applications API.
+    """
+    _assert_can_access(current_user, user_id)
+    return StudentShortlist.model_validate(await service.portal_shortlist(user_id))
 
 
 # --- Education history ---------------------------------------------------------

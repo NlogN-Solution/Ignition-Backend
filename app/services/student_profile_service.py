@@ -6,9 +6,18 @@ from uuid import UUID
 from fastapi import Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload
 
 from ..api.deps import get_db_session
-from ..models import Program, StudentEducationHistory, StudentProfile, StudentWorkExperience, University
+from ..models import (
+    Program,
+    StudentEducationHistory,
+    StudentProfile,
+    StudentSavedCourse,
+    StudentSavedUniversity,
+    StudentWorkExperience,
+    University,
+)
 from .partial_update import reject_null_on_required
 
 
@@ -144,6 +153,99 @@ class StudentProfileService:
             "universities": universities,
             "unresolved": [slug for slug in ordered if slug not in by_slug],
         }
+
+    # --- Portal shortlist -----------------------------------------------------
+
+    async def portal_shortlist(self, user_id: UUID) -> dict[str, Any]:
+        """What the student saved while signed in, for whoever works their file.
+
+        `student_saved_courses` and `student_saved_universities` have been
+        written by the portal since it was built and read by nothing. A student
+        could shortlist twelve courses and their counsellor would open the lead
+        to a blank page, then ask them on a call what they had been looking at.
+
+        Unlike `research_shortlist` there is no resolution step and no
+        catalogue stamp to check: these rows are foreign keys into `programs`
+        and `universities`, written by an authenticated student against the
+        same catalogue staff work in. Nothing can fail to resolve.
+
+        Unpublished rows are kept and flagged rather than filtered. A student
+        saved it while it was published; withdrawing it afterwards is exactly
+        the thing a counsellor needs to be told, not to have hidden.
+        """
+        course_rows = (
+            await self.session.execute(
+                select(StudentSavedCourse)
+                .where(StudentSavedCourse.student_id == user_id)
+                .options(selectinload(StudentSavedCourse.program).joinedload(Program.university))
+                .order_by(StudentSavedCourse.created_at.desc())
+            )
+        ).scalars().all()
+
+        university_rows = (
+            await self.session.execute(
+                select(StudentSavedUniversity)
+                .where(StudentSavedUniversity.student_id == user_id)
+                .options(selectinload(StudentSavedUniversity.university))
+                .order_by(StudentSavedUniversity.created_at.desc())
+            )
+        ).scalars().all()
+
+        # One grouped count for every shortlisted institution — including the
+        # ones reached through a saved course, so the "start application"
+        # affordance can be disabled consistently on both lists.
+        university_ids = {row.university_id for row in university_rows}
+        university_ids |= {row.program.university_id for row in course_rows if row.program is not None}
+        counts: dict[UUID, int] = {}
+        if university_ids:
+            counts = dict(
+                (
+                    await self.session.execute(
+                        select(Program.university_id, func.count(Program.id))
+                        .where(Program.university_id.in_(university_ids), Program.is_published.is_(True))
+                        .group_by(Program.university_id)
+                    )
+                ).all()  # type: ignore[arg-type]
+            )
+
+        courses = [
+            {
+                "id": row.program.id,
+                "slug": row.program.slug,
+                "title": row.program.name,
+                "qualification": row.program.qualification,
+                "course_level": row.program.course_level.value if row.program.course_level else None,
+                "subject": row.program.subject.value if row.program.subject else None,
+                "duration_years": float(row.program.duration_years)
+                if row.program.duration_years is not None
+                else None,
+                "is_published": row.program.is_published,
+                "university_id": row.program.university_id,
+                "university_name": row.program.university.name if row.program.university else None,
+                "university_slug": row.program.university.slug if row.program.university else None,
+                "university_city": row.program.university.city if row.program.university else None,
+                "saved_at": row.created_at,
+            }
+            for row in course_rows
+            if row.program is not None
+        ]
+
+        universities = [
+            {
+                "id": row.university.id,
+                "slug": row.university.slug,
+                "name": row.university.name,
+                "city": row.university.city,
+                "region": row.university.region.value if row.university.region else None,
+                "is_published": row.university.is_published,
+                "course_count": counts.get(row.university.id, 0),
+                "saved_at": row.created_at,
+            }
+            for row in university_rows
+            if row.university is not None
+        ]
+
+        return {"courses": courses, "universities": universities}
 
     # --- Education history ----------------------------------------------------
 

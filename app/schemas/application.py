@@ -30,6 +30,24 @@ class ApplicationCreate(ApplicationBase):
     pass
 
 
+class StudentApplicationCreate(BaseModel):
+    """What a student may say when they open their own application.
+
+    Three fields, and the omissions are the point. `student_id` is the caller,
+    `status` is always DRAFT, and every date and money field is staff's to set
+    — a student posting `{"status": "enrolled"}` or a tuition figure of their
+    choosing is exactly the hole the staff `POST /applications` endpoint was
+    locked down to avoid (see its docstring). This is that endpoint's
+    student-facing counterpart, and it is a different, much smaller shape
+    rather than the same one behind a different guard.
+    """
+
+    program_id: UUID
+    intake_id: UUID | None = None
+    #: The student's own note to their counsellor. Free text, not a decision.
+    remarks: str | None = Field(default=None, max_length=2000)
+
+
 class ApplicationStatusUpdate(BaseModel):
     status: ApplicationStatus
     remarks: str | None = None

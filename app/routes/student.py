@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -35,7 +36,13 @@ from ..models import (
     University,
     User,
 )
-from ..models.enums import AppointmentStatus, NotificationType, SavingsGoalKind, TaskStatus
+from ..models.enums import (
+    ApplicationStatus,
+    AppointmentStatus,
+    NotificationType,
+    SavingsGoalKind,
+    TaskStatus,
+)
 from ..models.student_portal import MAX_COMPARE_COURSES
 from ..schemas.academic import (
     BlogPostList,
@@ -51,6 +58,7 @@ from ..schemas.application import (
     ApplicationCounsellorSummary,
     ApplicationProgramSummary,
     ApplicationStatusHistoryRead,
+    StudentApplicationCreate,
     StudentApplicationList,
     StudentApplicationRead,
 )
@@ -154,8 +162,10 @@ from ..services.progress_service import (
     get_points_service,
     get_progress_service,
 )
+from ..services.application_service import ApplicationService, get_application_service
 from ..services.student_profile_service import StudentProfileService, get_student_profile_service
 from ..services.visa_service import VisaService, get_visa_service
+from ..services.workflow_service import ApplicationWorkflowService
 
 settings = get_settings()
 
@@ -258,6 +268,165 @@ async def list_my_applications(
         options=_APPLICATION_DETAIL_OPTIONS,
     )
     return StudentApplicationList(items=[_with_program_summary(a) for a in items], total=total, page=page, limit=limit)
+
+
+#: What a student may move their own application to, and from where.
+#:
+#: `READY_TO_SUBMIT`, not `SUBMITTED`. Submitting is filing the application
+#: *with the university*, and that is an act Ignition performs on the student's
+#: behalf after checking it — so the furthest a student can move their own file
+#: is "I have finished my part". Letting them write `SUBMITTED` would put a
+#: status on the record that nothing in the world has actually happened for.
+_STUDENT_SUBMITTABLE_FROM = frozenset(
+    {ApplicationStatus.DRAFT, ApplicationStatus.DOCUMENTS_PENDING, ApplicationStatus.READY_TO_SUBMIT}
+)
+
+
+@router.post(
+    "/me/applications",
+    response_model=StudentApplicationRead,
+    status_code=201,
+    summary="Start an application for myself",
+)
+async def create_my_application(
+    payload: StudentApplicationCreate,
+    repo: StudentScopedRepository = Depends(get_student_repository),
+    applications: ApplicationService = Depends(get_application_service),
+) -> StudentApplicationRead:
+    """A student opens their own application, from the course page.
+
+    The staff `POST /applications` endpoint's docstring has promised this since
+    the port: "Students get their own application-submission flow in Phase 5;
+    it does not run through this staff endpoint." This is it. It is a separate
+    route rather than a relaxed guard on that one because the two take
+    genuinely different input — see `StudentApplicationCreate`.
+
+    Three things it insists on:
+
+    * **The course has to be one we publish.** An unpublished offering, or one
+      at an unpublished university, is not applicable-to — it is a half-written
+      record, and an application against it would name a course no counsellor
+      can act on.
+    * **One live application per course.** Re-submitting the form, or coming
+      back to the page a week later, must not open a second file against the
+      same offering. A withdrawn or rejected one does not block a fresh
+      attempt: applying again after a rejection is a real thing students do.
+    * **It opens as a DRAFT.** Nothing is with the university. The student then
+      fills in what is missing and uploads their documents, and the counsellor
+      files it.
+
+    The document checklist comes from instantiating the application's workflow,
+    and that is **best-effort on purpose**. Template resolution can fail for
+    reasons that are nothing to do with this student — no active template for
+    the country, none marked default, none at all on a fresh database — and
+    none of them is a good reason to refuse to open an application. A file with
+    no checklist yet is one a counsellor can attach a workflow to; a 500 is
+    just a dead end.
+    """
+    program = await repo.session.scalar(
+        select(Program)
+        .join(University, Program.university_id == University.id)
+        .where(
+            Program.id == payload.program_id,
+            Program.is_published.is_(True),
+            University.is_published.is_(True),
+        )
+    )
+    if program is None:
+        raise NotFoundException("Course not found")
+
+    existing = await repo.session.scalar(
+        repo.scoped(Application).where(
+            Application.program_id == payload.program_id,
+            Application.status.not_in([ApplicationStatus.WITHDRAWN, ApplicationStatus.REJECTED]),
+        )
+    )
+    if existing is not None:
+        raise ConflictException("You already have an application for this course")
+
+    application = await applications.create_application(
+        {
+            "student_id": repo.student.id,
+            "program_id": payload.program_id,
+            "intake_id": payload.intake_id,
+            "status": ApplicationStatus.DRAFT,
+            # `.isoformat()`, not a `date`. `Application.application_date` is
+            # annotated `date | None` but stored as `String(10)` — a wart
+            # carried over from ED360 and flagged in the model. Passing a real
+            # date object gets an asyncpg DataError, not a coercion.
+            "application_date": date.today().isoformat(),
+            "remarks": payload.remarks,
+        }
+    )
+
+    try:
+        # Built here rather than injected: the `ApplicationWorkflowService`
+        # dependency factory lives in `routes/workflow.py`, and a route module
+        # importing another route module to borrow one is a worse dependency
+        # than one line of construction.
+        await ApplicationWorkflowService(repo.session).instantiate(application.id, None, repo.student.id)
+    except ValueError:
+        # No usable workflow template. The application still stands; its
+        # checklist is empty until staff attach one.
+        pass
+
+    loaded = await repo.get_or_404(
+        Application,
+        application.id,
+        detail="Application not found",
+        options=_APPLICATION_DETAIL_OPTIONS,
+    )
+    return _with_program_summary(loaded)
+
+
+@router.post(
+    "/me/applications/{application_id}/submit",
+    response_model=StudentApplicationRead,
+    summary="Hand my application to my counsellor",
+)
+async def submit_my_application(
+    application_id: UUID,
+    repo: StudentScopedRepository = Depends(get_student_repository),
+    applications: ApplicationService = Depends(get_application_service),
+) -> StudentApplicationRead:
+    """"I have finished my part" — not "this is with the university".
+
+    Moves the application to `READY_TO_SUBMIT` through
+    `change_application_status`, which is the one door that writes an
+    `application_status_history` row. See `_STUDENT_SUBMITTABLE_FROM` for why
+    that is as far as a student can move their own file.
+
+    Already-ready is not an error. A student who presses the button twice, or
+    reloads the confirmation, has not done anything wrong and should not be
+    shown a failure — `change_application_status` no-ops on an unchanged
+    status, so this is idempotent.
+    """
+    application = await repo.get_or_404(
+        Application,
+        application_id,
+        detail="Application not found",
+        options=_APPLICATION_DETAIL_OPTIONS,
+    )
+
+    if application.status not in _STUDENT_SUBMITTABLE_FROM:
+        raise BadRequestException(
+            "This application has already moved on — your counsellor is handling it from here."
+        )
+
+    await applications.change_application_status(
+        application,
+        ApplicationStatus.READY_TO_SUBMIT,
+        performed_by=repo.student.id,
+        remarks="Submitted by the student from the portal",
+    )
+
+    loaded = await repo.get_or_404(
+        Application,
+        application_id,
+        detail="Application not found",
+        options=_APPLICATION_DETAIL_OPTIONS,
+    )
+    return _with_program_summary(loaded)
 
 
 @router.get(

@@ -40,9 +40,11 @@ from ..schemas.public import (
     CoursePublic,
     CourseSearchResult,
     CourseUniversity,
+    CourseUniversityProfile,
     PostListPublic,
     PostPublic,
     CourseDetailPublic,
+    IntakePublic,
     RoutePublic,
     ScholarshipListPublic,
     ScholarshipPublic,
@@ -74,6 +76,7 @@ def _cache(response: Response) -> None:
 
 def _university_payload(university: Any, course_count: int | None = None) -> dict[str, Any]:
     data = {
+        "id": university.id,
         "slug": university.slug,
         "name": university.name,
         "city": university.city,
@@ -94,9 +97,21 @@ def _university_payload(university: Any, course_count: int | None = None) -> dic
     return data
 
 
+#: The spreadsheet's way of writing an empty cell. Printing "Scholarship: N/A"
+#: states a policy the university never gave, so it is dropped like a null.
+def _criterion(value: str | None) -> str | None:
+    cleaned = (value or "").strip()
+    return None if not cleaned or cleaned.upper() == "N/A" else cleaned
+
+
 def _course_payload(program: Any, intake: str | None = None) -> dict[str, Any]:
     university = program.university
+    # Withheld unless the route is published — same rule as the university
+    # page. A course must not become the back door to a fee staff have not
+    # signed off.
+    route = program.route if getattr(program, "route", None) and program.route.is_published else None
     return {
+        "id": program.id,
         "slug": program.slug,
         "title": program.name,
         "qualification": program.qualification,
@@ -107,9 +122,12 @@ def _course_payload(program: Any, intake: str | None = None) -> dict[str, Any]:
         "campus": program.campus,
         "extra_requirements": program.extra_requirements,
         "fee_tier": program.fee_tier,
+        "fee_text": _criterion(route.fee_structure) if route else None,
+        "scholarship_text": _criterion(route.scholarship_text) if route else None,
         "intake": intake,
         "is_example": program.is_example,
         "university": CourseUniversity(
+            id=university.id,
             slug=university.slug,
             name=university.name,
             city=university.city,
@@ -119,6 +137,55 @@ def _course_payload(program: Any, intake: str | None = None) -> dict[str, Any]:
         else None,
         "course_profile_slug": program.course_profile.slug if program.course_profile else None,
     }
+
+
+def _scholarship_payload(scholarship: Any, university_slug: str | None) -> ScholarshipPublic:
+    """One award, in the shape three routes serve it in.
+
+    The university page, the offering page and `/scholarships` all render the
+    same record. Building it in one place is what stops them drifting into
+    three subtly different funding tables.
+    """
+    return ScholarshipPublic(
+        slug=scholarship.slug,
+        name=scholarship.name,
+        provider=scholarship.provider,
+        kind=scholarship.kind,
+        university_slug=university_slug,
+        levels=scholarship.levels,
+        subjects=scholarship.subjects,
+        nationality_group=scholarship.nationality_group,
+        amount=scholarship.amount,
+        deadline=scholarship.deadline,
+        eligibility=scholarship.eligibility,
+        apply_via=scholarship.apply_via,
+        source=scholarship.source,
+        is_example=scholarship.is_example,
+    )
+
+
+def _route_payload(route: Any) -> RoutePublic:
+    """One column of the entry-criteria matrix.
+
+    Shared by the university page and the offering page on purpose: an
+    offering's criteria *are* the university's route row, and a student who
+    checks one against the other must find the same words.
+    """
+    return RoutePublic(
+        route_key=route.route_key.value,
+        label=route.label,
+        academic_criteria=route.academic_criteria,
+        english_criteria=route.english_criteria,
+        english_waiver=route.english_waiver,
+        fee_structure=route.fee_structure,
+        scholarship_text=route.scholarship_text,
+        gap_policy=route.gap_policy,
+        cas_deposit=route.cas_deposit,
+        enrolment_fee=route.enrolment_fee,
+        deadlines=route.deadlines,
+        previous_refusal=route.previous_refusal,
+        extras=route.extras,
+    )
 
 
 # --- universities ------------------------------------------------------------
@@ -194,43 +261,12 @@ async def public_university(
     )
 
     routes = [
-        RoutePublic(
-            route_key=route.route_key.value,
-            label=route.label,
-            academic_criteria=route.academic_criteria,
-            english_criteria=route.english_criteria,
-            english_waiver=route.english_waiver,
-            fee_structure=route.fee_structure,
-            scholarship_text=route.scholarship_text,
-            gap_policy=route.gap_policy,
-            cas_deposit=route.cas_deposit,
-            enrolment_fee=route.enrolment_fee,
-            deadlines=route.deadlines,
-            previous_refusal=route.previous_refusal,
-            extras=route.extras,
-        )
+        _route_payload(route)
         for route in sorted(university.routes, key=lambda item: item.display_order)
         if route.is_published
     ]
     scholarships = [
-        ScholarshipPublic(
-            slug=item.slug,
-            name=item.name,
-            provider=item.provider,
-            kind=item.kind,
-            university_slug=university.slug,
-            levels=item.levels,
-            subjects=item.subjects,
-            nationality_group=item.nationality_group,
-            amount=item.amount,
-            deadline=item.deadline,
-            eligibility=item.eligibility,
-            apply_via=item.apply_via,
-            source=item.source,
-            is_example=item.is_example,
-        )
-        for item in university.scholarships
-        if item.is_published
+        _scholarship_payload(item, university.slug) for item in university.scholarships if item.is_published
     ]
 
     # Empty lists are omitted rather than sent: a university with no published
@@ -332,28 +368,79 @@ async def public_course(
     if program is None:
         raise NotFoundException("Course not found")
 
+    university = program.university
     payload = _course_payload(program, await service.course_intake(program.id))
-    payload["university_city"] = program.university.city if program.university else None
+    payload["university_city"] = university.city if university else None
 
     # The criteria this course is admitted under. Unpublished routes are
     # withheld exactly as they are on the university page — a course must not
     # become the back door to a requirement staff have not signed off.
     route = program.route
     if route is not None and route.is_published:
-        payload["route"] = RoutePublic(
-            route_key=route.route_key.value,
-            label=route.label,
-            academic_criteria=route.academic_criteria,
-            english_criteria=route.english_criteria,
-            english_waiver=route.english_waiver,
-            fee_structure=route.fee_structure,
-            scholarship_text=route.scholarship_text,
-            gap_policy=route.gap_policy,
-            cas_deposit=route.cas_deposit,
-            enrolment_fee=route.enrolment_fee,
-            deadlines=route.deadlines,
-            previous_refusal=route.previous_refusal,
-            extras=route.extras,
+        payload["route"] = _route_payload(route)
+
+    # The offering's own columns. Every one of these was already on `programs`
+    # and had never been served, which is why the page had a spec list and
+    # nothing else. Empty containers are normalised to None so `exclude_none`
+    # drops the key and the tab hides, rather than rendering a heading over
+    # nothing.
+    payload.update(
+        {
+            "requirements": program.requirements or None,
+            "key_dates": program.key_dates or None,
+            "highlights": program.highlights or None,
+            "outcomes": program.outcomes or None,
+            "intakes_summary": program.intakes_summary or None,
+            "tuition_fee": float(program.tuition_fee) if program.tuition_fee is not None else None,
+            "currency": program.currency,
+            "duration_months": program.duration_months,
+            "minimum_ielts": float(program.minimum_ielts) if program.minimum_ielts is not None else None,
+            "minimum_gpa": float(program.minimum_gpa) if program.minimum_gpa is not None else None,
+            "course_type": program.course_type,
+            "image_url": program.image_url,
+        }
+    )
+
+    intakes = await service.course_intakes(program.id)
+    payload["intakes"] = [IntakePublic.model_validate(intake) for intake in intakes] or None
+
+    if university is not None:
+        scholarships = await service.course_scholarships(program)
+        payload["scholarships"] = [
+            _scholarship_payload(item, university.slug) for item in scholarships
+        ] or None
+
+        # "About the university this course belongs to", as a tab rather than
+        # a link off the page. A strict subset of what `/universities/{slug}`
+        # serves — same columns, no re-worded copy — so the two cannot state
+        # different facts about one institution.
+        payload["university_profile"] = CourseUniversityProfile(
+            id=university.id,
+            slug=university.slug,
+            name=university.name,
+            city=university.city,
+            region=university.region.value if university.region else None,
+            monogram=university.monogram,
+            tagline=university.tagline,
+            overview=university.overview,
+            logo_url=university.logo_url,
+            imagery=university.imagery,
+            website=university.website,
+            founded=university.founded,
+            kind=university.kind,
+            campus=university.campus,
+            student_population=university.student_population,
+            international_students=university.international_students,
+            student_staff_ratio=university.student_staff_ratio,
+            ranking=university.ranking,
+            rankings=university.rankings or None,
+            facilities=university.facilities or None,
+            international_support=university.international_support or None,
+            accommodation=university.accommodation or None,
+            tuition_min=university.tuition_min,
+            tuition_max=university.tuition_max,
+            living_cost_monthly=university.living_cost_monthly,
+            course_count=await service.university_course_count(university.id),
         )
 
     related = await service.related_courses(program)
@@ -423,6 +510,7 @@ async def public_course_profile(
             "offering_count": count,
             "universities": [
                 CourseUniversity(
+                    id=university.id,
                     slug=university.slug,
                     name=university.name,
                     city=university.city,
@@ -457,25 +545,7 @@ async def public_scholarships(
 ) -> ScholarshipListPublic:
     _cache(response)
     rows, total = await service.scholarships(page, limit, university=university, level=level)
-    items = [
-        ScholarshipPublic(
-            slug=scholarship.slug,
-            name=scholarship.name,
-            provider=scholarship.provider,
-            kind=scholarship.kind,
-            university_slug=university_slug,
-            levels=scholarship.levels,
-            subjects=scholarship.subjects,
-            nationality_group=scholarship.nationality_group,
-            amount=scholarship.amount,
-            deadline=scholarship.deadline,
-            eligibility=scholarship.eligibility,
-            apply_via=scholarship.apply_via,
-            source=scholarship.source,
-            is_example=scholarship.is_example,
-        )
-        for scholarship, university_slug in rows
-    ]
+    items = [_scholarship_payload(scholarship, university_slug) for scholarship, university_slug in rows]
     return ScholarshipListPublic(items=items, total=total, page=page, limit=limit)
 
 

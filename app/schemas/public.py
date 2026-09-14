@@ -19,8 +19,9 @@ field to disappear. One model cannot do both.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
@@ -35,6 +36,14 @@ class UniversitySummary(BaseModel):
     nothing that only a detail page reads.
     """
 
+    #: The catalogue row's own key. Present so the *student portal* can read
+    #: this endpoint rather than a thinner parallel one: its shortlist tables
+    #: (`student_saved_universities`, `student_saved_courses`) are keyed by
+    #: UUID, while the public site addresses everything by slug. Exposing the
+    #: id of a row that is already public in full costs nothing and is what
+    #: lets all three portals read one catalogue. The landing ignores it — its
+    #: own `University.id` is the slug.
+    id: UUID
     slug: str
     name: str
     city: str | None = None
@@ -133,6 +142,8 @@ class UniversityDetail(UniversitySummary):
 class CourseUniversity(BaseModel):
     """The university, as an offering carries it."""
 
+    #: See the note on `UniversitySummary.id`.
+    id: UUID
     slug: str
     name: str
     city: str | None = None
@@ -144,6 +155,8 @@ class CourseUniversity(BaseModel):
 class CoursePublic(BaseModel):
     """One university's offering of a course — there are ~4,800 of these."""
 
+    #: See the note on `UniversitySummary.id`.
+    id: UUID
     slug: str
     title: str
     qualification: str | None = None
@@ -155,9 +168,84 @@ class CoursePublic(BaseModel):
     extra_requirements: str | None = None
     fee_tier: str | None = None
     intake: str | None = None
+    #: The tuition and scholarship wording from the entry route this offering
+    #: was imported under, verbatim.
+    #:
+    #: These are on the *card* payload rather than only the detail because
+    #: `programs.tuition_fee` is NULL for every one of the 4,797 offerings —
+    #: the fee has only ever existed as prose on `university_routes`, and a
+    #: results list that cannot say what anything costs is a results list a
+    #: student has to open thirty times. 4,575 offerings reach a fee this way
+    #: and 4,389 reach a scholarship.
+    #:
+    #: Unpublished routes are withheld, exactly as they are on the university
+    #: page: a course must not become the back door to a fee staff have not
+    #: signed off. The text is not parsed or tidied server-side — "LOWER TIER:
+    #: £12,100 / UPPER TIER: £14,900" is one fee with a condition in it, and
+    #: the condition is the part applicants get wrong.
+    fee_text: str | None = None
+    scholarship_text: str | None = None
     university: CourseUniversity | None = None
     course_profile_slug: str | None = None
     is_example: bool | None = None
+
+    model_config = _FROM_ORM
+
+
+class IntakePublic(BaseModel):
+    """One intake of an offering, with the two dates that matter.
+
+    Separate from `CoursePublic.intake`, which is a single display string for a
+    card. A student deciding *when* to apply needs the deadline next to the
+    start, and there is usually more than one.
+    """
+
+    name: str
+    start_date: date | None = None
+    application_deadline: date | None = None
+
+    model_config = _FROM_ORM
+
+
+class CourseUniversityProfile(BaseModel):
+    """Enough of the institution to answer "where would I be studying?".
+
+    The offering page used to end with a card that said only the university's
+    name and a link. That is the right link, but it is the wrong moment to send
+    someone away — the question "what is this place" is part of deciding
+    whether the course is worth reading on, not a separate errand.
+
+    This is a strict subset of `UniversityDetail`: same columns, same values,
+    no derived or re-worded copy. A student who opens the university page next
+    must not find a different number.
+    """
+
+    id: UUID
+    slug: str
+    name: str
+    city: str | None = None
+    region: str | None = None
+    monogram: str | None = None
+    tagline: str | None = None
+    overview: str | None = None
+    logo_url: str | None = None
+    imagery: dict[str, Any] | None = None
+    website: str | None = None
+    founded: str | None = None
+    kind: str | None = None
+    campus: str | None = None
+    student_population: str | None = None
+    international_students: str | None = None
+    student_staff_ratio: str | None = None
+    ranking: int | None = None
+    rankings: list[dict[str, Any]] | None = None
+    facilities: list[str] | None = None
+    international_support: list[str] | None = None
+    accommodation: dict[str, Any] | None = None
+    tuition_min: float | None = None
+    tuition_max: float | None = None
+    living_cost_monthly: float | None = None
+    course_count: int | None = None
 
     model_config = _FROM_ORM
 
@@ -173,6 +261,12 @@ class CourseDetailPublic(CoursePublic):
     serves, deliberately: a student comparing the course page against the
     university's "Entry criteria by route" tab must see the same words, because
     they are the same row.
+
+    Everything below `route` was already on `programs` and had simply never
+    been served: the page rendered a title, a level and a duration while the
+    row itself held requirements, key dates, outcomes and a fee. `exclude_none`
+    still governs — a thin offering omits these keys entirely and its tabs
+    hide rather than render empty.
     """
 
     university_city: str | None = None
@@ -181,6 +275,33 @@ class CourseDetailPublic(CoursePublic):
     route: RoutePublic | None = None
     #: Other offerings at the same university in the same subject.
     related: list[CoursePublic] | None = None
+
+    # --- the offering's own record -------------------------------------------
+    #: Keyed by section — {academic, documents, english}. Objects, not lists,
+    #: because that is how the source data groups them.
+    requirements: dict[str, Any] | None = None
+    #: Keyed by milestone — {applicationOpens, applicationDeadline, ...}.
+    key_dates: dict[str, Any] | None = None
+    highlights: list[str] | None = None
+    outcomes: list[str] | None = None
+    #: Display copy ("Feb / Jul"). `intakes` below is the queryable version.
+    intakes_summary: list[str] | None = None
+    intakes: list[IntakePublic] | None = None
+    tuition_fee: float | None = None
+    currency: str | None = None
+    duration_months: int | None = None
+    minimum_ielts: float | None = None
+    minimum_gpa: float | None = None
+    course_type: str | None = None
+    image_url: str | None = None
+
+    # --- inherited context ---------------------------------------------------
+    #: The institution behind the offering, so "about the university this
+    #: course belongs to" is a tab rather than a link off the page.
+    university_profile: CourseUniversityProfile | None = None
+    #: Funding this course could plausibly draw on: the university's published
+    #: awards, narrowed to those that name this course's level or subject.
+    scholarships: list[ScholarshipPublic] | None = None
 
 
 class CourseSearchResult(BaseModel):

@@ -17,7 +17,7 @@ from uuid import UUID
 from fastapi import Depends
 from sqlalchemy import ColumnElement, Select, Text, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from ..api.deps import get_db_session
 from ..models import (
@@ -192,7 +192,14 @@ class PublicCatalogueService:
         sort: str = "title",
     ) -> tuple[list[Program], int]:
         conditions = self._conditions(filters)
-        query = self._base().options(selectinload(Program.university), selectinload(Program.course_profile))
+        # `route` joins the same way the other two do. The card reads the
+        # route's fee and scholarship wording — `programs.tuition_fee` is NULL
+        # on all 4,797 rows — so without this every result would lazy-load one.
+        query = self._base().options(
+            selectinload(Program.university),
+            selectinload(Program.course_profile),
+            selectinload(Program.route),
+        )
         count_query = (
             select(func.count())
             .select_from(Program)
@@ -229,10 +236,17 @@ class PublicCatalogueService:
         return await self.session.scalar(
             self._base()
             .where(Program.slug == slug)
+            # `joinedload`, not `selectinload`, and the difference matters here
+            # in a way it does not in `search_courses`. All three are
+            # many-to-one from a *single* row, so a join costs one extra row
+            # width and nothing else, while `selectinload` would issue three
+            # more round trips to fetch one parent each. The database is a
+            # network hop away; four sequential queries to render one page is
+            # three too many.
             .options(
-                selectinload(Program.university),
-                selectinload(Program.course_profile),
-                selectinload(Program.route),
+                joinedload(Program.university),
+                joinedload(Program.course_profile),
+                joinedload(Program.route),
             )
         )
 
@@ -258,7 +272,11 @@ class PublicCatalogueService:
                 Program.subject == program.subject,
                 Program.id != program.id,
             )
-            .options(selectinload(Program.university), selectinload(Program.course_profile))
+            .options(
+                joinedload(Program.university),
+                joinedload(Program.course_profile),
+                joinedload(Program.route),
+            )
             .order_by(Program.name)
             .limit(limit)
         )
@@ -372,6 +390,61 @@ class PublicCatalogueService:
         return await self.session.scalar(
             select(Intake.name).where(Intake.program_id == program_id, Intake.is_active.is_(True)).limit(1)
         )
+
+    async def course_intakes(self, program_id: UUID) -> list[Intake]:
+        """Every active intake of an offering, earliest first.
+
+        `course_intake` above answers a different question — the one word a
+        card has room for. This is what the page needs: a student choosing when
+        to apply reads the deadline against the start, and there is usually
+        more than one pair.
+
+        Rows with no `start_date` sort last rather than being dropped. An
+        intake named "September 2026" with no date on it is still the answer to
+        "when does this run", and hiding it would under-report the offering.
+        """
+        result = await self.session.execute(
+            select(Intake)
+            .where(Intake.program_id == program_id, Intake.is_active.is_(True))
+            .order_by(Intake.start_date.nulls_last(), Intake.name)
+        )
+        return list(result.scalars().all())
+
+    async def course_scholarships(self, program: Program) -> list[Scholarship]:
+        """The university's published awards that this course could draw on.
+
+        Filtered in Python rather than SQL, and deliberately: `levels` and
+        `subjects` are JSONB arrays of display strings, and the rule is
+        *permissive* — a scholarship that names no level applies to every
+        level, and one that names no subject applies to every subject. That is
+        the semantics recorded on the model ("NULL on `subjects` means any
+        subject"), and a NOT-EXISTS-or-CONTAINS predicate expresses it far less
+        clearly than four lines of Python over the handful of rows one
+        institution has.
+
+        A scholarship that names a level or subject this course is not gets
+        withheld. Showing a student funding they cannot apply for is worse than
+        showing none.
+        """
+        level = program.course_level.value if program.course_level else None
+        subject = program.subject.value if program.subject else None
+
+        def applies(scholarship: Scholarship) -> bool:
+            if scholarship.levels and level is not None and level not in scholarship.levels:
+                return False
+            if scholarship.subjects and subject is not None and subject not in scholarship.subjects:
+                return False
+            return True
+
+        result = await self.session.execute(
+            select(Scholarship)
+            .where(
+                Scholarship.university_id == program.university_id,
+                Scholarship.is_published.is_(True),
+            )
+            .order_by(Scholarship.name)
+        )
+        return [item for item in result.scalars().all() if applies(item)]
 
     # --- course profiles -----------------------------------------------------
 

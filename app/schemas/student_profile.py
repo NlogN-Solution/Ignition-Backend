@@ -138,6 +138,60 @@ class ResearchUniversity(BaseModel):
     course_count: int = 0
 
 
+class ShortlistUniversity(BaseModel):
+    """One institution the student saved from inside the portal."""
+
+    id: UUID
+    slug: str | None = None
+    name: str
+    city: str | None = None
+    region: str | None = None
+    is_published: bool
+    #: Published offerings, so a counsellor knows whether the application
+    #: dialog will open onto anything to pick from.
+    course_count: int = 0
+    saved_at: datetime
+
+
+class ShortlistCourse(BaseModel):
+    """One offering the student saved from inside the portal.
+
+    Carries `university_id` as well as its own id because starting an
+    application needs both, and a saved *course* is a stronger signal than a
+    saved university: the student has already chosen what to study, not only
+    where.
+    """
+
+    id: UUID
+    slug: str | None = None
+    title: str
+    qualification: str | None = None
+    course_level: str | None = None
+    subject: str | None = None
+    duration_years: float | None = None
+    is_published: bool
+    university_id: UUID
+    university_name: str | None = None
+    university_slug: str | None = None
+    university_city: str | None = None
+    saved_at: datetime
+
+
+class StudentShortlist(BaseModel):
+    """What the student saved while browsing the catalogue in the portal.
+
+    Distinct from `ResearchShortlist`, which is what they saved on the *public*
+    site before they had an account. Both end up in front of the same
+    counsellor and they are deliberately not merged: one is a signed-in,
+    catalogue-keyed decision, the other is anonymous browsing carried across an
+    origin boundary in a URL fragment, and only one of them can be trusted to
+    name a row.
+    """
+
+    courses: list[ShortlistCourse] = []
+    universities: list[ShortlistUniversity] = []
+
+
 class ResearchShortlist(BaseModel):
     """A student's public-site shortlist, against the real catalogue.
 
