@@ -54,6 +54,18 @@ PUBLIC_ENDPOINTS: set[tuple[str, str]] = {
     # response is deliberately narrower than what it stores: no lead id, no
     # internal reasoning. See app/routes/public.py.
     ("POST", "/api/v1/public/eligibility"),
+    # Apply-intent. The POST writes, like /eligibility, and for the same
+    # reason: the visitor pressing Apply Now has no account yet, and that is
+    # exactly the moment the course has to be remembered. What it records is a
+    # programme id, not a person.
+    #
+    # The GET is public because the registration and login screens must render
+    # "You're applying for X" before the student authenticates. It returns only
+    # published catalogue data the same caller can already read from
+    # /public/courses/{slug}. Claiming an intent — the part that involves a
+    # person — is authenticated and lives under /student.
+    ("POST", "/api/v1/public/apply-intents"),
+    ("GET", "/api/v1/public/apply-intents/{intent_id}"),
 }
 
 #: FastAPI's own docs routes, which are disabled in production by `main.py`.

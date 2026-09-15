@@ -19,6 +19,7 @@ async def list_activity_logs(
     user_id: UUID | None = None,
     activity_type: str | None = None,
     entity_type: str | None = None,
+    entity_id: UUID | None = None,
     service: ActivityLogService = Depends(get_activity_log_service),
     user: User = Depends(require_role("admin", "super_admin")),
 ) -> ActivityLogList:
@@ -28,6 +29,7 @@ async def list_activity_logs(
         user_id=user_id,
         activity_type=activity_type,
         entity_type=entity_type,
+        entity_id=entity_id,
     )
     items = [
         ActivityLogRead(

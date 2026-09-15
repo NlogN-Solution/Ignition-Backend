@@ -21,7 +21,14 @@ from ..models import (
     WorkflowStepActivity,
     WorkflowTemplate,
 )
-from ..models.enums import ApplicationWorkflowStatus, ChecklistItemStatus, WorkflowActivityType, WorkflowStepStatus
+from ..models.enums import (
+    ApplicationWorkflowStatus,
+    ChecklistItemStatus,
+    DocumentStatus,
+    WorkflowActivityType,
+    WorkflowStepStatus,
+)
+from .document_service import DocumentService
 
 
 def slugify(value: str) -> str:
@@ -556,6 +563,13 @@ class ApplicationWorkflowService:
         return items, total
 
 
+#: Checklist statuses that mean something about the *file*, and so have to
+#: reach the `Document` row. `waived` and `pending` deliberately do not: waiving
+#: an item says the application no longer needs it, which is not a judgement on
+#: any document, and there is nothing to un-verify back to pending.
+_DOCUMENT_MIRRORED_STATUSES = frozenset({ChecklistItemStatus.VERIFIED, ChecklistItemStatus.REJECTED})
+
+
 class ChecklistService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -581,12 +595,86 @@ class ChecklistService:
         await self.session.refresh(item)
         return item
 
-    async def update_item(self, item: ApplicationChecklistItem, data: dict[str, Any]) -> ApplicationChecklistItem:
+    async def update_item(
+        self,
+        item: ApplicationChecklistItem,
+        data: dict[str, Any],
+        acting_user_id: UUID | None = None,
+    ) -> ApplicationChecklistItem:
+        """Apply an update, keeping the item and its document telling one story.
+
+        A requested document has two rows behind it: the `ApplicationChecklistItem`
+        that asked for it and the `Document` that answers it. Until now each was
+        written independently, so the two drifted the moment either side was
+        touched — staff pressing Verify here left the `Document` on `pending`,
+        which is the status the student's own Documents screen reads, so a
+        verified document went on saying "Pending" to the only person who cared.
+
+        So the two directions are closed here:
+
+        - **Linking a document** marks the item submitted (it was already doing
+          this) *and* attaches the document to the application, so the file
+          shows up on the application it was requested for rather than only in
+          the student's general vault.
+        - **Verifying or rejecting the item** does the same to the linked
+          document, through `DocumentService` — which raises `DocumentApproved`
+          /`DocumentRejected`, notifying the student and advancing their
+          progress exactly as the Documents screen's own Verify button does.
+
+        The reverse direction (verifying the *document*) was already handled, by
+        the `sync_checklist_item_on_document_*` subscribers. Those run for the
+        events raised here too and simply re-assert the status this method has
+        already set, which is harmless and keeps one rule in one place.
+        """
+        document_service = DocumentService(self.session)
+        newly_linked = data.get("document_id") and data["document_id"] != item.document_id
+        requested_status = data.get("status")
+
         for key, value in data.items():
             if value is not None:
                 setattr(item, key, value)
-        if data.get("document_id") and item.status == ChecklistItemStatus.PENDING:
-            item.status = ChecklistItemStatus.SUBMITTED
+
+        # What linking a document means for the item depends on the document.
+        #
+        # Normally "submitted": a re-upload against an item that was rejected
+        # (or verified, if staff asked for a better scan) starts the review
+        # again, because it is a different file and nobody has looked at it.
+        #
+        # But a document can arrive already decided — staff uploading an offer
+        # letter, or a passport they have in front of them, files it approved,
+        # because staff filing it *is* the verification (see the upload route).
+        # Calling that "submitted" would put the item back in a review queue
+        # nobody is going to work, and leave the item and its document saying
+        # different things, which is the whole class of bug this method exists
+        # to close.
+        linked_document = (
+            await document_service.get_document(data["document_id"]) if newly_linked else None
+        )
+        if newly_linked and requested_status is None:
+            item.status = (
+                ChecklistItemStatus.VERIFIED
+                if linked_document is not None and linked_document.status is DocumentStatus.APPROVED
+                else ChecklistItemStatus.SUBMITTED
+            )
+
         await self.session.commit()
         await self.session.refresh(item)
+
+        if newly_linked:
+            await document_service.link_to_application(item.document_id, item.application_id)
+
+        if item.document_id and requested_status in _DOCUMENT_MIRRORED_STATUSES and acting_user_id is not None:
+            document = await document_service.get_document(item.document_id)
+            if document is not None:
+                if requested_status is ChecklistItemStatus.VERIFIED:
+                    if document.status is not DocumentStatus.APPROVED:
+                        await document_service.verify_document(document, verified_by=acting_user_id)
+                elif document.status is not DocumentStatus.REJECTED:
+                    await document_service.reject_document(
+                        document,
+                        verified_by=acting_user_id,
+                        reason=item.notes or "Rejected during the application document review.",
+                    )
+            await self.session.refresh(item)
+
         return item

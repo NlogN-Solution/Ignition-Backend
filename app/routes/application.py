@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from uuid import UUID
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from ..api.auth import require_role
-from ..api.exceptions import ForbiddenException, NotFoundException
-from ..models import Application, User
-from ..models.enums import UserRole
+from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
+from ..core.uploads import DOCUMENT_EXTENSIONS, DOCUMENT_FOLDER, store_upload
+from ..models import Application, Document, User
+from ..models.enums import ApplicationStatus, DocumentStatus, DocumentType, UserRole
 from ..schemas.application import (
     ApplicationCreate,
     ApplicationList,
@@ -15,8 +17,13 @@ from ..schemas.application import (
     ApplicationStatusHistoryRead,
     ApplicationStatusUpdate,
     ApplicationUpdate,
+    StatusRequirementRead,
 )
 from ..services.application_service import ApplicationService, get_application_service
+from ..services.document_service import DocumentService, get_document_service
+from ..services.milestone_service import MilestoneService, get_milestone_service
+from ..services.notification_service import NotificationService, get_notification_service
+from ..services.status_requirements import requirement_for, requirements_payload
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
 
@@ -98,6 +105,23 @@ async def create_application(
     return ApplicationRead.model_validate(application)
 
 
+@router.get(
+    "/status-requirements",
+    response_model=list[StatusRequirementRead],
+    summary="What each milestone status needs",
+)
+async def get_status_requirements(
+    user: User = Depends(_MANAGE_ROLES),
+) -> list[StatusRequirementRead]:
+    """The config behind the status dialog.
+
+    Served rather than duplicated in TypeScript so the form and the validator
+    cannot disagree about what recording an offer requires. Declared before
+    `/{application_id}/status` would swallow it as an id.
+    """
+    return [StatusRequirementRead(**item) for item in requirements_payload()]
+
+
 @router.post("/{application_id}/status", response_model=ApplicationRead, summary="Update application status")
 async def change_application_status(
     application_id: UUID,
@@ -105,14 +129,134 @@ async def change_application_status(
     service: ApplicationService = Depends(get_application_service),
     user: User = Depends(require_role(UserRole.ADMIN, UserRole.COUNSELLOR)),
 ) -> ApplicationRead:
+    """The plain path: a status and a note.
+
+    Refuses the milestone statuses. They need a date and a document, and
+    letting them through here is exactly how an application ended up saying an
+    offer existed with nothing behind it — so the refusal names the endpoint
+    that does it properly rather than silently accepting half a milestone.
+    """
     application = await service.get_application(application_id)
     if application is None:
         raise NotFoundException("Application not found")
+
+    if requirement_for(payload.status) is not None:
+        raise BadRequestException(
+            f"'{payload.status.value}' records something the university issued, so it needs a date "
+            "and its letter. Use POST /applications/{id}/milestone."
+        )
+
     updated = await service.change_application_status(
         application,
         payload.status,
         performed_by=user.id,
         remarks=payload.remarks,
+    )
+    return ApplicationRead.model_validate(updated)
+
+
+@router.post(
+    "/{application_id}/milestone",
+    response_model=ApplicationRead,
+    summary="Record an offer, a CAS or a visa decision",
+)
+async def record_application_milestone(
+    application_id: UUID,
+    status: ApplicationStatus = Form(...),
+    remarks: str | None = Form(None),
+    offer_received_date: str | None = Form(None),
+    cas_received_date: str | None = Form(None),
+    visa_decision_date: str | None = Form(None),
+    offer_type: str | None = Form(None),
+    cas_number: str | None = Form(None),
+    tuition_fee: str | None = Form(None),
+    scholarship_amount: str | None = Form(None),
+    letter: UploadFile | None = File(None),
+    applications: ApplicationService = Depends(get_application_service),
+    milestones: MilestoneService = Depends(get_milestone_service),
+    documents: DocumentService = Depends(get_document_service),
+    notifications: NotificationService = Depends(get_notification_service),
+    user: User = Depends(_MANAGE_ROLES),
+) -> ApplicationRead:
+    """One request: the status, the date, the letter and the milestone.
+
+    Multipart because the letter travels with it. That is the whole point — the
+    date used to live behind a different dialog and the letter in an unrelated
+    upload, so the normal outcome of recording an offer was an application
+    claiming one with no evidence attached.
+
+    Ordering is `MilestoneService.record`'s business and documented there; what
+    happens here is the one step that cannot join a transaction. The file is
+    stored *after* the required fields are known to be present, so a request
+    missing a date never writes bytes, and the document is created only if
+    there is one to create.
+    """
+    application = await applications.get_application(application_id)
+    if application is None:
+        raise NotFoundException("Application not found")
+
+    requirement = requirement_for(status)
+    if requirement is None:
+        raise BadRequestException(
+            f"'{status.value}' is not a milestone status. Use POST /applications/{{id}}/status."
+        )
+
+    fields = {
+        key: value
+        for key, value in {
+            "offer_received_date": offer_received_date,
+            "cas_received_date": cas_received_date,
+            "visa_decision_date": visa_decision_date,
+            "offer_type": offer_type,
+            "cas_number": cas_number,
+            "tuition_fee": tuition_fee,
+            "scholarship_amount": scholarship_amount,
+        }.items()
+        if value not in (None, "")
+    }
+
+    # Cheap validation before the upload: a request with no date must not leave
+    # a file in Cloudinary. `record` re-checks everything — this is the early
+    # exit, not the authority.
+    if requirement.required_date_field and not fields.get(requirement.required_date_field):
+        raise BadRequestException(
+            f"Record the date before saving '{status.value.replace('_', ' ')}'."
+        )
+
+    document: Document | None = None
+    if letter is not None and letter.filename:
+        stored = await store_upload(
+            letter, DOCUMENT_EXTENSIONS, folder=DOCUMENT_FOLDER, private=True
+        )
+        document_id = uuid4()
+        document = await documents.create_document(
+            {
+                "id": document_id,
+                "student_id": application.student_id,
+                "uploaded_by": user.id,
+                "document_type": requirement.required_document or DocumentType.OTHER,
+                "title": requirement.document_label or letter.filename,
+                "original_file_name": letter.filename,
+                "stored_file_name": stored.stored_file_name,
+                "file_url": f"/api/v1/documents/{document_id}/download",
+                "mime_type": letter.content_type,
+                "file_size": stored.size,
+                # Staff filing what the university sent *is* the verification —
+                # there is nobody left to check it against. Same rule as
+                # `POST /documents/upload`.
+                "status": DocumentStatus.APPROVED,
+                "verified_by": user.id,
+                "verified_at": datetime.now(UTC),
+            }
+        )
+
+    updated = await milestones.record(
+        application,
+        status,
+        fields=fields,
+        document=document,
+        performed_by=user.id,
+        remarks=remarks,
     )
     return ApplicationRead.model_validate(updated)
 

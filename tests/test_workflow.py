@@ -305,3 +305,205 @@ async def test_checklist_items_belong_to_their_application(
     # The owning student can see it; a stranger cannot.
     owner_headers = await auth_headers(application["student"])
     assert (await client.get(f"{APPLICATIONS}/{application_id}/checklist", headers=owner_headers)).status_code == 200
+
+
+# ── The document request round trip ───────────────────────────────────────────
+#
+# A requested document is two rows: the `ApplicationChecklistItem` that asked
+# for it and the `Document` that answers it. The bug these cover is the two
+# drifting — the student's Documents screen reads the `Document`, the staff
+# console reads the item, and each side used to write only its own row, so a
+# verified document went on saying "Pending" to the student who uploaded it.
+
+
+async def _request_and_fulfil(client: AsyncClient, admin_headers, application: dict, auth_headers) -> tuple[str, str, str]:
+    """Staff request a passport; the student uploads one and links it."""
+    application_id = application["application"]["id"]
+    student = application["student"]
+    student_headers = await auth_headers(student)
+
+    item = (
+        await client.post(
+            f"{APPLICATIONS}/{application_id}/checklist",
+            json={"document_type": "passport"},
+            headers=admin_headers,
+        )
+    ).json()
+
+    uploaded = (
+        await client.post(
+            "/api/v1/documents/upload",
+            data={"student_id": str(student.id), "document_type": "passport"},
+            files={"file": ("passport.pdf", b"%PDF-1.4 scan", "application/pdf")},
+            headers=student_headers,
+        )
+    ).json()
+
+    linked = await client.patch(
+        f"{APPLICATIONS}/{application_id}/checklist/{item['id']}",
+        json={"document_id": uploaded["id"]},
+        headers=student_headers,
+    )
+    assert linked.status_code == 200, linked.text
+    return application_id, item["id"], uploaded["id"]
+
+
+async def test_linking_a_document_submits_the_item_and_files_it_on_the_application(
+    client: AsyncClient, admin_headers, application: dict, auth_headers
+) -> None:
+    application_id, item_id, document_id = await _request_and_fulfil(
+        client, admin_headers, application, auth_headers
+    )
+
+    items = (await client.get(f"{APPLICATIONS}/{application_id}/checklist", headers=admin_headers)).json()
+    assert items[0]["status"] == "submitted"
+    assert items[0]["document_id"] == document_id
+
+    # And the file is now the application's, not just the student's vault.
+    student_headers = await auth_headers(application["student"])
+    filed = await client.get(
+        f"/api/v1/student/me/applications/{application_id}/documents", headers=student_headers
+    )
+    assert filed.status_code == 200, filed.text
+    assert [d["id"] for d in filed.json()["items"]] == [document_id]
+
+
+async def test_verifying_the_checklist_item_approves_the_underlying_document(
+    client: AsyncClient, admin_headers, application: dict, auth_headers
+) -> None:
+    """The bug: staff pressed Verify here, the student kept seeing "Pending"."""
+    application_id, item_id, document_id = await _request_and_fulfil(
+        client, admin_headers, application, auth_headers
+    )
+
+    verified = await client.patch(
+        f"{APPLICATIONS}/{application_id}/checklist/{item_id}",
+        json={"status": "verified"},
+        headers=admin_headers,
+    )
+    assert verified.status_code == 200, verified.text
+    assert verified.json()["status"] == "verified"
+
+    student_headers = await auth_headers(application["student"])
+    document = (await client.get(f"/api/v1/documents/{document_id}", headers=student_headers)).json()
+    assert document["status"] == "approved"
+    assert document["verified_at"] is not None
+
+
+async def test_rejecting_the_checklist_item_rejects_the_underlying_document(
+    client: AsyncClient, admin_headers, application: dict, auth_headers
+) -> None:
+    application_id, item_id, document_id = await _request_and_fulfil(
+        client, admin_headers, application, auth_headers
+    )
+
+    await client.patch(
+        f"{APPLICATIONS}/{application_id}/checklist/{item_id}",
+        json={"status": "rejected", "notes": "The photo page is cut off."},
+        headers=admin_headers,
+    )
+
+    student_headers = await auth_headers(application["student"])
+    document = (await client.get(f"/api/v1/documents/{document_id}", headers=student_headers)).json()
+    assert document["status"] == "rejected"
+    assert document["rejection_reason"] == "The photo page is cut off."
+
+
+async def test_verifying_the_document_verifies_the_checklist_item(
+    client: AsyncClient, admin_headers, application: dict, auth_headers
+) -> None:
+    """The other direction, which the event subscribers already handled — kept
+    here so the pair is covered in one place."""
+    application_id, item_id, document_id = await _request_and_fulfil(
+        client, admin_headers, application, auth_headers
+    )
+
+    await client.post(f"/api/v1/documents/{document_id}/verify", json={}, headers=admin_headers)
+
+    items = (await client.get(f"{APPLICATIONS}/{application_id}/checklist", headers=admin_headers)).json()
+    assert items[0]["status"] == "verified"
+
+
+async def test_re_uploading_against_a_rejected_item_puts_it_back_under_review(
+    client: AsyncClient, admin_headers, application: dict, auth_headers
+) -> None:
+    application_id, item_id, _ = await _request_and_fulfil(client, admin_headers, application, auth_headers)
+    student = application["student"]
+    student_headers = await auth_headers(student)
+
+    await client.patch(
+        f"{APPLICATIONS}/{application_id}/checklist/{item_id}",
+        json={"status": "rejected", "notes": "Unreadable."},
+        headers=admin_headers,
+    )
+
+    replacement = (
+        await client.post(
+            "/api/v1/documents/upload",
+            data={"student_id": str(student.id), "document_type": "passport"},
+            files={"file": ("passport-2.pdf", b"%PDF-1.4 better scan", "application/pdf")},
+            headers=student_headers,
+        )
+    ).json()
+    relinked = await client.patch(
+        f"{APPLICATIONS}/{application_id}/checklist/{item_id}",
+        json={"document_id": replacement["id"]},
+        headers=student_headers,
+    )
+
+    assert relinked.status_code == 200, relinked.text
+    assert relinked.json()["status"] == "submitted"
+    assert relinked.json()["document_id"] == replacement["id"]
+
+
+async def test_staff_uploading_the_requested_file_lands_the_item_verified(
+    client: AsyncClient, admin_headers, application: dict, auth_headers
+) -> None:
+    """A document that arrives already decided does not go back in the queue.
+
+    Staff uploading on a student's behalf files the row approved — they have the
+    document in front of them, and there is nobody left to verify it against. An
+    item linked to such a document must say `verified`, not `submitted`, or the
+    checklist and the file it points at disagree the moment they are joined.
+    """
+    application_id = application["application"]["id"]
+    student = application["student"]
+
+    item = (
+        await client.post(
+            f"{APPLICATIONS}/{application_id}/checklist",
+            json={"document_type": "offer_letter"},
+            headers=admin_headers,
+        )
+    ).json()
+
+    uploaded = (
+        await client.post(
+            "/api/v1/documents/upload",
+            data={"student_id": str(student.id), "document_type": "offer_letter"},
+            files={"file": ("offer.pdf", b"%PDF-1.4 offer", "application/pdf")},
+            headers=admin_headers,
+        )
+    ).json()
+    assert uploaded["status"] == "approved"
+
+    linked = await client.patch(
+        f"{APPLICATIONS}/{application_id}/checklist/{item['id']}",
+        json={"document_id": uploaded["id"]},
+        headers=admin_headers,
+    )
+    assert linked.status_code == 200, linked.text
+    assert linked.json()["status"] == "verified"
+
+
+async def test_a_students_own_upload_still_lands_the_item_submitted(
+    client: AsyncClient, admin_headers, application: dict, auth_headers
+) -> None:
+    """The other half: a student's upload genuinely is waiting on someone."""
+    _, item_id, _ = await _request_and_fulfil(client, admin_headers, application, auth_headers)
+    items = (
+        await client.get(
+            f"{APPLICATIONS}/{application['application']['id']}/checklist", headers=admin_headers
+        )
+    ).json()
+    assert next(i for i in items if i["id"] == item_id)["status"] == "submitted"

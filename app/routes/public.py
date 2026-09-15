@@ -22,13 +22,15 @@ Four properties this router has to get right, all of them easy to break:
 from __future__ import annotations
 
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 
 from ..api.auth import require_public
 from ..api.exceptions import NotFoundException
-from ..core.rate_limit import ELIGIBILITY_RATE_LIMIT, limiter
+from ..core.rate_limit import APPLY_INTENT_RATE_LIMIT, ELIGIBILITY_RATE_LIMIT, limiter
 from ..models.enums import EligibilityOverall
+from ..schemas.apply_intent import ApplyIntentCreate, ApplyIntentRead
 from ..schemas.eligibility import EligibilityResultPublic, EligibilitySubmission
 from ..schemas.public import (
     ContentListPublic,
@@ -45,37 +47,87 @@ from ..schemas.public import (
     PostPublic,
     CourseDetailPublic,
     IntakePublic,
-    RoutePublic,
     ScholarshipListPublic,
-    ScholarshipPublic,
     Taxonomies,
     UniversityDetail,
     UniversityListPublic,
     UniversitySummary,
 )
+from ..services.apply_intent_service import ApplyIntentService, get_apply_intent_service
 from ..services.eligibility_service import EligibilityService, get_eligibility_service
 from ..services.public_service import CourseFilters, PublicCatalogueService, get_public_service
 
 router = APIRouter(prefix="/public", tags=["Public"])
 
-#: Served from a CDN or Next's ISR, so a short shared max-age with a long
-#: stale window: a visitor never waits on a revalidation, and a publish is
-#: picked up within five minutes even without the on-demand webhook.
-_CACHE = "public, s-maxage=300, stale-while-revalidate=86400"
-
-#: Pagination ceiling. The explorer asks for 24 at a time.
-MAX_LIMIT = 100
-
-PageParam = Annotated[int, Query(ge=1)]
-LimitParam = Annotated[int, Query(ge=1, le=MAX_LIMIT)]
+#: Every response here is a published-only read of data staff edit rarely, so
+#: it is cached at the edge rather than per-browser: `s-maxage` lets a CDN hold
+#: it for five minutes, and `stale-while-revalidate` lets it keep serving the
+#: old copy for a day while it fetches a new one. A student never waits for a
+#: revalidation, and a corrected fee is live within five minutes.
+_CACHE_CONTROL = "public, s-maxage=300, stale-while-revalidate=86400"
 
 
 def _cache(response: Response) -> None:
-    response.headers["Cache-Control"] = _CACHE
+    response.headers["Cache-Control"] = _CACHE_CONTROL
+
+
+#: `limit` is clamped on every paginated public route. There is no max-limit
+#: anywhere else in this API, and `?limit=999999` against ~4,800 offerings is a
+#: free denial of service — see this module's docstring, property 4.
+PageParam = Annotated[int, Query(ge=1)]
+LimitParam = Annotated[int, Query(ge=1, le=100)]
+
+
+def _route_payload(route: Any) -> dict[str, Any]:
+    """One column of the entry-criteria matrix."""
+    return {
+        "route_key": route.route_key.value if hasattr(route.route_key, "value") else route.route_key,
+        "label": route.label,
+        "academic_criteria": route.academic_criteria,
+        "english_criteria": route.english_criteria,
+        "english_waiver": route.english_waiver,
+        "fee_structure": route.fee_structure,
+        "scholarship_text": route.scholarship_text,
+        "gap_policy": route.gap_policy,
+        "cas_deposit": route.cas_deposit,
+        "enrolment_fee": route.enrolment_fee,
+        "deadlines": route.deadlines,
+        "previous_refusal": route.previous_refusal,
+        "extras": route.extras,
+    }
+
+
+def _scholarship_payload(scholarship: Any, university_slug: str | None) -> dict[str, Any]:
+    return {
+        "slug": scholarship.slug,
+        "name": scholarship.name,
+        "provider": scholarship.provider,
+        "kind": scholarship.kind,
+        "university_slug": university_slug,
+        "levels": scholarship.levels,
+        "subjects": scholarship.subjects,
+        "nationality_group": scholarship.nationality_group,
+        "amount": scholarship.amount,
+        "deadline": scholarship.deadline,
+        "eligibility": scholarship.eligibility,
+        "apply_via": scholarship.apply_via,
+        "source": scholarship.source,
+        "is_example": scholarship.is_example or None,
+    }
 
 
 def _university_payload(university: Any, course_count: int | None = None) -> dict[str, Any]:
-    data = {
+    """A university row as the public site reads it.
+
+    Built by hand rather than left to `from_attributes` because three things
+    have to happen that a straight ORM read cannot do: `course_count` is a
+    computed column from the caller's query, `region` is an enum that has to
+    come out as its value, and the booleans are collapsed to None when false so
+    `response_model_exclude_none` drops the key entirely. That last one is the
+    hide-when-absent contract in property 1 of this module's docstring — a
+    `false` would render an empty section shell on the landing.
+    """
+    return {
         "id": university.id,
         "slug": university.slug,
         "name": university.name,
@@ -85,110 +137,48 @@ def _university_payload(university: Any, course_count: int | None = None) -> dic
         "tagline": university.tagline,
         "logo_url": university.logo_url,
         "imagery": university.imagery,
-        "tuition_min": university.tuition_min,
-        "tuition_max": university.tuition_max,
-        "living_cost_monthly": university.living_cost_monthly,
+        "tuition_min": float(university.tuition_min) if university.tuition_min is not None else None,
+        "tuition_max": float(university.tuition_max) if university.tuition_max is not None else None,
+        "living_cost_monthly": (
+            float(university.living_cost_monthly) if university.living_cost_monthly is not None else None
+        ),
         "subjects": university.subjects,
-        "placement_year": university.placement_year,
-        "is_example": university.is_example,
+        "placement_year": university.placement_year or None,
+        "course_count": course_count,
+        "is_example": university.is_example or None,
+        "overview": university.overview,
+        "student_experience": university.student_experience,
+        "careers_text": university.careers_text,
+        "website": university.website,
+        "accommodation": university.accommodation,
+        "entry": university.entry,
+        "international_support": university.international_support,
+        "facilities": university.facilities,
+        "founded": university.founded,
+        "kind": university.kind,
+        "campus": university.campus,
+        "student_population": university.student_population,
+        "international_students": university.international_students,
+        "student_staff_ratio": university.student_staff_ratio,
+        "history": university.history,
+        "milestones": university.milestones,
+        "rankings": university.rankings,
+        "awards": university.awards,
+        # Declared on the model *and* assembled here. Missing it returns 200
+        # with the section silently absent, which reads exactly like a
+        # university that has no recognition data — see
+        # `test_recognition_reaches_the_public_detail`.
+        "recognition": university.recognition,
+        "employability": university.employability,
+        "interview_profile": university.interview_profile,
+        "flyer_url": university.flyer_url,
+        "ranking": university.ranking,
+        "acceptance_rate": (
+            float(university.acceptance_rate) if university.acceptance_rate is not None else None
+        ),
+        "faculties": university.faculties,
+        "highlights": university.highlights,
     }
-    if course_count is not None:
-        data["course_count"] = course_count
-    return data
-
-
-#: The spreadsheet's way of writing an empty cell. Printing "Scholarship: N/A"
-#: states a policy the university never gave, so it is dropped like a null.
-def _criterion(value: str | None) -> str | None:
-    cleaned = (value or "").strip()
-    return None if not cleaned or cleaned.upper() == "N/A" else cleaned
-
-
-def _course_payload(program: Any, intake: str | None = None) -> dict[str, Any]:
-    university = program.university
-    # Withheld unless the route is published — same rule as the university
-    # page. A course must not become the back door to a fee staff have not
-    # signed off.
-    route = program.route if getattr(program, "route", None) and program.route.is_published else None
-    return {
-        "id": program.id,
-        "slug": program.slug,
-        "title": program.name,
-        "qualification": program.qualification,
-        "subject": program.subject.value if program.subject else None,
-        "course_level": program.course_level.value if program.course_level else None,
-        "duration_years": float(program.duration_years) if program.duration_years is not None else None,
-        "placement": program.placement,
-        "campus": program.campus,
-        "extra_requirements": program.extra_requirements,
-        "fee_tier": program.fee_tier,
-        "fee_text": _criterion(route.fee_structure) if route else None,
-        "scholarship_text": _criterion(route.scholarship_text) if route else None,
-        "intake": intake,
-        "is_example": program.is_example,
-        "university": CourseUniversity(
-            id=university.id,
-            slug=university.slug,
-            name=university.name,
-            city=university.city,
-            region=university.region.value if university.region else None,
-        )
-        if university and university.slug
-        else None,
-        "course_profile_slug": program.course_profile.slug if program.course_profile else None,
-    }
-
-
-def _scholarship_payload(scholarship: Any, university_slug: str | None) -> ScholarshipPublic:
-    """One award, in the shape three routes serve it in.
-
-    The university page, the offering page and `/scholarships` all render the
-    same record. Building it in one place is what stops them drifting into
-    three subtly different funding tables.
-    """
-    return ScholarshipPublic(
-        slug=scholarship.slug,
-        name=scholarship.name,
-        provider=scholarship.provider,
-        kind=scholarship.kind,
-        university_slug=university_slug,
-        levels=scholarship.levels,
-        subjects=scholarship.subjects,
-        nationality_group=scholarship.nationality_group,
-        amount=scholarship.amount,
-        deadline=scholarship.deadline,
-        eligibility=scholarship.eligibility,
-        apply_via=scholarship.apply_via,
-        source=scholarship.source,
-        is_example=scholarship.is_example,
-    )
-
-
-def _route_payload(route: Any) -> RoutePublic:
-    """One column of the entry-criteria matrix.
-
-    Shared by the university page and the offering page on purpose: an
-    offering's criteria *are* the university's route row, and a student who
-    checks one against the other must find the same words.
-    """
-    return RoutePublic(
-        route_key=route.route_key.value,
-        label=route.label,
-        academic_criteria=route.academic_criteria,
-        english_criteria=route.english_criteria,
-        english_waiver=route.english_waiver,
-        fee_structure=route.fee_structure,
-        scholarship_text=route.scholarship_text,
-        gap_policy=route.gap_policy,
-        cas_deposit=route.cas_deposit,
-        enrolment_fee=route.enrolment_fee,
-        deadlines=route.deadlines,
-        previous_refusal=route.previous_refusal,
-        extras=route.extras,
-    )
-
-
-# --- universities ------------------------------------------------------------
 
 
 @router.get(
@@ -310,7 +300,7 @@ async def public_courses(
         q=q, route=route, level=level, subject=subject, university=university, placement=placement, duration=duration
     )
     programs, total = await service.search_courses(filters, page, limit, sort=sort)
-    items = [CoursePublic(**_course_payload(program)) for program in programs]
+    items = [CoursePublic(**CoursePublic.payload(program)) for program in programs]
     return CourseSearchResult(items=items, total=total, page=page, limit=limit)
 
 
@@ -369,7 +359,7 @@ async def public_course(
         raise NotFoundException("Course not found")
 
     university = program.university
-    payload = _course_payload(program, await service.course_intake(program.id))
+    payload = CoursePublic.payload(program, await service.course_intake(program.id))
     payload["university_city"] = university.city if university else None
 
     # The criteria this course is admitted under. Unpublished routes are
@@ -445,7 +435,7 @@ async def public_course(
 
     related = await service.related_courses(program)
     if related:
-        payload["related"] = [CoursePublic(**_course_payload(item)) for item in related]
+        payload["related"] = [CoursePublic(**CoursePublic.payload(item)) for item in related]
 
     return CourseDetailPublic(**payload)
 
@@ -729,3 +719,69 @@ async def public_taxonomies(
     """
     _cache(response)
     return Taxonomies(**service.taxonomies())
+
+
+# --- Apply intent ---------------------------------------------------------------------
+#
+# The second public endpoint that writes, and for the same kind of reason as
+# `/eligibility`: the thing it records is created by somebody who does not have
+# an account yet, and requiring one first would defeat the feature.
+#
+# What it stores is not personal data — a programme id, an optional intake, and
+# the page the student was on. See `models/apply_intent.py` for why this is a
+# row rather than a signed token in the URL.
+
+
+@router.post(
+    "/apply-intents",
+    response_model=ApplyIntentRead,
+    status_code=201,
+    summary="Record which course a visitor pressed Apply on",
+)
+@limiter.limit(APPLY_INTENT_RATE_LIMIT)
+async def create_apply_intent(
+    request: Request,
+    payload: ApplyIntentCreate,
+    service: ApplyIntentService = Depends(get_apply_intent_service),
+    _: None = Depends(require_public),
+) -> ApplyIntentRead:
+    """Mint an intent from a course slug.
+
+    Rate-limited because it writes and is unauthenticated. The slug is a lookup
+    key, never data: the response's course block is read back out of `programs`
+    and `universities`, so a caller who posts a slug cannot influence what the
+    registration screen then says the student is applying for.
+    """
+    intent = await service.mint(
+        payload.course_slug,
+        intake_id=payload.intake_id,
+        source_path=payload.source_path,
+    )
+    if intent is None:
+        raise NotFoundException("Course not found")
+    return ApplyIntentRead.of(intent)
+
+
+@router.get(
+    "/apply-intents/{intent_id}",
+    response_model=ApplyIntentRead,
+    summary="Read a recorded apply intent",
+)
+async def read_apply_intent(
+    intent_id: UUID,
+    service: ApplyIntentService = Depends(get_apply_intent_service),
+    _: None = Depends(require_public),
+) -> ApplyIntentRead:
+    """Unauthenticated on purpose.
+
+    The registration and login screens have to render "You're applying for MSc
+    Computer Science at Coventry" *before* the student has an account, which is
+    the entire point. Everything returned is published catalogue data that the
+    same caller can already read from `/public/courses/{slug}` — the intent adds
+    no personal information to it, and claiming (which does involve a person) is
+    authenticated and lives under `/student`.
+    """
+    intent = await service.get_live(intent_id)
+    if intent is None:
+        raise NotFoundException("That application link has expired. Open the course again to restart.")
+    return ApplyIntentRead.of(intent)

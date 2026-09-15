@@ -26,12 +26,15 @@ from ..models.enums import (
     LeadSource,
     LeadStatus,
     NotificationType,
+    UserRole,
+    UserStatus,
 )
 from ..services.progress_service import PointsService, ProgressService
 from ..services.staff_resolution import resolve_responsible_staff_ids
 from .cache import invalidate_dashboard_cache
 from .events import (
     ApplicationStatusChanged,
+    ApplicationSubmitted,
     AppointmentScheduled,
     ChecklistItemCompleted,
     DocumentApproved,
@@ -39,9 +42,11 @@ from .events import (
     DocumentUploaded,
     Event,
     InterviewCompleted,
+    MilestoneRecorded,
     PaymentCompleted,
     StudentCreated,
     TaskAssigned,
+    ThreadMessagePosted,
     event_bus,
 )
 
@@ -131,6 +136,133 @@ async def sync_checklist_item_on_document_rejection(event: DocumentRejected, ses
         update(ApplicationChecklistItem)
         .where(ApplicationChecklistItem.document_id == event.document_id)
         .values(status=ChecklistItemStatus.REJECTED)
+    )
+    await session.commit()
+
+
+# --- Correspondence -----------------------------------------------------------
+
+
+async def notify_about_thread_message(event: ThreadMessagePosted, session: AsyncSession) -> None:
+    """Tell whichever side did not write it.
+
+    A student's message goes to the staff responsible for them; a staff reply
+    goes to the student. The asymmetry lives here rather than in
+    `CommunicationService` because it is a question about who cares, not about
+    what happened — the service's job ends at recording the message.
+
+    A thread that is still only against a lead has no `student_id` and so no
+    portal account to notify. Staff still hear about it.
+    """
+    if event.is_from_student:
+        if event.student_id is None:
+            return
+        staff_ids = await resolve_responsible_staff_ids(session, event.student_id)
+        for staff_id in staff_ids:
+            session.add(
+                Notification(
+                    user_id=staff_id,
+                    type=NotificationType.MESSAGE,
+                    title=f"Reply: {event.subject}",
+                    message=event.preview,
+                    related_type="thread",
+                    related_id=event.thread_id,
+                    action_url=f"/communication?thread={event.thread_id}",
+                )
+            )
+        if staff_ids:
+            await session.commit()
+        return
+
+    if event.student_id is None:
+        return
+    session.add(
+        Notification(
+            user_id=event.student_id,
+            type=NotificationType.MESSAGE,
+            title=event.subject,
+            message=event.preview,
+            related_type="thread",
+            related_id=event.thread_id,
+            action_url=f"/messages?thread={event.thread_id}",
+        )
+    )
+    await session.commit()
+
+
+# --- Applications -------------------------------------------------------------
+
+
+async def notify_staff_of_new_application(event: ApplicationSubmitted, session: AsyncSession) -> None:
+    """The notification that did not exist.
+
+    Documents raised notifications, status changes notified the student, and an
+    application *arriving* notified nobody — staff found out by refreshing a
+    list. This is the first thing the brief asks for and the one with the
+    clearest cost when it is missing: an application nobody has looked at.
+
+    Sent to the staff responsible for the student where there are any, and to
+    every admin/manager otherwise — an unassigned application is precisely the
+    one most likely to be missed, so it must not notify an empty set.
+    """
+    recipients = await resolve_responsible_staff_ids(session, event.student_id)
+    if not recipients:
+        recipients = list(
+            (
+                await session.scalars(
+                    select(User.id).where(
+                        User.role.in_([UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.MANAGER]),
+                        User.deleted_at.is_(None),
+                    )
+                )
+            ).all()
+        )
+
+    university = f" — {event.university_name}" if event.university_name else ""
+    for user_id in recipients:
+        session.add(
+            Notification(
+                user_id=user_id,
+                type=NotificationType.APPLICATION,
+                title="New application submitted",
+                message=f"{event.student_name} submitted an application for {event.program_name}{university}.",
+                related_type="application",
+                related_id=event.application_id,
+                action_url=f"/applications/{event.application_id}",
+            )
+        )
+    if recipients:
+        await session.commit()
+
+
+async def notify_student_of_milestone(event: MilestoneRecorded, session: AsyncSession) -> None:
+    """The good news, as a notification that outlives the celebration.
+
+    The dashboard shows a one-time overlay (see `ApplicationMilestone.seen_at`);
+    this is the durable record of it, so a student who dismissed the overlay can
+    still find the offer afterwards.
+    """
+    university = event.university_name or "the university"
+    titles = {
+        "offer_received": "🎉 Offer received",
+        "cas_received": "Your CAS has arrived",
+        "visa_approved": "Visa approved",
+    }
+    messages = {
+        "offer_received": f"{university} has made you an offer for {event.program_name}.",
+        "cas_received": f"{university} has issued your CAS for {event.program_name}.",
+        "visa_approved": f"Your visa for {event.program_name} has been approved.",
+    }
+    session.add(
+        Notification(
+            user_id=event.student_id,
+            type=NotificationType.APPLICATION,
+            title=titles.get(event.kind, "Application update"),
+            message=messages.get(event.kind, f"Your application for {event.program_name} was updated."),
+            related_type="application",
+            related_id=event.application_id,
+            action_url=f"/applications/{event.application_id}",
+        )
     )
     await session.commit()
 
@@ -331,6 +463,64 @@ async def invalidate_dashboard_on_interview_completed(event: InterviewCompleted,
 # --- Lead coverage ------------------------------------------------------------
 
 
+#: Who hears about a portal self-registration.
+#:
+#: Not `resolve_responsible_staff_ids`: that answers "who owns this student",
+#: and a student who just signed up is owned by nobody — it would fall through
+#: to admins only. A fresh registration is a new lead on the desk, so it goes to
+#: everyone who works the desk. Managers and admins are included because they
+#: are the ones who notice when nobody picks it up.
+LEAD_DESK_ROLES = (
+    UserRole.COUNSELLOR.value,
+    UserRole.ADMISSIONS.value,
+    UserRole.FRONTDESK.value,
+    UserRole.MANAGER.value,
+    UserRole.ADMIN.value,
+    UserRole.SUPER_ADMIN.value,
+)
+
+
+async def _lead_desk_staff_ids(session: AsyncSession) -> list[UUID]:
+    result = await session.execute(
+        select(User.id).where(
+            User.role.in_(LEAD_DESK_ROLES),
+            User.status == UserStatus.ACTIVE.value,
+            User.deleted_at.is_(None),
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def notify_desk_of_registration(session: AsyncSession, user: User, *, linked: bool) -> None:
+    """"Somebody just registered" — said once, to the people who act on it.
+
+    The lead row this accompanies has existed since Phase 5b, but nothing
+    announced it: a student could sign up on the portal and sit unworked in the
+    pipeline until someone happened to sort by created date. The message names
+    the person and says which of the two things happened, because they need
+    different responses — a brand-new registration is a first contact to make,
+    while a registration against an existing lead means someone already in the
+    pipeline has just self-served and should not be cold-called about it.
+    """
+    name = f"{user.first_name} {user.last_name or ''}".strip() or user.email
+    title = "New student registration"
+    message = (
+        f"{name} registered on the student portal and matched an existing lead."
+        if linked
+        else f"{name} registered on the student portal and is now a lead."
+    )
+    for staff_id in await _lead_desk_staff_ids(session):
+        session.add(
+            Notification(
+                user_id=staff_id,
+                type=NotificationType.LEAD,
+                title=title,
+                message=message,
+            )
+        )
+    await session.commit()
+
+
 async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncSession) -> None:
     """Make sure every student account has a lead behind it.
 
@@ -372,6 +562,10 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
         )
         await session.commit()
         logger.info("Linked lead %s to self-registered student %s", lead.id, event.student_id)
+
+        user = (await session.execute(select(User).where(User.id == event.student_id))).scalar_one_or_none()
+        if user is not None:
+            await notify_desk_of_registration(session, user, linked=True)
         return
 
     user = (await session.execute(select(User).where(User.id == event.student_id))).scalar_one_or_none()
@@ -404,6 +598,7 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
     )
     await session.commit()
     logger.info("Created lead %s for self-registered student %s", new_lead.id, event.student_id)
+    await notify_desk_of_registration(session, user, linked=False)
 
 
 def register_subscribers() -> None:
@@ -422,6 +617,9 @@ def register_subscribers() -> None:
     event_bus.subscribe(DocumentApproved, sync_checklist_item_on_document_approval)
     event_bus.subscribe(DocumentRejected, sync_checklist_item_on_document_rejection)
     event_bus.subscribe(DocumentUploaded, log_document_upload)
+    event_bus.subscribe(ThreadMessagePosted, notify_about_thread_message)
+    event_bus.subscribe(ApplicationSubmitted, notify_staff_of_new_application)
+    event_bus.subscribe(MilestoneRecorded, notify_student_of_milestone)
     event_bus.subscribe(DocumentUploaded, notify_reviewers_of_upload)
     event_bus.subscribe(AppointmentScheduled, notify_about_appointment)
     event_bus.subscribe(StudentCreated, link_or_create_lead_for_student)

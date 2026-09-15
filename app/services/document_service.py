@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.deps import get_db_session
 from ..core.events import DocumentApproved, DocumentRejected, DocumentUploaded, event_bus
-from ..models import Document, User
+from ..models import ApplicationDocument, Document, User
 from ..models.enums import DocumentStatus
 from .partial_update import reject_null_on_required
 from .staff_resolution import resolve_responsible_staff_ids
@@ -62,9 +62,12 @@ class DocumentService:
         result = await self.session.execute(query)
         return list(result.scalars().all()), total
 
-    async def create_document(self, data: dict[str, Any]) -> Document:
+    async def create_document(self, data: dict[str, Any], application_id: UUID | None = None) -> Document:
         document = Document(**data)
         self.session.add(document)
+        await self.session.flush()
+        if application_id is not None:
+            self.session.add(ApplicationDocument(application_id=application_id, document_id=document.id))
         await self.session.commit()
         await self.session.refresh(document)
         await event_bus.publish(
@@ -77,6 +80,35 @@ class DocumentService:
             self.session,
         )
         return document
+
+    async def link_to_application(self, document_id: UUID, application_id: UUID) -> None:
+        """Attach a document to an application, idempotently.
+
+        Called whenever a document becomes an application's business — a
+        checklist item it fulfils, an offer letter staff file against it. The
+        join row has a uniqueness constraint, so the existence check is here to
+        keep a second link from turning into a 500 rather than to guard the
+        table.
+        """
+        existing = await self.session.scalar(
+            select(ApplicationDocument.id).where(
+                ApplicationDocument.application_id == application_id,
+                ApplicationDocument.document_id == document_id,
+            )
+        )
+        if existing is not None:
+            return
+        self.session.add(ApplicationDocument(application_id=application_id, document_id=document_id))
+        await self.session.commit()
+
+    async def list_for_application(self, application_id: UUID) -> list[Document]:
+        result = await self.session.execute(
+            select(Document)
+            .join(ApplicationDocument, ApplicationDocument.document_id == Document.id)
+            .where(ApplicationDocument.application_id == application_id)
+            .order_by(Document.created_at.desc())
+        )
+        return list(result.scalars().all())
 
     async def update_document(self, document: Document, data: dict[str, Any]) -> Document:
         reject_null_on_required(Document, data)

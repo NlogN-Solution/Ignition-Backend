@@ -13,12 +13,24 @@ from ..api.student import (
     StudentScopedRepository,
     get_current_student,
     get_student_repository,
-    require_paid_portal_access,
 )
+
+# NOTE: `require_paid_portal_access` is deliberately not imported or applied.
+#
+# It was written to gate the whole application workflow behind the access fee
+# and was never wired to a single endpoint — it has been an unused import in
+# this module since it was added. The product answer landed elsewhere: the fee
+# unlocks the *offer and CAS letters*, enforced on the document routes
+# themselves (`_assert_entitled` in routes/document.py), because a student must
+# be able to apply, upload and correspond before there is anything worth
+# paying for. The guard is left in `api/student.py` rather than deleted, since
+# a future "premium workflow" tier is exactly what it is for.
 from ..core.config import get_settings
+from ..core.events import ApplicationSubmitted, event_bus
 from ..models import (
     Application,
     ApplicationChecklistItem,
+    ApplicationDocument,
     ApplicationStatusHistory,
     Appointment,
     BlogPost,
@@ -39,10 +51,12 @@ from ..models import (
 from ..models.enums import (
     ApplicationStatus,
     AppointmentStatus,
+    DocumentType,
     NotificationType,
     SavingsGoalKind,
     TaskStatus,
 )
+from ..models.communication import ThreadVisibility
 from ..models.student_portal import MAX_COMPARE_COURSES
 from ..schemas.academic import (
     BlogPostList,
@@ -54,6 +68,10 @@ from ..schemas.academic import (
     UniversityList,
 )
 from ..schemas.activity import ActivityEntryRead, ActivityList
+from ..schemas.apply_intent import ApplyIntentRead
+from ..schemas.communication import StudentThreadCreate, ThreadDetail, ThreadRead
+from ..schemas.milestone import ApplicationMilestoneRead
+from ..schemas.public import CourseFeed, CoursePublic, FeedSectionPublic
 from ..schemas.application import (
     ApplicationCounsellorSummary,
     ApplicationProgramSummary,
@@ -134,6 +152,10 @@ from ..services.academic_service import (
     get_university_service,
 )
 from ..services.activity_service import ActivityService, get_activity_service
+from ..services.apply_intent_service import ApplyIntentService, get_apply_intent_service
+from ..services.communication_service import CommunicationService, get_communication_service
+from ..services.milestone_service import MilestoneService, get_milestone_service
+from ..services.recommendation_service import RecommendationService, get_recommendation_service
 from ..services.checklist_service import ChecklistService, get_checklist_service
 from ..services.dashboard_service import DashboardService, get_dashboard_service
 from ..services.finance_service import (
@@ -370,6 +392,12 @@ async def create_my_application(
         # checklist is empty until staff attach one.
         pass
 
+    # The student came from Apply Now and has now done the thing. Closing the
+    # intent here rather than in the apply flow means it closes however the
+    # application was opened — from the course page, from Explore, or from a
+    # link a counsellor sent.
+    await ApplyIntentService(repo.session).mark_fulfilled(repo.student.id, payload.program_id)
+
     loaded = await repo.get_or_404(
         Application,
         application.id,
@@ -413,6 +441,7 @@ async def submit_my_application(
             "This application has already moved on — your counsellor is handling it from here."
         )
 
+    already_submitted = application.status is ApplicationStatus.READY_TO_SUBMIT
     await applications.change_application_status(
         application,
         ApplicationStatus.READY_TO_SUBMIT,
@@ -426,6 +455,28 @@ async def submit_my_application(
         detail="Application not found",
         options=_APPLICATION_DETAIL_OPTIONS,
     )
+
+    # Staff find out immediately. Nothing used to tell them: documents raised
+    # notifications and status changes notified the *student*, so an arriving
+    # application notified nobody and was found by refreshing a list.
+    #
+    # Guarded on the status having actually changed, so a double-press or a
+    # reloaded confirmation does not notify the office twice.
+    if not already_submitted:
+        program = loaded.program
+        await event_bus.publish(
+            ApplicationSubmitted(
+                application_id=loaded.id,
+                student_id=repo.student.id,
+                student_name=f"{repo.student.first_name} {repo.student.last_name}".strip(),
+                program_name=program.name if program else "a course",
+                university_name=(
+                    program.university.name if program and program.university else None
+                ),
+            ),
+            repo.session,
+        )
+
     return _with_program_summary(loaded)
 
 
@@ -482,6 +533,276 @@ async def get_my_application_checklist(
         .order_by(ApplicationChecklistItem.created_at)
     )
     return [ApplicationChecklistItemRead.model_validate(row, from_attributes=True) for row in result.mappings()]
+
+
+# --- Milestones ------------------------------------------------------------------
+#
+# The celebration, and the record that outlives it. `ApplicationMilestone`
+# stores acknowledgement only — the offer itself stays on the application and
+# its letter — so there is exactly one source of truth for what the offer *is*
+# and one for whether the student has seen it.
+
+
+@router.get(
+    "/me/milestones/unseen",
+    response_model=list[ApplicationMilestoneRead],
+    summary="Good news I have not been shown yet",
+)
+async def list_my_unseen_milestones(
+    student: User = Depends(get_current_student),
+    milestones: MilestoneService = Depends(get_milestone_service),
+) -> list[ApplicationMilestoneRead]:
+    """What the dashboard's celebration overlay reads.
+
+    Oldest first: a student who has been away should see the offer before the
+    CAS that followed it, because that is the order the news arrived in.
+    """
+    return [ApplicationMilestoneRead.of(milestone) for milestone in await milestones.unseen_for(student.id)]
+
+
+@router.post("/me/milestones/{milestone_id}/seen", summary="Acknowledge a milestone")
+async def mark_milestone_seen(
+    milestone_id: UUID,
+    student: User = Depends(get_current_student),
+    milestones: MilestoneService = Depends(get_milestone_service),
+) -> dict[str, bool]:
+    """This is what stops the confetti firing forever.
+
+    Scoped to the calling student, so a guessed id cannot dismiss somebody
+    else's news. The notification raised alongside the milestone is untouched —
+    a student who dismisses the overlay can still find the offer afterwards.
+    """
+    if not await milestones.mark_seen(student.id, milestone_id):
+        raise NotFoundException("Milestone not found")
+    return {"success": True}
+
+
+# --- Correspondence ------------------------------------------------------------------
+#
+# The student's own mailbox. Reads the *same* threads the console reads — see
+# `CommunicationService` — so a reply a counsellor wrote against the lead this
+# student used to be is visible here too. Sending and reading one thread live on
+# the shared `/communication` router, which applies the ownership check; these
+# two are the list and the badge, which are student-scoped by definition.
+
+
+@router.get("/me/threads", response_model=list[ThreadRead], summary="My correspondence")
+async def list_my_threads(
+    application_id: UUID | None = None,
+    student: User = Depends(get_current_student),
+    service: CommunicationService = Depends(get_communication_service),
+) -> list[ThreadRead]:
+    """Every conversation this person has had with Ignition.
+
+    `include_internal` is not a parameter. Staff notes are never returned to a
+    student, and making that a default rather than an option means no future
+    caller can pass the wrong flag.
+    """
+    threads = await service.threads_for_student(student.id, application_id=application_id)
+    return [ThreadRead.of(thread, viewer_is_student=True) for thread in threads]
+
+
+@router.post(
+    "/me/threads",
+    response_model=ThreadDetail,
+    status_code=201,
+    summary="Start a conversation",
+)
+async def create_my_thread(
+    payload: StudentThreadCreate,
+    student: User = Depends(get_current_student),
+    service: CommunicationService = Depends(get_communication_service),
+) -> ThreadDetail:
+    """A student opening a thread about themselves.
+
+    Separate from the staff route because the input is genuinely different:
+    there is no `student_id` to supply (it is theirs by construction) and no
+    `visibility` (an internal note is not something a student can write).
+    """
+    thread = await service.create_thread(
+        subject=payload.subject,
+        student_id=student.id,
+        lead_id=None,
+        application_id=payload.application_id,
+        visibility=ThreadVisibility.SHARED,
+        created_by=student.id,
+    )
+    await service.post_message(
+        thread,
+        author=student,
+        body=payload.body,
+        body_html=payload.body_html,
+        is_from_student=True,
+    )
+    return ThreadDetail.of(await service.get_thread(thread.id), viewer_is_student=True)
+
+
+# --- Explore feed ------------------------------------------------------------------
+
+
+@router.get(
+    "/me/explore/feed",
+    response_model=CourseFeed,
+    response_model_exclude_none=True,
+    summary="My personalised course feed",
+)
+async def get_my_course_feed(
+    student: User = Depends(get_current_student),
+    recommendations: RecommendationService = Depends(get_recommendation_service),
+) -> CourseFeed:
+    """Explore, as sections rather than one grid.
+
+    Deterministic SQL over signals the student has actually produced — the
+    course they pressed Apply on, what they have applied for, what they have
+    saved, what they told onboarding. See `RecommendationService` for the
+    honesty rule: a section that cannot say why it is there is omitted rather
+    than filled, so a brand-new account's feed is short on purpose.
+    """
+    sections = await recommendations.feed(student.id)
+    return CourseFeed(
+        sections=[
+            FeedSectionPublic(
+                key=section.key,
+                title=section.title,
+                reason=section.reason,
+                items=[CoursePublic(**CoursePublic.payload(program)) for program in section.programs],
+            )
+            for section in sections
+        ]
+    )
+
+
+@router.get(
+    "/me/explore/similar/{program_id}",
+    response_model=list[CoursePublic],
+    response_model_exclude_none=True,
+    summary="Courses like this one",
+)
+async def get_similar_courses(
+    program_id: UUID,
+    student: User = Depends(get_current_student),
+    recommendations: RecommendationService = Depends(get_recommendation_service),
+) -> list[CoursePublic]:
+    """"You may also be interested in", for one course.
+
+    Same subject and level, different offering. Rendered under the selected
+    course in the apply flow, which is where the brief asks for optional
+    related courses — the original choice stays primary and these are additions
+    the student may make, never a replacement.
+    """
+    programs = await recommendations.similar_to(program_id)
+    return [CoursePublic(**CoursePublic.payload(program)) for program in programs]
+
+
+# --- Apply intent ------------------------------------------------------------------
+
+
+@router.get(
+    "/me/apply-intent",
+    response_model=ApplyIntentRead | None,
+    summary="The course I came here to apply for",
+)
+async def get_my_apply_intent(
+    student: User = Depends(get_current_student),
+    intents: ApplyIntentService = Depends(get_apply_intent_service),
+) -> ApplyIntentRead | None:
+    """What onboarding reads instead of asking the student to pick a course.
+
+    Null when there is nothing pending, which is the normal case for a student
+    who registered without coming from a course page — the wizard then behaves
+    exactly as it always did.
+    """
+    intent = await intents.pending_for(student.id)
+    return ApplyIntentRead.of(intent) if intent else None
+
+
+@router.post(
+    "/me/apply-intent/{intent_id}/claim",
+    response_model=ApplyIntentRead,
+    summary="Attach an apply intent to my account",
+)
+async def claim_my_apply_intent(
+    intent_id: UUID,
+    student: User = Depends(get_current_student),
+    intents: ApplyIntentService = Depends(get_apply_intent_service),
+) -> ApplyIntentRead:
+    """Called once, straight after sign-in or sign-up.
+
+    This is the join between "somebody pressed Apply on a course" and "this
+    person has an account", and it is the same call on both paths — which is
+    what makes the intent survive a student choosing *Already have an account?*
+    at the registration screen. Idempotent for the same student; refused for a
+    different one, so a forwarded link cannot steal an intent.
+    """
+    intent = await intents.claim(intent_id, student.id)
+    if intent is None:
+        raise NotFoundException("That application link has expired or belongs to someone else.")
+    return ApplyIntentRead.of(intent)
+
+
+#: Documents the university issues and Ignition files — never something the
+#: student uploads. They are what an application's "Offer" section is made of,
+#: and the reason an application needs a document list of its own at all.
+ISSUED_DOCUMENT_TYPES = (DocumentType.OFFER_LETTER, DocumentType.CAS_LETTER)
+
+
+@router.get(
+    "/me/applications/{application_id}/documents",
+    response_model=DocumentList,
+    summary="Documents filed against one of my applications",
+)
+async def list_my_application_documents(
+    application_id: UUID,
+    repo: StudentScopedRepository = Depends(get_student_repository),
+) -> DocumentList:
+    """Everything attached to this application, offer letter included.
+
+    Two sources, unioned:
+
+    1. Documents explicitly linked through `application_documents` — what staff
+       filed against this application, and what the student uploaded to fulfil
+       one of its checklist items.
+    2. The student's own offer and CAS letters that are not linked to *any*
+       application.
+
+    The second exists because an offer letter filed before the link was written
+    has nothing tying it to the application it belongs to, and the student would
+    otherwise be told an offer had arrived while being shown no letter. An
+    unlinked issued letter belongs to exactly one journey — the student's own —
+    so surfacing it here is right where it is ambiguous only between the
+    student's own applications, and silently hiding it is wrong everywhere.
+    Once anything links it, clause 2 stops matching and clause 1 takes over.
+    """
+    application = await repo.get_or_404(Application, application_id, detail="Application not found")
+
+    linked = (
+        select(Document.id)
+        .join(ApplicationDocument, ApplicationDocument.document_id == Document.id)
+        .where(ApplicationDocument.application_id == application.id)
+    )
+    unlinked_issued = (
+        select(Document.id)
+        .where(
+            Document.student_id == application.student_id,
+            Document.document_type.in_(ISSUED_DOCUMENT_TYPES),
+            ~select(ApplicationDocument.id)
+            .where(ApplicationDocument.document_id == Document.id)
+            .exists(),
+        )
+    )
+
+    result = await repo.session.execute(
+        select(Document)
+        .where(Document.id.in_(linked.union(unlinked_issued)))
+        .order_by(Document.created_at.desc())
+    )
+    documents = list(result.scalars().all())
+    return DocumentList(
+        items=[DocumentRead.model_validate(d) for d in documents],
+        total=len(documents),
+        page=1,
+        limit=len(documents),
+    )
 
 
 # --- Documents ------------------------------------------------------------------

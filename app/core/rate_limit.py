@@ -28,3 +28,9 @@ REFRESH_RATE_LIMIT = "30/minute"
 #: a student correcting a typo and resubmitting is normal — but tight enough
 #: that the lead table cannot be filled from a script.
 ELIGIBILITY_RATE_LIMIT = "6/minute"
+
+#: Pressing Apply Now. Looser again: the row it writes holds no personal data
+#: (a programme id and the page they were on), and a student comparing four
+#: courses legitimately mints four intents in a minute. Still bounded, because
+#: it is an unauthenticated insert.
+APPLY_INTENT_RATE_LIMIT = "30/minute"

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..models.enums import ApplicationStatus, DegreeLevel
+from ..models.enums import ApplicationStatus, DegreeLevel, OfferType
 
 
 class ApplicationBase(BaseModel):
@@ -19,6 +19,13 @@ class ApplicationBase(BaseModel):
     visa_applied_date: date | None = None
     visa_decision_date: date | None = None
     enrollment_date: date | None = None
+    #: The CAS trio. Declared here rather than only on `ApplicationRead`
+    #: because staff create and correct them through the same shapes as
+    #: everything else — and a column the API stores but never returns is
+    #: indistinguishable from a column that was never written.
+    cas_received_date: date | None = None
+    cas_number: str | None = None
+    offer_type: OfferType | None = None
     tuition_fee: float | None = None
     scholarship_amount: float | None = None
     university_application_id: str | None = None
@@ -72,6 +79,13 @@ class ApplicationUpdate(BaseModel):
     visa_applied_date: date | None = None
     visa_decision_date: date | None = None
     enrollment_date: date | None = None
+    #: The CAS trio. Declared here rather than only on `ApplicationRead`
+    #: because staff create and correct them through the same shapes as
+    #: everything else — and a column the API stores but never returns is
+    #: indistinguishable from a column that was never written.
+    cas_received_date: date | None = None
+    cas_number: str | None = None
+    offer_type: OfferType | None = None
     tuition_fee: float | None = None
     scholarship_amount: float | None = None
     university_application_id: str | None = None
@@ -159,3 +173,20 @@ class StudentApplicationList(BaseModel):
     total: int
     page: int
     limit: int
+
+
+class StatusRequirementRead(BaseModel):
+    """What a milestone status needs, for the dialog that collects it.
+
+    Served from `services/status_requirements.py` rather than restated in the
+    client, so the form and the validator read the same config. A field added
+    there appears in the dialog with no frontend change.
+    """
+
+    status: str
+    prompt: str
+    required_date_field: str | None
+    required_document: str | None
+    document_label: str
+    optional_fields: list[str]
+    milestone: str | None

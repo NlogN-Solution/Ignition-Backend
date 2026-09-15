@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -33,6 +32,14 @@ DOCUMENT_EXTENSIONS = frozenset(
     {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".gif", ".doc", ".docx", ".xls", ".xlsx", ".txt"}
 )
 
+#: What may be attached to a message. Everything a document may be, plus the
+#: audio formats `MediaRecorder` actually produces — `audio/webm` in Chromium
+#: and Firefox, `audio/mp4` in Safari. Both are needed or voice notes work in
+#: one browser family and silently fail in the other.
+MESSAGE_ATTACHMENT_EXTENSIONS = DOCUMENT_EXTENSIONS | frozenset(
+    {".webm", ".m4a", ".mp4", ".mp3", ".ogg", ".wav"}
+)
+
 _IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 
 #: Cloudinary folders, one per kind of upload — keeps the dashboard on
@@ -41,15 +48,32 @@ _IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 AVATAR_FOLDER = "ignition/avatars"
 DOCUMENT_FOLDER = "ignition/documents"
 LEAVE_ATTACHMENT_FOLDER = "ignition/leave-attachments"
+#: Files and voice notes sent inside a correspondence thread.
+#:
+#: Its own folder, and deliberately *not* `ignition/documents`: the document
+#: vault is the student's verifiable paperwork — the passports and transcripts
+#: staff approve — and a screenshot pasted into a reply has no business turning
+#: up in a verification queue. Same private delivery, same signed access, a
+#: different meaning.
+MESSAGE_ATTACHMENT_FOLDER = "ignition/message-attachments"
 #: Public site media — the one folder uploaded with `private=False`, because a
 #: university logo or a guide's hero image has to be fetchable by anyone
 #: reading the page. Everything else here is private and served only through a
-#: short-lived signed URL.
+#: signed URL this server mints after an ownership check.
 CONTENT_FOLDER = "ignition/content"
 
-#: How long a signed document-download URL stays valid. Short: it's handed
-#: straight to the browser as a redirect target, never stored or shared.
-_SIGNED_URL_TTL_SECONDS = 300
+#: Characters Cloudinary will carry safely inside an `fl_attachment:` flag.
+#: The flag is interpolated into the URL *path*, and the path is what the
+#: signature is computed over — so a filename with a space in it ("offer
+#: letter.pdf") produces a URL the browser must re-encode and Cloudinary then
+#: reads back differently from the string that was signed.
+_ATTACHMENT_NAME_SAFE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
+
+
+def _attachment_name(download_name: str) -> str:
+    """A download filename that survives being part of a signed URL path."""
+    cleaned = "".join(c if c in _ATTACHMENT_NAME_SAFE else "_" for c in Path(download_name).stem)
+    return cleaned.strip("_") or "document"
 
 
 def _resource_type_for(extension: str) -> str:
@@ -81,9 +105,9 @@ async def store_upload(
     straight into the stored name with no check and no size limit.
 
     `private=True` uploads under Cloudinary's `authenticated` delivery type,
-    which serves no public URL: the asset is only reachable through a
-    short-lived signed URL (`build_download_response`), gated on whatever
-    ownership check the caller applies first.
+    which serves no public URL: the asset is only reachable through a signed
+    URL (`build_download_url`), minted only after whatever ownership check the
+    caller applies first.
     """
     extension = Path(file.filename or "").suffix.lower()
     if extension not in allowed_extensions:
@@ -127,22 +151,74 @@ async def store_upload(
     )
 
 
+def build_download_url(
+    stored_file_name: str,
+    *,
+    folder: str,
+    download_name: str,
+    inline: bool = False,
+) -> str | None:
+    """A short-lived, signed URL for a `private=True` upload.
+
+    Returns `None` under `ENVIRONMENT=test`, where uploads live on a local
+    scratch dir with no URL of their own — callers fall back to the
+    authenticated download route in that case.
+
+    `inline=False` asks Cloudinary to serve the file as an attachment, which is
+    what a Download button wants. `inline=True` drops that flag so a PDF or an
+    image opens in the browser's own viewer, which is what a Preview wants —
+    the same bytes, a different Content-Disposition.
+
+    Only the basename of `stored_file_name` is ever used: `POST /documents`
+    lets staff set that column directly, so a `folder`-escaping public_id must
+    not reach Cloudinary unsanitized.
+
+    **These URLs are signed, not time-limited.** This used to pass
+    `expires_at=now+300` and describe itself as expiring in a few minutes. It
+    does not: `cloudinary_url` silently ignores `expires_at` for the
+    `authenticated` delivery type — the parameter is only honoured with
+    token-based authentication, which is a separate Cloudinary feature and is
+    not configured here. Verified against cloudinary 1.46: the generated URL
+    carries a signature segment and nothing else. What the signature does buy is
+    real and is the point — the asset is unreachable without a URL this server
+    minted, and this server mints one only after checking the caller may see the
+    document. But anyone who obtains the URL afterwards keeps access, so it must
+    be treated as a credential and not logged, stored or shared. Making it
+    genuinely short-lived means enabling token auth and signing with
+    `auth_token`; until then, saying "expires in 5 minutes" is a security claim
+    nothing enforces, and the parameter has been removed rather than left in
+    place looking like it does something.
+    """
+    safe_name = Path(stored_file_name).name
+    if settings.ENVIRONMENT == "test":
+        return None
+
+    extension = Path(safe_name).suffix.lower()
+    url, _ = cloudinary.utils.cloudinary_url(
+        f"{folder}/{safe_name}",
+        resource_type=_resource_type_for(extension),
+        type="authenticated",
+        sign_url=True,
+        secure=True,
+        **({} if inline else {"flags": f"attachment:{_attachment_name(download_name)}"}),
+    )
+    return url
+
+
 def build_download_response(
     stored_file_name: str,
     *,
     folder: str,
     mime_type: str | None,
     download_name: str,
+    inline: bool = False,
 ) -> Response:
     """Serve a `private=True` upload, after the caller has already checked
     the requester may see it.
 
-    Only the basename of `stored_file_name` is ever used — `POST /documents`
-    lets staff set this column directly, so a value like `../../etc/passwd`
-    (or, on Cloudinary, a `folder`-escaping public_id) must not reach storage
-    unsanitized. In production this redirects to a signed Cloudinary URL that
-    expires in a few minutes; in tests it resolves the file straight off the
-    hermetic local scratch dir used by `store_upload`.
+    In production this redirects to a signed Cloudinary URL — signed, not
+    expiring; see `build_download_url`. In tests it resolves the file straight
+    off the hermetic local scratch dir used by `store_upload`.
     """
     safe_name = Path(stored_file_name).name
 
@@ -151,17 +227,14 @@ def build_download_response(
         candidate = (upload_dir / safe_name).resolve()
         if candidate.parent != upload_dir or not candidate.is_file():
             raise NotFoundException("File not found")
-        return FileResponse(candidate, media_type=mime_type or "application/octet-stream", filename=download_name)
+        return FileResponse(
+            candidate,
+            media_type=mime_type or "application/octet-stream",
+            filename=download_name,
+            content_disposition_type="inline" if inline else "attachment",
+        )
 
-    extension = Path(safe_name).suffix.lower()
-    public_id = f"{folder}/{safe_name}"
-    url, _ = cloudinary.utils.cloudinary_url(
-        public_id,
-        resource_type=_resource_type_for(extension),
-        type="authenticated",
-        sign_url=True,
-        secure=True,
-        expires_at=int(time.time()) + _SIGNED_URL_TTL_SECONDS,
-        flags=f"attachment:{download_name}",
-    )
+    url = build_download_url(safe_name, folder=folder, download_name=download_name, inline=inline)
+    if url is None:  # pragma: no cover - only reachable if ENVIRONMENT flips mid-request
+        raise NotFoundException("File not found")
     return RedirectResponse(url, status_code=307)

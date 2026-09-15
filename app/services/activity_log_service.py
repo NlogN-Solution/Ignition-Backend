@@ -49,6 +49,7 @@ class ActivityLogService:
         user_id: UUID | None = None,
         activity_type: str | None = None,
         entity_type: str | None = None,
+        entity_id: UUID | None = None,
     ) -> tuple[Sequence[ActivityLog], int]:
         query = select(ActivityLog).options(selectinload(ActivityLog.user))
         count_query = select(func.count()).select_from(ActivityLog)
@@ -62,6 +63,12 @@ class ActivityLogService:
         if entity_type:
             query = query.where(ActivityLog.entity_type == entity_type)
             count_query = count_query.where(ActivityLog.entity_type == entity_type)
+        # Scoping to one record, which is what an audit trail on a detail page
+        # needs. Additive and optional: every existing caller passes neither and
+        # keeps the unfiltered list it had.
+        if entity_id:
+            query = query.where(ActivityLog.entity_id == entity_id)
+            count_query = count_query.where(ActivityLog.entity_id == entity_id)
 
         query = query.order_by(ActivityLog.created_at.desc()).offset((page - 1) * limit).limit(limit)
 

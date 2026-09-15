@@ -1,21 +1,29 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
 
 from ..api.auth import require_role
-from ..api.exceptions import ForbiddenException, NotFoundException
-from ..core.uploads import DOCUMENT_EXTENSIONS, DOCUMENT_FOLDER, build_download_response, store_upload
+from ..api.exceptions import ForbiddenException, NotFoundException, PaymentRequiredException
+from ..core.uploads import (
+    DOCUMENT_EXTENSIONS,
+    DOCUMENT_FOLDER,
+    build_download_response,
+    build_download_url,
+    store_upload,
+)
 from ..models import Document, User
-from ..models.enums import DocumentType, NotificationType, UserRole
+from ..models.enums import DocumentStatus, DocumentType, NotificationType, UserRole
 from ..schemas.document import (
     DocumentCommentRequest,
     DocumentCreate,
     DocumentExtractionResult,
     DocumentFolderList,
     DocumentFolderRead,
+    DocumentLinkRead,
     DocumentList,
     DocumentRead,
     DocumentRejectRequest,
@@ -24,6 +32,7 @@ from ..schemas.document import (
 )
 from ..services.document_service import DocumentService, get_document_service
 from ..services.notification_service import NotificationService, get_notification_service
+from ..services.portal_access_service import PortalAccessService, get_portal_access_service
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -37,13 +46,61 @@ _VIEW_ROLES = require_role(
     UserRole.STUDENT,
 )
 
+#: The handful of document types worth naming in a notification. Anything not
+#: here falls back to "A document", which reads better than a title-cased enum.
+DOCUMENT_TYPE_TITLES = {
+    DocumentType.OFFER_LETTER: "Your offer letter",
+    DocumentType.CAS_LETTER: "Your CAS letter",
+    DocumentType.VISA: "Your visa document",
+}
+
 #: Staff who review documents and browse the per-student folders.
 _REVIEW_ROLES = require_role(UserRole.ADMIN, UserRole.COUNSELLOR, UserRole.ADMISSIONS, UserRole.MANAGER)
+
+
+#: Documents a student must have unlocked the platform to open.
+#:
+#: The offer letter and the CAS statement, and nothing else. Their own
+#: passport, their own transcripts, the bank statement they uploaded — all
+#: freely theirs, because charging somebody to read a file they supplied would
+#: be indefensible. What the fee buys is the thing Ignition obtained *for*
+#: them.
+GATED_DOCUMENT_TYPES = frozenset({DocumentType.OFFER_LETTER, DocumentType.CAS_LETTER})
 
 
 def _assert_visible_to(user: User, document: Document) -> None:
     if user.role is UserRole.STUDENT and document.student_id != user.id:
         raise ForbiddenException("Forbidden")
+
+
+async def _assert_entitled(user: User, document: Document, access: PortalAccessService) -> None:
+    """The paywall, enforced where the bytes are.
+
+    **This is the check that matters.** Hiding the button is not a gate: the
+    download route is a URL with a bearer token, and a student who has not paid
+    could previously have read their own offer letter with `curl` — which is
+    the exact bypass the brief calls out.
+
+    Staff are unaffected. So is every other document type, and so is the
+    student's own upload of a gated type on the vanishing chance they have one
+    — `uploaded_by` is checked, because the fee is for what Ignition obtained,
+    not for anything with the word "offer" on it.
+
+    402, not 403: "pay and this works" is a different answer from "this is not
+    yours", and the portal needs to tell them apart to know whether to show the
+    unlock screen or an error.
+    """
+    if user.role is not UserRole.STUDENT:
+        return
+    if document.document_type not in GATED_DOCUMENT_TYPES:
+        return
+    if document.uploaded_by == user.id:
+        return
+    if await access.has_access(user.id):
+        return
+    raise PaymentRequiredException(
+        "Unlock your Ignition application package to open your offer and CAS letters."
+    )
 
 
 @router.get("", response_model=DocumentList, summary="List documents")
@@ -116,6 +173,7 @@ async def upload_document(
     file: UploadFile = File(...),
     title: str | None = Form(None),
     remarks: str | None = Form(None),
+    application_id: UUID | None = Form(None),
     service: DocumentService = Depends(get_document_service),
     notification_service: NotificationService = Depends(get_notification_service),
     user: User = Depends(_VIEW_ROLES),
@@ -127,6 +185,17 @@ async def upload_document(
         student_id = user.id
 
     stored = await store_upload(file, DOCUMENT_EXTENSIONS, folder=DOCUMENT_FOLDER, private=True)
+
+    # Who uploaded it decides whether it is waiting on anyone.
+    #
+    # `pending` means "a reviewer has not looked at this yet", and that is true
+    # of a student's passport scan. It is not true of an offer letter a
+    # counsellor received from the university and filed: there is nobody left to
+    # verify it against, and the student was being shown "Pending" on a document
+    # that was already final. Staff uploading on a student's behalf *is* the
+    # verification, so the row is stamped approved by the person who filed it.
+    is_staff_upload = user.role is not UserRole.STUDENT and student_id != user.id
+    verified_at = datetime.now(UTC) if is_staff_upload else None
 
     # `file_url` now points at the authenticated download route, which needs the
     # row's own id — so the id is generated here rather than by the column
@@ -145,16 +214,68 @@ async def upload_document(
             "mime_type": file.content_type,
             "file_size": stored.size,
             "remarks": remarks,
-        }
+            "status": DocumentStatus.APPROVED if is_staff_upload else DocumentStatus.PENDING,
+            "verified_by": user.id if is_staff_upload else None,
+            "verified_at": verified_at,
+        },
+        application_id=application_id,
     )
 
+    if is_staff_upload:
+        await notification_service.notify_many(
+            [student_id],
+            notification_type=NotificationType.DOCUMENT,
+            title=f"{DOCUMENT_TYPE_TITLES.get(document_type, 'A document')} is ready",
+            message=(
+                f"{document.title or document.original_file_name} has been added to your documents. "
+                "Open it from your dashboard."
+            ),
+        )
+
     return DocumentRead.model_validate(document)
+
+
+@router.get("/{document_id}/link", response_model=DocumentLinkRead, summary="Get a short-lived link to the file")
+async def get_document_link(
+    document_id: UUID,
+    disposition: str = "inline",
+    service: DocumentService = Depends(get_document_service),
+    access: PortalAccessService = Depends(get_portal_access_service),
+    user: User = Depends(_VIEW_ROLES),
+) -> DocumentLinkRead:
+    """The same ownership check as `/download`, answered as JSON.
+
+    `/download` is a 307 to a signed Cloudinary URL, which is only usable by a
+    browser navigating to it — and a browser navigating to it sends no
+    `Authorization` header, so both consoles' View and Download buttons hit a
+    401 before they ever reached the redirect. This hands the caller the signed
+    URL to open instead, so the auth happens on the XHR where the token lives.
+    """
+    document = await service.get_document(document_id)
+    if document is None:
+        raise NotFoundException("Document not found")
+    _assert_visible_to(user, document)
+    await _assert_entitled(user, document, access)
+
+    url = build_download_url(
+        document.stored_file_name,
+        folder=DOCUMENT_FOLDER,
+        download_name=document.original_file_name,
+        inline=disposition != "attachment",
+    )
+    return DocumentLinkRead(
+        url=url or f"/api/v1/documents/{document_id}/download",
+        file_name=document.original_file_name,
+        mime_type=document.mime_type,
+    )
 
 
 @router.get("/{document_id}/download", summary="Download a document's file")
 async def download_document(
     document_id: UUID,
+    disposition: str = "attachment",
     service: DocumentService = Depends(get_document_service),
+    access: PortalAccessService = Depends(get_portal_access_service),
     user: User = Depends(_VIEW_ROLES),
 ) -> Response:
     """Authenticated, ownership-checked file access.
@@ -170,12 +291,14 @@ async def download_document(
     if document is None:
         raise NotFoundException("Document not found")
     _assert_visible_to(user, document)
+    await _assert_entitled(user, document, access)
 
     return build_download_response(
         document.stored_file_name,
         folder=DOCUMENT_FOLDER,
         mime_type=document.mime_type,
         download_name=document.original_file_name,
+        inline=disposition == "inline",
     )
 
 

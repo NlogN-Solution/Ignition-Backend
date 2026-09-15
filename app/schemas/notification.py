@@ -35,6 +35,15 @@ class NotificationUpdate(BaseModel):
 class NotificationRead(NotificationBase):
     id: UUID
     created_at: datetime | None
+    #: What the notification is about, and where pressing it should go.
+    #:
+    #: On the read schema only — deliberately not on `NotificationCreate`.
+    #: These are written by the server, which is what knows which surface owns
+    #: an entity; letting a caller name an `action_url` would be an open
+    #: redirect wearing a notification.
+    related_type: str | None = None
+    related_id: UUID | None = None
+    action_url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -88,6 +88,11 @@ class DocumentType(str, Enum):
     STATEMENT_OF_PURPOSE = "statement_of_purpose"
     RECOMMENDATION_LETTER = "recommendation_letter"
     OFFER_LETTER = "offer_letter"
+    #: Confirmation of Acceptance for Studies. Issued by the university after the
+    #: offer is accepted, and the one document a UK Student visa cannot be
+    #: applied for without — it has an `ApplicationStatus` of its own
+    #: (`cas_received`) and needed a document type to match.
+    CAS_LETTER = "cas_letter"
     VISA = "visa"
     FINANCIAL_DOCUMENT = "financial_document"
     MEDICAL_REPORT = "medical_report"
@@ -129,12 +134,33 @@ class ApplicationStatus(str, Enum):
     OFFER_RECEIVED = "offer_received"
     OFFER_ACCEPTED = "offer_accepted"
     OFFER_DECLINED = "offer_declined"
+    #: Confirmation of Acceptance for Studies. A UK-specific step, and not an
+    #: optional one: a student cannot apply for a Student visa without a CAS
+    #: number, so every application that reaches a visa has passed through here.
+    #: It sits between accepting the offer and applying for the visa because
+    #: that is the order it happens in — the university issues the CAS after
+    #: the offer is accepted and the deposit is settled.
+    CAS_RECEIVED = "cas_received"
     VISA_PROCESSING = "visa_processing"
     VISA_APPROVED = "visa_approved"
     VISA_REJECTED = "visa_rejected"
     ENROLLED = "enrolled"
     WITHDRAWN = "withdrawn"
     REJECTED = "rejected"
+
+
+class OfferType(str, Enum):
+    """What kind of offer the university made.
+
+    A conditional offer is not a place — it is a place *if* the student meets
+    the remaining conditions — and a student reading "Offer received" with no
+    qualifier will reasonably assume the former. Recorded alongside the offer
+    date so the portal can say which.
+    """
+
+    CONDITIONAL = "conditional"
+    UNCONDITIONAL = "unconditional"
+    OTHER = "other"
 
 
 class AppointmentStatus(str, Enum):

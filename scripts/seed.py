@@ -40,6 +40,7 @@ from app.models import (  # noqa: E402
     InterviewType,
     LeaveType,
     PointsRule,
+    PortalAccessFee,
     Program,
     ProgressMilestone,
     University,
@@ -210,128 +211,104 @@ CHECKLIST_TEMPLATE = [
 #: feedback bands' `min_score` regardless of which type was taken.
 INTERVIEW_TYPES = [
     # key, name, description, duration_minutes, passing_score
-    ("academic", "Academic Interview", "Programme-fit questions asked by admissions faculty.", 20, 70),
-    ("visa", "Visa Interview", "Consular questions about intent, funding and post-study plans.", 15, 75),
-    ("merit", "Merit Panel Interview", "Competitive panel questions on achievements and leadership.", 25, 80),
+    #
+    # The UK route, in the order a student meets it. This replaced a US-shaped
+    # set — an "Academic Interview", a "Visa Interview" described as *consular*
+    # questions, and a "Merit Panel Interview". The UK has no consular visa
+    # interview: what it has is a UKVI credibility interview, usually by video,
+    # and it is the one that refuses people. A merit panel is not part of the
+    # ordinary journey at all.
+    (
+        "pre_cas",
+        "Pre-CAS Interview",
+        "The university's own check before it issues your CAS. Course knowledge, funding and intent.",
+        20,
+        70,
+    ),
+    (
+        "credibility",
+        "UKVI Credibility Interview",
+        "The Home Office interview for a Student visa. Short, recorded, and decided on whether you sound like a genuine student.",
+        15,
+        75,
+    ),
+    (
+        "academic",
+        "Academic / Programme Interview",
+        "Departmental questions for competitive courses — your subject, your work, and why this programme.",
+        25,
+        70,
+    ),
 ]
 
 INTERVIEW_QUESTIONS = {
+    "pre_cas": [
+        (
+            "Why have you chosen this university and this course over the others you applied to?",
+            "Name the modules and what they lead to. 'It was the offer I got' is the answer that fails this.",
+            25,
+        ),
+        (
+            "How will you pay your tuition and living costs, and where is that money now?",
+            "Name the sponsor, their relationship to you, and the account the funds have been held in.",
+            25,
+        ),
+        (
+            "What do you know about the modules in your first year?",
+            "Two or three by name, and what each one covers. Read the course page before this interview.",
+            25,
+        ),
+        (
+            "What do you plan to do after you graduate?",
+            "A specific role and where — the Graduate Route or a plan back home both answer this well.",
+            25,
+        ),
+    ],
+    "credibility": [
+        (
+            "Why do you want to study in the UK rather than in your own country?",
+            "Give a reason about the course and the sector, not about immigration.",
+            25,
+        ),
+        (
+            "Tell me about your course. How long is it, what will you study, and how much does it cost?",
+            "Know the duration, the tuition figure and two or three modules. Vagueness here is what refusals cite.",
+            25,
+        ),
+        (
+            "Where will you live, and how much will it cost you each month?",
+            "A city, a rough rent, and how it fits the maintenance funds you have shown.",
+            25,
+        ),
+        (
+            "What will you do when your visa ends?",
+            "Answer plainly. A clear plan reads as genuine; a vague one reads as an intention to stay.",
+            25,
+        ),
+    ],
     "academic": [
         (
-            "Why have you chosen this programme, and how does it connect to your undergraduate work?",
-            "Name two specific modules and link them to a project you have already built.",
+            "Why this programme, and how does it follow on from what you have already studied?",
+            "Name two modules and link them to a project or a paper you have actually worked on.",
             25,
         ),
         (
-            "Describe a technical project you led. What went wrong and how did you recover?",
-            "Use a situation → action → result structure and quantify the result.",
+            "Talk me through a piece of work you led. What went wrong, and what did you do about it?",
+            "Situation, action, result — and give the result a number.",
             25,
         ),
         (
-            "Which faculty member's research would you want to work with, and why?",
-            "Reference a paper or lab, not just a name.",
+            "Whose research in the department interests you, and why?",
+            "Reference the work, not just the name. A paper or a lab, and what you found interesting in it.",
             25,
         ),
         (
-            "Where do you see yourself five years after graduating?",
-            "Tie the answer back to the skills the programme actually teaches.",
+            "What would you want to be doing five years after you graduate?",
+            "Tie it back to what this programme actually teaches.",
             25,
-        ),
-    ],
-    "visa": [
-        (
-            "Why did you choose this country and this specific university?",
-            "Compare against options at home to show a deliberate decision.",
-            25,
-        ),
-        (
-            "Who is funding your studies and how will the funds be transferred?",
-            "Name the sponsor, the relationship and the account documentation.",
-            25,
-        ),
-        ("What are your plans after you finish the programme?", "Show clear ties to your home country.", 25),
-        (
-            "Do you have relatives in the country you are travelling to?",
-            "Answer factually and briefly — do not volunteer extra detail.",
-            25,
-        ),
-    ],
-    "merit": [
-        (
-            "What is the achievement you are proudest of, and what did it cost you?",
-            "Panels reward honesty about the trade-offs.",
-            34,
-        ),
-        (
-            "Tell us about a time you changed someone's mind.",
-            "Focus on how you listened before you argued.",
-            33,
-        ),
-        (
-            "What will you contribute to the cohort beyond your coursework?",
-            "Be concrete — a club, a workshop, a mentoring commitment.",
-            33,
         ),
     ],
 }
-
-#: Matched by score at completion: the band with the highest `min_score` the
-#: session's total meets or exceeds.
-INTERVIEW_FEEDBACK_BANDS = [
-    (
-        "excellent",
-        85,
-        "Excellent",
-        "green",
-        "Panel-ready. Your answers were specific, structured and well paced.",
-        [
-            "Every answer opened with a clear position",
-            "Concrete examples backed each claim",
-            "Confident, unhurried delivery",
-        ],
-        ["Trim the closing sentence on longer answers", "Prepare one more research-specific reference"],
-    ),
-    (
-        "good",
-        70,
-        "Strong",
-        "blue",
-        "A solid performance. Tighten your examples and you are interview ready.",
-        ["Good programme knowledge", "Clear motivation for studying abroad"],
-        [
-            "Quantify results — numbers make projects memorable",
-            "Avoid repeating the question back before answering",
-            "Practise a 30-second version of your longest answer",
-        ],
-    ),
-    (
-        "average",
-        50,
-        "Developing",
-        "orange",
-        "The substance is there but the structure is loose. Rehearse before the real thing.",
-        ["Honest, natural tone", "No factual contradictions"],
-        [
-            "Use a situation → action → result structure",
-            "Name specific modules, labs or sponsors",
-            "Cut filler openings such as 'I think that maybe'",
-            "Rehearse the funding question until it is automatic",
-        ],
-    ),
-    (
-        "weak",
-        0,
-        "Needs work",
-        "red",
-        "Answers were too short or too general to convince a panel. Try the set again after preparing notes.",
-        ["You completed the full set — that is the first step"],
-        [
-            "Write bullet notes for each question before retrying",
-            "Aim for at least three sentences per answer",
-            "Book a counsellor session to review your talking points",
-        ],
-    ),
-]
 
 #: Cost-of-living catalog, from the portal's `countryFinance.json`. Only the
 #: three destinations already in `COUNTRIES` are seeded here — the fixture
@@ -425,6 +402,65 @@ WORKFLOW_STAGES = [
     ("offer", "Offer & Acceptance"),
     ("visa", "Visa Application"),
     ("predeparture", "Pre-departure"),
+]
+
+
+#: Matched by score at completion: the band with the highest `min_score` the
+#: session's total meets or exceeds.
+INTERVIEW_FEEDBACK_BANDS = [
+    (
+        "excellent",
+        85,
+        "Excellent",
+        "green",
+        "Panel-ready. Your answers were specific, structured and well paced.",
+        [
+            "Every answer opened with a clear position",
+            "Concrete examples backed each claim",
+            "Confident, unhurried delivery",
+        ],
+        ["Trim the closing sentence on longer answers", "Prepare one more research-specific reference"],
+    ),
+    (
+        "good",
+        70,
+        "Strong",
+        "blue",
+        "A solid performance. Tighten your examples and you are interview ready.",
+        ["Good programme knowledge", "Clear motivation for studying abroad"],
+        [
+            "Quantify results — numbers make projects memorable",
+            "Avoid repeating the question back before answering",
+            "Practise a 30-second version of your longest answer",
+        ],
+    ),
+    (
+        "average",
+        50,
+        "Developing",
+        "orange",
+        "The substance is there but the structure is loose. Rehearse before the real thing.",
+        ["Honest, natural tone", "No factual contradictions"],
+        [
+            "Use a situation → action → result structure",
+            "Name specific modules, labs or sponsors",
+            "Cut filler openings such as 'I think that maybe'",
+            "Rehearse the funding question until it is automatic",
+        ],
+    ),
+    (
+        "weak",
+        0,
+        "Needs work",
+        "red",
+        "Answers were too short or too general to convince a panel. Try the set again after preparing notes.",
+        ["You completed the full set — that is the first step"],
+        [
+            "Write bullet notes for each question before retrying",
+            "Aim for at least three sentences per answer",
+            "Book a counsellor session to review your talking points",
+        ],
+    ),
 ]
 
 
@@ -559,7 +595,30 @@ async def seed(session: AsyncSession) -> dict[str, int]:
         )
     counts["checklist_template"] = len(CHECKLIST_TEMPLATE)
 
+    # --- Portal access fee ----------------------------------------------------
+    #
+    # The fallback row (country_id NULL), which is what a student from any
+    # country without its own price is quoted. Without at least this row
+    # `PortalAccessService.fee_for` returns None and the portal cannot name a
+    # price — so every student is locked out of the workflow with no way to
+    # find out what it costs, which is the state this seed found.
+    await _get_or_create(
+        session,
+        PortalAccessFee,
+        {"country_id": None},
+        amount=500,
+        currency="NPR",
+        notes="Default one-time portal access fee.",
+    )
+    counts["portal_access_fee"] = 1
+
     # --- Mock interview catalog -----------------------------------------------
+    #
+    # This block UPDATES as well as inserts, unlike `_get_or_create` elsewhere in
+    # this file. The catalog is content, and the seed is its source of truth: an
+    # interview set that could only ever be written once would mean every wording
+    # fix needed a migration or a manual UPDATE. Sessions and answers are student
+    # data and are never touched here.
     for key, name, description, duration, passing in INTERVIEW_TYPES:
         interview_type = await _get_or_create(
             session,
@@ -570,6 +629,12 @@ async def seed(session: AsyncSession) -> dict[str, int]:
             duration_minutes=duration,
             passing_score=passing,
         )
+        interview_type.name = name
+        interview_type.description = description
+        interview_type.duration_minutes = duration
+        interview_type.passing_score = passing
+        interview_type.is_active = True
+
         for order, (prompt, hint, max_score) in enumerate(INTERVIEW_QUESTIONS[key], start=1):
             existing_question = await session.scalar(
                 select(InterviewQuestion).where(
@@ -582,7 +647,29 @@ async def seed(session: AsyncSession) -> dict[str, int]:
                         type_id=interview_type.id, prompt=prompt, hint=hint, max_score=max_score, order=order
                     )
                 )
+            else:
+                existing_question.prompt = prompt
+                existing_question.hint = hint
+                existing_question.max_score = max_score
+
+    # Retire anything this file no longer defines — deactivated, never deleted.
+    # The US-shaped "visa" (consular) and "merit" panel types were replaced by
+    # the UK set above, but a student may already have sat one, and their
+    # session rows point at these ids. Deactivating drops them out of
+    # `list_types` (which filters `is_active`) while leaving that history intact.
+    retired = await session.scalars(
+        select(InterviewType).where(
+            InterviewType.key.notin_([key for key, *_ in INTERVIEW_TYPES]),
+            InterviewType.is_active.is_(True),
+        )
+    )
+    retired_count = 0
+    for interview_type in retired:
+        interview_type.is_active = False
+        retired_count += 1
+
     counts["interview_types"] = len(INTERVIEW_TYPES)
+    counts["interview_types_retired"] = retired_count
 
     for key, min_score, band, tone, summary, strengths, improvements in INTERVIEW_FEEDBACK_BANDS:
         await _get_or_create(

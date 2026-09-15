@@ -508,4 +508,4 @@ async def update_application_checklist_item(
         disallowed = set(data) - _STUDENT_EDITABLE_CHECKLIST_FIELDS
         if disallowed:
             raise ForbiddenException(f"Only staff can update: {', '.join(sorted(disallowed))}")
-    return await service.update_item(item, data)  # type: ignore[return-value]
+    return await service.update_item(item, data, acting_user_id=user.id)  # type: ignore[return-value]

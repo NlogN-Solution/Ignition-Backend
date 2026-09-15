@@ -108,6 +108,63 @@ class DocumentRejected(Event):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ThreadMessagePosted(Event):
+    """Somebody replied in a correspondence thread.
+
+    Raised for both directions. Subscribers decide who cares: a student's
+    message notifies the staff responsible for them, a staff reply notifies the
+    student. That asymmetry is the subscriber's business, not the service's.
+    """
+
+    name: ClassVar[str] = "communication.message_posted"
+    thread_id: UUID
+    message_id: UUID
+    #: None for a thread that is still only against a lead — nobody to notify
+    #: in the portal yet, because there is no portal account.
+    student_id: UUID | None
+    subject: str
+    is_from_student: bool
+    author_id: UUID | None
+    preview: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ApplicationSubmitted(Event):
+    """A student finished their part and handed an application over.
+
+    Distinct from `ApplicationCreated`, which fires when the draft row appears
+    — usually the moment a student fills in step one of the apply flow, and not
+    news for anybody. This one is the thing staff have to react to, and before
+    it existed nothing told them: documents raised notifications, status changes
+    notified the student, and an arriving application notified no one at all.
+    """
+
+    name: ClassVar[str] = "application.submitted"
+    application_id: UUID
+    student_id: UUID
+    student_name: str
+    program_name: str
+    university_name: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MilestoneRecorded(Event):
+    """An offer or a CAS was recorded against an application.
+
+    Carries what the celebration and the notification both need so neither has
+    to re-read the application.
+    """
+
+    name: ClassVar[str] = "application.milestone_recorded"
+    application_id: UUID
+    student_id: UUID
+    kind: str
+    program_name: str
+    university_name: str | None
+    occurred_on: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class AppointmentScheduled(Event):
     name: ClassVar[str] = "appointment.scheduled"
     appointment_id: UUID

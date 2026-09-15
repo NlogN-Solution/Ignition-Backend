@@ -9,6 +9,7 @@ from ..routes.appointment import router as appointment_router
 from ..routes.attendance import router as attendance_router
 from ..routes.auth import router as auth_router
 from ..routes.catalogue import router as catalogue_router
+from ..routes.communication import router as communication_router
 from ..routes.content import router as content_router
 from ..routes.departments import router as departments_router
 from ..routes.document import router as document_router
@@ -58,6 +59,11 @@ router.include_router(payment_router)
 router.include_router(task_router)
 router.include_router(notification_router)
 router.include_router(message_router)
+# The unified correspondence surface. `message_router` above is the older
+# flat per-student chat it replaces, kept reachable while the portal and the
+# console move over — removing it is a separate change with its own
+# migration, not a footnote to this one.
+router.include_router(communication_router)
 router.include_router(workflow_router)
 router.include_router(leads_router)
 router.include_router(attendance_router)

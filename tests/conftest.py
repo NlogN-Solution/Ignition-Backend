@@ -158,3 +158,25 @@ async def auth_headers(client: AsyncClient):
         return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
     return _headers
+
+
+@pytest_asyncio.fixture
+async def access_fee(session: AsyncSession):
+    """The one-time portal access fee, priced.
+
+    Production gets this from the `9b2e14c7a8d3` data migration; the test suite
+    builds its schema with `create_all` and so sees no migration data at all.
+    Without a price list `PortalAccessService.fee_for` returns None and
+    checkout refuses — which is correct behaviour and exactly what
+    `test_the_quoted_fee_is_the_configured_one` would otherwise be asserting
+    by accident.
+
+    The fallback row (`country_id IS NULL`) rather than a per-country one, to
+    match what the migration seeds.
+    """
+    from app.models import PortalAccessFee
+
+    fee = PortalAccessFee(country_id=None, amount=5000, currency="NPR", is_active=True)
+    session.add(fee)
+    await session.commit()
+    return fee

@@ -339,3 +339,81 @@ async def test_extraction_reports_that_it_is_not_configured(
     assert response.status_code == 200
     assert response.json()["configured"] is False
     assert response.json()["fields"] == {}
+
+
+# ── Who uploaded it decides whether anyone is waiting ─────────────────────────
+
+
+async def test_a_staff_upload_lands_verified_not_pending(client: AsyncClient, user_factory, auth_headers) -> None:
+    """An offer letter a counsellor received from the university and filed is
+    not "awaiting review" — there is nobody left to review it against. It used
+    to land `pending`, and the student's portal, which reads exactly this
+    column, told them their offer letter was still being checked."""
+    student = await user_factory(UserRole.STUDENT)
+    counsellor = await user_factory(UserRole.COUNSELLOR)
+    headers = await auth_headers(counsellor)
+
+    document = await _upload(client, headers, student, document_type="offer_letter")
+
+    assert document["status"] == "approved"
+    assert document["verified_by"] == str(counsellor.id)
+    assert document["verified_at"] is not None
+    assert document["student_id"] == str(student.id)
+
+
+async def test_a_student_upload_still_lands_pending(client: AsyncClient, user_factory, auth_headers) -> None:
+    """The other half of the rule: a passport scan genuinely is waiting on
+    someone."""
+    student = await user_factory(UserRole.STUDENT)
+    document = await _upload(client, await auth_headers(student), student)
+    assert document["status"] == "pending"
+    assert document["verified_at"] is None
+
+
+async def test_staff_uploading_their_own_document_is_not_a_self_approval(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """The rule is "staff filed this *for someone else*". A staff member
+    uploading against their own record has not verified anything."""
+    counsellor = await user_factory(UserRole.COUNSELLOR)
+    document = await _upload(client, await auth_headers(counsellor), counsellor)
+    assert document["status"] == "pending"
+
+
+async def test_a_staff_upload_notifies_the_student(client: AsyncClient, user_factory, auth_headers) -> None:
+    student = await user_factory(UserRole.STUDENT)
+    counsellor = await user_factory(UserRole.COUNSELLOR)
+    await _upload(client, await auth_headers(counsellor), student, document_type="offer_letter")
+
+    notifications = await client.get("/api/v1/student/me/notifications", headers=await auth_headers(student))
+    titles = [n["title"] for n in notifications.json()["items"]]
+    assert "Your offer letter is ready" in titles
+
+
+# ── The signed link ───────────────────────────────────────────────────────────
+
+
+async def test_the_owner_gets_a_link_to_their_own_file(client: AsyncClient, user_factory, auth_headers) -> None:
+    """`file_url` on the row is the *authenticated route*, which a
+    `window.open` cannot use — it carries no bearer token. This is what the
+    View and Download buttons ask for instead."""
+    student = await user_factory(UserRole.STUDENT)
+    headers = await auth_headers(student)
+    document = await _upload(client, headers, student)
+
+    response = await client.get(f"{DOCUMENTS}/{document['id']}/link", headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["file_name"] == "passport.pdf"
+    assert body["url"]
+
+
+async def test_another_student_cannot_get_a_link_to_someone_elses_file(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    student = await user_factory(UserRole.STUDENT)
+    stranger = await user_factory(UserRole.STUDENT)
+    document = await _upload(client, await auth_headers(student), student)
+
+    response = await client.get(f"{DOCUMENTS}/{document['id']}/link", headers=await auth_headers(stranger))
+    assert response.status_code == 403

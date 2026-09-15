@@ -10,9 +10,17 @@ single-tenant platform. `payment.py` keeps `Payment` but drops `Subscription`.
 
 from .academic import BlogPost, Country, CountryGuide, Intake, Program, University
 from .application import Application, ApplicationStatusHistory
+from .apply_intent import ApplyIntent
 from .appointment import Appointment
 from .attendance import AttendancePolicy, AttendanceRecord
 from .catalogue import CourseProfile, Scholarship, UniversityRoute
+from .communication import (
+    MessageAttachment,
+    MessageAttachmentKind,
+    MessageThread,
+    ThreadMessage,
+    ThreadVisibility,
+)
 from .content import ContentBlock, ContentPage, MediaAsset
 from .department import Department, EmployeeEmploymentEvent
 from .document import ApplicationDocument, Document, StudentEnglishTest
@@ -39,6 +47,7 @@ from .interview import (
 from .lead import Lead, LeadActivity, LeadFollowUp
 from .leave import LeaveRequest, LeaveType
 from .message import Message
+from .milestone import ApplicationMilestone, MilestoneKind
 from .notification import Notification
 from .payment import Payment, PortalAccessFee
 from .payroll import PayrollRun, Payslip, PayslipLineItem, SalaryStructure
@@ -115,7 +124,15 @@ __all__ = [
     "LoanDisbursement",
     "LoanDocument",
     "MediaAsset",
+    "ApplicationMilestone",
+    "ApplyIntent",
     "Message",
+    "MessageAttachment",
+    "MessageAttachmentKind",
+    "MessageThread",
+    "MilestoneKind",
+    "ThreadMessage",
+    "ThreadVisibility",
     "Notification",
     "Payment",
     "PayrollRun",

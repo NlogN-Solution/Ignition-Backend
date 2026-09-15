@@ -191,6 +191,62 @@ class CoursePublic(BaseModel):
 
     model_config = _FROM_ORM
 
+    @staticmethod
+    def payload(program: Any, intakes: Any = None) -> dict[str, Any]:
+        """One offering, with whatever its entry route can tell a student.
+
+        `fee_text` and `scholarship_text` are lifted off `university_routes`
+        because `programs.tuition_fee` is NULL for every one of the ~4,800 imported
+        offerings — the fee has only ever existed as prose on the route. An
+        unpublished route contributes nothing at all: a course must not become the
+        back door to criteria staff have not signed off, which is the same rule the
+        university page applies.
+        """
+        route = program.route if getattr(program, "route", None) and program.route.is_published else None
+        university = getattr(program, "university", None)
+
+        payload: dict[str, Any] = {
+            "id": program.id,
+            "slug": program.slug,
+            "title": program.name,
+            "qualification": program.qualification,
+            "subject": program.subject.value if program.subject else None,
+            "course_level": program.course_level.value if program.course_level else None,
+            "duration_years": float(program.duration_years) if program.duration_years is not None else None,
+            "placement": program.placement or None,
+            "campus": program.campus,
+            "extra_requirements": program.extra_requirements,
+            "fee_tier": program.fee_tier,
+            "intake": program.intake,
+            "fee_text": route.fee_structure if route else None,
+            "scholarship_text": route.scholarship_text if route else None,
+            "university": (
+                {
+                    "id": university.id,
+                    "slug": university.slug,
+                    "name": university.name,
+                    "city": university.city,
+                    "region": university.region.value if university.region else None,
+                }
+                if university
+                else None
+            ),
+            "course_profile_slug": (
+                program.course_profile.slug if getattr(program, "course_profile", None) else None
+            ),
+            "is_example": program.is_example or None,
+        }
+        if intakes is not None:
+            payload["intakes"] = [
+                {
+                    "name": intake.name,
+                    "start_date": intake.start_date,
+                    "application_deadline": intake.application_deadline,
+                }
+                for intake in intakes
+            ]
+        return payload
+
 
 class IntakePublic(BaseModel):
     """One intake of an offering, with the two dates that matter.
@@ -446,3 +502,24 @@ class Taxonomies(BaseModel):
     course_levels: list[str]
     study_routes: list[dict[str, Any]]
     entry_routes: list[str]
+
+
+class FeedSectionPublic(BaseModel):
+    """One row of the Explore feed.
+
+    `reason` is not decoration. Every section on that page has to be able to
+    say why it is there — "Because you are interested in Computing" — and a
+    section that cannot name its reason is not shipped. Carrying the sentence
+    in the payload rather than deriving it client-side keeps that rule where
+    the query that justifies it lives.
+    """
+
+    key: str
+    title: str
+    reason: str
+    items: list[CoursePublic]
+    model_config = _FROM_ORM
+
+
+class CourseFeed(BaseModel):
+    sections: list[FeedSectionPublic]

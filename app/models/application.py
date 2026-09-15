@@ -4,13 +4,13 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Index, Numeric, String, Text, func
+from sqlalchemy import TIMESTAMP, Date, ForeignKey, Index, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base import Base
 from ..db.mixins import TimestampMixin, UUIDPKMixin
 from ..db.types import enum_type
-from .enums import ApplicationStatus
+from .enums import ApplicationStatus, OfferType
 
 if TYPE_CHECKING:
     from .academic import Intake, Program
@@ -49,6 +49,24 @@ class Application(Base, UUIDPKMixin, TimestampMixin):
     visa_applied_date: Mapped[date | None] = mapped_column(String(10))
     visa_decision_date: Mapped[date | None] = mapped_column(String(10))
     enrollment_date: Mapped[date | None] = mapped_column(String(10))
+
+    # The CAS columns are real DATE, unlike the six String(10) dates above.
+    #
+    # That inconsistency is deliberate. The six are a carried-over ED360 bug
+    # kept as-is so the port stayed mechanical, and they now have production
+    # rows behind them. A *new* column has no such excuse: writing one more
+    # mistyped date to stay tidy would be choosing to be consistently wrong.
+    # ISO-8601 strings do at least sort correctly, so nothing above is broken,
+    # only mistyped — and converting them is still the tracked follow-up it
+    # always was.
+    cas_received_date: Mapped[date | None] = mapped_column(Date)
+    #: The Confirmation of Acceptance for Studies reference the university
+    #: issues. A UK visa application cannot be filed without quoting it, so it
+    #: is worth a column of its own rather than a line in `remarks`.
+    cas_number: Mapped[str | None] = mapped_column(String(50))
+    offer_type: Mapped[OfferType | None] = mapped_column(
+        enum_type(OfferType, "offer_type", create_type=False)
+    )
 
     tuition_fee: Mapped[float | None] = mapped_column(Numeric(12, 2))
     scholarship_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
