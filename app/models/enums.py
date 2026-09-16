@@ -126,6 +126,16 @@ class LeadActivityType(str, Enum):
 
 
 class ApplicationStatus(str, Enum):
+    #: A student asked; nobody has agreed yet.
+    #:
+    #: `draft` already means "we are preparing this", which is a commitment
+    #: Ignition has made. An application a student opened from a course page is
+    #: not that — it is a request sitting in a queue, and showing it as
+    #: Preparing told the student work had started and told the desk a file was
+    #: in progress when neither was true. A counsellor accepting it is what
+    #: moves it to `draft`; staff opening one themselves start at `draft`,
+    #: because creating it *is* the acceptance.
+    REQUESTED = "requested"
     DRAFT = "draft"
     DOCUMENTS_PENDING = "documents_pending"
     READY_TO_SUBMIT = "ready_to_submit"

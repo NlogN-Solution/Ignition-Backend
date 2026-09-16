@@ -212,6 +212,48 @@ async def test_course_detail_omits_an_unpublished_route(
     assert "route" not in body, "an unpublished route must not reach the public course page"
 
 
+async def test_course_detail_survives_an_offering_that_has_intakes(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """A course with intake rows must still render.
+
+    This is the regression for a 500 that hit every one of the ~4,800 course
+    pages that had an intake: the route passed `course_intake(...)`, which
+    returns the intake *name* as a `str`, into a parameter that is iterated and
+    read `.name` off each element — so the handler raised `'str' object has no
+    attribute 'name'` and the landing site rendered "Course not found. It may
+    have been withdrawn from the catalogue."
+
+    The existing detail tests did not catch it because none of them seed an
+    intake, and with no intakes the argument was `None` and the loop never ran.
+    So the assertion that matters here is not the payload but that seeding an
+    intake at all does not break the endpoint.
+    """
+    admin = await user_factory(UserRole.ADMIN)
+    headers = await auth_headers(admin)
+    await _seed(client, headers)
+
+    target = (await client.get(f"{PROGRAMS}?limit=100", headers=headers)).json()["items"][0]
+    intake = await client.post(
+        "/api/v1/intakes",
+        json={
+            "program_id": target["id"],
+            "name": "September 2026",
+            "start_date": "2026-09-21",
+            "application_deadline": "2026-07-31",
+            "is_active": True,
+        },
+        headers=headers,
+    )
+    assert intake.status_code == 200, intake.text
+
+    response = await client.get(f"{PUBLIC}/courses/{target['slug']}")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [item["name"] for item in body["intakes"]] == ["September 2026"]
+    assert body["intakes"][0]["application_deadline"] == "2026-07-31"
+
+
 async def test_course_facets_is_not_swallowed_by_the_slug_route(client: AsyncClient) -> None:
     """`/courses/facets` is a literal path sharing a prefix with `/courses/{slug}`.
 

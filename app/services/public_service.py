@@ -386,18 +386,12 @@ class PublicCatalogueService:
             "total": total,
         }
 
-    async def course_intake(self, program_id: UUID) -> str | None:
-        return await self.session.scalar(
-            select(Intake.name).where(Intake.program_id == program_id, Intake.is_active.is_(True)).limit(1)
-        )
-
     async def course_intakes(self, program_id: UUID) -> list[Intake]:
         """Every active intake of an offering, earliest first.
 
-        `course_intake` above answers a different question — the one word a
-        card has room for. This is what the page needs: a student choosing when
-        to apply reads the deadline against the start, and there is usually
-        more than one pair.
+        A card has room for one word and reads `program.intake` for it. This is
+        what the *page* needs: a student choosing when to apply reads the
+        deadline against the start, and there is usually more than one pair.
 
         Rows with no `start_date` sort last rather than being dropped. An
         intake named "September 2026" with no date on it is still the answer to

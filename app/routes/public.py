@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 
 from ..api.auth import require_public
 from ..api.exceptions import NotFoundException
+from ..core.public_cache import CachedRoute
 from ..core.rate_limit import APPLY_INTENT_RATE_LIMIT, ELIGIBILITY_RATE_LIMIT, limiter
 from ..models.enums import EligibilityOverall
 from ..schemas.apply_intent import ApplyIntentCreate, ApplyIntentRead
@@ -57,13 +58,22 @@ from ..services.apply_intent_service import ApplyIntentService, get_apply_intent
 from ..services.eligibility_service import EligibilityService, get_eligibility_service
 from ..services.public_service import CourseFilters, PublicCatalogueService, get_public_service
 
-router = APIRouter(prefix="/public", tags=["Public"])
+#: `route_class` puts a read-through Redis cache in front of every GET here.
+#: The routes below are unchanged by it and cannot forget to use it; what it
+#: does, what it refuses to cache and how publishing purges it are all in
+#: `core/public_cache.py`.
+router = APIRouter(prefix="/public", tags=["Public"], route_class=CachedRoute)
 
 #: Every response here is a published-only read of data staff edit rarely, so
 #: it is cached at the edge rather than per-browser: `s-maxage` lets a CDN hold
 #: it for five minutes, and `stale-while-revalidate` lets it keep serving the
 #: old copy for a day while it fetches a new one. A student never waits for a
 #: revalidation, and a corrected fee is live within five minutes.
+#:
+#: This is an instruction to whatever sits in front of the API, and in
+#: development and on a single Render instance nothing does — which is why
+#: `CachedRoute` above keeps the same five minutes inside the process. The two
+#: numbers are one decision; change them together.
 _CACHE_CONTROL = "public, s-maxage=300, stale-while-revalidate=86400"
 
 
@@ -359,7 +369,14 @@ async def public_course(
         raise NotFoundException("Course not found")
 
     university = program.university
-    payload = CoursePublic.payload(program, await service.course_intake(program.id))
+    # No `intakes` argument here. It used to be passed `course_intake(...)`,
+    # which returns the single intake *name* as a string — `payload` iterates
+    # what it is given and reads `.name` off each item, so every one of the
+    # ~4,800 course pages raised `'str' object has no attribute 'name'` and
+    # 500'd. Both callers that render a card pass nothing, and this page sets
+    # `payload["intakes"]` properly from `course_intakes` forty lines down, so
+    # the argument was never doing anything but breaking the endpoint.
+    payload = CoursePublic.payload(program)
     payload["university_city"] = university.city if university else None
 
     # The criteria this course is admitted under. Unpublished routes are

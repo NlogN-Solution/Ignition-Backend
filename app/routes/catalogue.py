@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends
 
 from ..api.auth import get_current_user, require_role
 from ..api.exceptions import NotFoundException
+from ..core.public_cache import PurgingRoute
 from ..models.enums import UserRole
 from ..schemas.catalogue import (
     CourseProfileCreate,
@@ -45,7 +46,9 @@ from ..services.catalogue_service import (
     get_university_route_service,
 )
 
-router = APIRouter(tags=["Catalogue"])
+#: Same purge as the academic router — scholarships are published to the
+#: public site too. See `core/public_cache.py`.
+router = APIRouter(tags=["Catalogue"], route_class=PurgingRoute)
 
 #: Editing the public catalogue is a marketing job as much as an admin one.
 _MANAGE_WEBSITE = require_role(UserRole.ADMIN, UserRole.MARKETING)

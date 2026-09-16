@@ -42,7 +42,13 @@ class PublicRegisterRequest(BaseModel):
     password: str = Field(min_length=8)
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
-    phone: str | None = Field(default=None, max_length=20)
+    #: Long enough to be dialled. The ceiling alone was not enough: a
+    #: registration writing `phone="abc"` creates a Lead with that number
+    #: (`core/subscribers.link_or_create_lead_for_student`), and `LeadBase`
+    #: requires seven characters — so a three-character phone accepted here
+    #: produced a lead the staff console could not list. The two ends of that
+    #: chain now agree.
+    phone: str | None = Field(default=None, min_length=7, max_length=20)
     date_of_birth: date | None = None
     gender: Gender | None = None
 

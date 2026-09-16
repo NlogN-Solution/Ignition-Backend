@@ -73,6 +73,33 @@ async def list_applications(
     )
 
 
+@router.get(
+    "/status-requirements",
+    response_model=list[StatusRequirementRead],
+    summary="What each milestone status needs",
+)
+async def get_status_requirements(
+    user: User = Depends(_MANAGE_ROLES),
+) -> list[StatusRequirementRead]:
+    """The config behind the status dialog.
+
+    Served rather than duplicated in TypeScript so the form and the validator
+    cannot disagree about what recording an offer requires.
+
+    **Declared before `/{application_id}`, not merely before
+    `/{application_id}/status`.** It used to sit between the two, which reads
+    right and is wrong: a literal segment only wins if its route is registered
+    first, and `/{application_id}` is registered above. Every call therefore
+    parsed "status-requirements" as an id and came back 422 — so the console
+    never learned which statuses need a date and a letter, offered
+    `offer_received` on the plain status dropdown, and handed the counsellor
+    the backend's refusal ("Use POST /applications/{id}/milestone") as if it
+    were advice they could act on. `tests/test_applications.py` now pins the
+    order.
+    """
+    return [StatusRequirementRead(**item) for item in requirements_payload()]
+
+
 @router.get("/{application_id}", response_model=ApplicationRead, summary="Get application")
 async def get_application(
     application_id: UUID,
@@ -100,26 +127,58 @@ async def create_application(
     another student, or opening their own already marked `enrolled`. Students
     get their own application-submission flow in Phase 5; it does not run
     through this staff endpoint.
+
+    **Staff-created applications start at `draft`** — the first phase of the
+    journey, "Preparing" — because a counsellor opening a file has already
+    decided to work it. Only the student-facing route opens one as `requested`,
+    which is the queue this endpoint's caller is on the other side of.
     """
     application = await service.create_application(payload.model_dump())
     return ApplicationRead.model_validate(application)
 
 
-@router.get(
-    "/status-requirements",
-    response_model=list[StatusRequirementRead],
-    summary="What each milestone status needs",
+@router.post(
+    "/{application_id}/accept",
+    response_model=ApplicationRead,
+    summary="Accept an application a student requested",
 )
-async def get_status_requirements(
+async def accept_application_request(
+    application_id: UUID,
+    service: ApplicationService = Depends(get_application_service),
     user: User = Depends(_MANAGE_ROLES),
-) -> list[StatusRequirementRead]:
-    """The config behind the status dialog.
+) -> ApplicationRead:
+    """Take a student's request off the queue and start work on it.
 
-    Served rather than duplicated in TypeScript so the form and the validator
-    cannot disagree about what recording an offer requires. Declared before
-    `/{application_id}/status` would swallow it as an id.
+    `requested` → `draft`, through `change_application_status`, so the
+    acceptance lands in `application_status_history` with the counsellor's id
+    against it like every other transition. That matters more here than
+    elsewhere: "who agreed to work this, and when" is exactly the question a
+    queue exists to answer.
+
+    A separate endpoint rather than letting the generic status route do it,
+    because the two say different things. Setting a status is bookkeeping;
+    accepting a request is a commitment, and the console should be able to
+    offer it as one button rather than as "change the dropdown to Draft", which
+    is not a sentence anybody would say out loud.
+
+    Idempotent-ish: accepting something already past `requested` is a
+    no-op rather than an error, so a double-click cannot rewind a file that has
+    moved on.
     """
-    return [StatusRequirementRead(**item) for item in requirements_payload()]
+    application = await service.get_application(application_id)
+    if application is None:
+        raise NotFoundException("Application not found")
+
+    if application.status is not ApplicationStatus.REQUESTED:
+        return ApplicationRead.model_validate(application)
+
+    updated = await service.change_application_status(
+        application,
+        ApplicationStatus.DRAFT,
+        performed_by=user.id,
+        remarks="Request accepted",
+    )
+    return ApplicationRead.model_validate(updated)
 
 
 @router.post("/{application_id}/status", response_model=ApplicationRead, summary="Update application status")

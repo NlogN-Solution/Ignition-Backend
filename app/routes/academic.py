@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from ..api.auth import get_current_user, require_role
 from ..api.exceptions import NotFoundException
+from ..core.public_cache import PurgingRoute
 from ..models.enums import UserRole
 from ..schemas.academic import (
     CountryCreate,
@@ -39,7 +40,12 @@ from ..services.academic_service import (
 # No prefix: ED360 mounts the catalog at the root and the staff dashboard
 # calls /countries, /universities, /programs directly. Adding an /academic
 # prefix during the port 404s every catalog call in the frontend.
-router = APIRouter(tags=["Academic"])
+#: `route_class` purges the public response cache after any write here.
+#: Universities, programs, intakes and countries are exactly what `/public/*`
+#: serves, so an edit that did not invalidate it would leave the public site
+#: showing the old figure for up to five minutes with nothing to say so. See
+#: `core/public_cache.py`.
+router = APIRouter(tags=["Academic"], route_class=PurgingRoute)
 
 # Reads are open to any authenticated user, writes to admin/super_admin. Note
 # that "any authenticated user" includes students here, and deliberately so —

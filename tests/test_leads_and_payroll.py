@@ -155,6 +155,88 @@ async def test_registering_with_a_known_email_links_the_existing_lead(
     assert items[0]["converted_user_id"] is not None
 
 
+async def test_one_unlistable_lead_does_not_break_the_list(
+    client: AsyncClient, admin_headers, session
+) -> None:
+    """A bad row must cost you that row, not the whole pipeline.
+
+    `LeadRead` inherited `LeadBase`'s *input* rules, so Pydantic validated rows
+    on the way out and `LeadList` refused to build if any one of them failed.
+    A single lead with `phone = "abc"` therefore returned a 500 for
+    `GET /leads` — every counsellor locked out of every lead because of one
+    three-character phone number.
+
+    This writes such a row straight to the table, past the API that now forbids
+    it, because that is the only honest way to test the read path: the question
+    is not "can this be created" but "what happens when it already exists".
+    """
+    from sqlalchemy import text
+
+    good = await client.post(LEADS, json=_lead_payload(email="fine@example.com"), headers=admin_headers)
+    assert good.status_code == 200, good.text
+
+    await session.execute(
+        text(
+            "insert into leads (id, first_name, phone, email, status, source)"
+            " values (gen_random_uuid(), 'Bad', 'abc', 'bad@example.com', 'new', 'website')"
+        )
+    )
+    await session.commit()
+
+    listed = await client.get(LEADS, headers=admin_headers)
+    assert listed.status_code == 200, listed.text
+    emails = {item["email"] for item in listed.json()["items"]}
+    assert "fine@example.com" in emails, "a good lead must still be listed"
+    assert "bad@example.com" in emails, "and the bad one is reported, not hidden"
+
+
+async def test_registration_refuses_a_phone_too_short_to_be_one(client: AsyncClient) -> None:
+    """The write side of the same defect.
+
+    Registration accepted any string up to twenty characters, and the lead
+    created behind it (`core/subscribers.link_or_create_lead_for_student`)
+    copied it verbatim — so the API could mint a lead the console could not
+    list. The two ends now agree on what a phone number is.
+    """
+    response = await client.post(
+        AUTH_REGISTER,
+        json={
+            "email": "short.phone@example.com",
+            "password": "portal-password",
+            "first_name": "Too",
+            "last_name": "Short",
+            "phone": "abc",
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"][0]["loc"][-1] == "phone"
+
+
+async def test_registration_without_a_phone_still_makes_a_listable_lead(
+    client: AsyncClient, admin_headers
+) -> None:
+    """No number is fine. A number nobody can ring is not.
+
+    The subscriber's fallback used to trigger only on a blank string, so it
+    caught "" and let "abc" through. It guards on length now, which is the
+    rule `LeadBase` actually applies.
+    """
+    registered = await client.post(
+        AUTH_REGISTER,
+        json={
+            "email": "no.phone@example.com",
+            "password": "portal-password",
+            "first_name": "Anu",
+            "last_name": "Gurung",
+        },
+    )
+    assert registered.status_code == 200, registered.text
+
+    leads = await client.get(LEADS, params={"search": "no.phone@example.com"}, headers=admin_headers)
+    assert leads.status_code == 200, leads.text
+    assert leads.json()["items"][0]["phone"] == "not provided"
+
+
 async def test_students_cannot_touch_the_crm(client: AsyncClient, user_factory, auth_headers) -> None:
     student = await user_factory(UserRole.STUDENT)
     headers = await auth_headers(student)

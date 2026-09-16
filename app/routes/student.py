@@ -333,9 +333,14 @@ async def create_my_application(
       back to the page a week later, must not open a second file against the
       same offering. A withdrawn or rejected one does not block a fresh
       attempt: applying again after a rejection is a real thing students do.
-    * **It opens as a DRAFT.** Nothing is with the university. The student then
-      fills in what is missing and uploads their documents, and the counsellor
-      files it.
+    * **It opens as REQUESTED, not DRAFT.** Nothing is with the university and
+      nobody at Ignition has agreed to work it yet. `draft` is the first phase
+      of the journey — "Preparing" on every rail in both frontends — and a
+      student pressing Apply cannot put their own file into it: that would show
+      the student work had started, and show the desk a file in progress,
+      before anyone had looked. A counsellor accepting the request is what
+      moves it to `draft`. Staff opening an application themselves start at
+      `draft`, because creating it *is* the acceptance.
 
     The document checklist comes from instantiating the application's workflow,
     and that is **best-effort on purpose**. Template resolution can fail for
@@ -371,7 +376,7 @@ async def create_my_application(
             "student_id": repo.student.id,
             "program_id": payload.program_id,
             "intake_id": payload.intake_id,
-            "status": ApplicationStatus.DRAFT,
+            "status": ApplicationStatus.REQUESTED,
             # `.isoformat()`, not a `date`. `Application.application_date` is
             # annotated `date | None` but stored as `String(10)` — a wart
             # carried over from ED360 and flagged in the model. Passing a real
@@ -435,6 +440,13 @@ async def submit_my_application(
         detail="Application not found",
         options=_APPLICATION_DETAIL_OPTIONS,
     )
+
+    # `requested` is deliberately not in the submittable set, and the message
+    # says why: a student cannot hand over a file nobody has picked up yet.
+    if application.status is ApplicationStatus.REQUESTED:
+        raise BadRequestException(
+            "Your counsellor has not accepted this application yet. You will hear from them shortly."
+        )
 
     if application.status not in _STUDENT_SUBMITTABLE_FROM:
         raise BadRequestException(

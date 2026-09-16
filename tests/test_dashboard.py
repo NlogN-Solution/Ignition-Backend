@@ -43,7 +43,7 @@ def fake_cache(monkeypatch):
     from app.core import cache as cache_module
 
     fake = FakeRedis()
-    monkeypatch.setattr(cache_module, "_get_client", lambda: fake)
+    monkeypatch.setattr(cache_module, "get_client", lambda: fake)
     return fake
 
 

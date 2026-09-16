@@ -521,6 +521,18 @@ async def notify_desk_of_registration(session: AsyncSession, user: User, *, link
     await session.commit()
 
 
+#: Shortest string `LeadBase.phone` will accept. Kept next to its one caller
+#: rather than imported, because the point is that the two must agree and a
+#: mismatch here is a broken leads list rather than a broken lead.
+_MIN_LEAD_PHONE = 7
+
+
+def _usable_phone(phone: str | None) -> str:
+    """A number worth storing, or an honest admission that there is none."""
+    cleaned = (phone or "").strip()
+    return cleaned if len(cleaned) >= _MIN_LEAD_PHONE else "not provided"
+
+
 async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncSession) -> None:
     """Make sure every student account has a lead behind it.
 
@@ -576,9 +588,13 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
         first_name=user.first_name,
         last_name=user.last_name or None,
         email=user.email,
-        # `leads.phone` is NOT NULL and must be non-blank; self-signup does not
-        # require one. Saying so is better than inventing a number.
-        phone=(user.phone or "").strip() or "not provided",
+        # `leads.phone` is NOT NULL, and `LeadBase` wants at least seven
+        # characters. Self-signup does not require a number at all, and until
+        # `PublicRegisterRequest` gained a minimum it could supply a useless
+        # one — so this guards on length, not merely on blank. A lead the
+        # console cannot list is worse than a lead with no number, and saying
+        # "not provided" is better than inventing one.
+        phone=_usable_phone(user.phone),
         source=LeadSource.WEBSITE,
         status=LeadStatus.CONVERTED,
         converted_user_id=user.id,

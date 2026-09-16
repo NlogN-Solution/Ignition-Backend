@@ -28,6 +28,7 @@ import httpx
 import jwt
 
 from .config import get_settings
+from .public_cache import purge as purge_public_cache
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,17 @@ TAG_CATALOGUE = "catalogue"
 
 
 async def revalidate(*tags: str) -> bool:
-    """Ask the landing to expire cache tags. Returns whether it was told."""
+    """Expire what this publish changed. Returns whether the landing was told.
+
+    Two caches, one call. The API's own response cache
+    (`core/public_cache.py`) is dropped first and unconditionally — it lives in
+    this process, so there is no secret to configure and no reason an editor on
+    a dev machine should wait five minutes to see their own edit. The webhook
+    to the landing is the part that needs a trust relationship, and its absence
+    is why the return value is about that and not about the purge.
+    """
+    await purge_public_cache()
+
     settings = get_settings()
     if not settings.LANDING_REVALIDATE_SECRET or not settings.LANDING_BASE_URL:
         return False
