@@ -4,11 +4,11 @@ from datetime import date
 from typing import Any, cast
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.orm import selectinload
 
-from ..api.exceptions import BadRequestException, ConflictException, NotFoundException
+from ..api.exceptions import BadRequestException, ConflictException, ForbiddenException, NotFoundException
 from ..api.student import (
     StudentScopedRepository,
     get_current_student,
@@ -27,6 +27,7 @@ from ..api.student import (
 # a future "premium workflow" tier is exactly what it is for.
 from ..core.config import get_settings
 from ..core.events import ApplicationSubmitted, event_bus
+from ..core.uploads import DOCUMENT_EXTENSIONS, DOCUMENT_FOLDER, store_upload
 from ..models import (
     Application,
     ApplicationChecklistItem,
@@ -48,15 +49,17 @@ from ..models import (
     University,
     User,
 )
+from ..models.communication import ThreadVisibility
 from ..models.enums import (
     ApplicationStatus,
     AppointmentStatus,
+    ChecklistItemStatus,
+    DocumentStatus,
     DocumentType,
     NotificationType,
     SavingsGoalKind,
     TaskStatus,
 )
-from ..models.communication import ThreadVisibility
 from ..models.student_portal import MAX_COMPARE_COURSES
 from ..schemas.academic import (
     BlogPostList,
@@ -68,18 +71,18 @@ from ..schemas.academic import (
     UniversityList,
 )
 from ..schemas.activity import ActivityEntryRead, ActivityList
-from ..schemas.apply_intent import ApplyIntentRead
-from ..schemas.communication import StudentThreadCreate, ThreadDetail, ThreadRead
-from ..schemas.milestone import ApplicationMilestoneRead
-from ..schemas.public import CourseFeed, CoursePublic, FeedSectionPublic
 from ..schemas.application import (
     ApplicationCounsellorSummary,
+    ApplicationCourseDetail,
+    ApplicationIntakeSummary,
     ApplicationProgramSummary,
     ApplicationStatusHistoryRead,
+    ApplicationUniversityDetail,
     StudentApplicationCreate,
     StudentApplicationList,
     StudentApplicationRead,
 )
+from ..schemas.apply_intent import ApplyIntentRead
 from ..schemas.appointment import (
     AppointmentCounsellorSummary,
     AppointmentRead,
@@ -93,8 +96,15 @@ from ..schemas.checklist import (
     ChecklistItemUpdate,
     ChecklistRead,
 )
+from ..schemas.communication import StudentThreadCreate, ThreadDetail, ThreadRead
 from ..schemas.dashboard import DashboardRead
-from ..schemas.document import DocumentList, DocumentRead
+from ..schemas.document import (
+    DocumentApplicationRef,
+    DocumentList,
+    DocumentRead,
+    StudentDocumentList,
+    StudentDocumentRead,
+)
 from ..schemas.finance import (
     BudgetRead,
     BudgetReplace,
@@ -117,11 +127,13 @@ from ..schemas.interview import (
     InterviewTypeRead,
 )
 from ..schemas.message import MessageCreate, MessageList, MessageRead, MessageSenderSummary
+from ..schemas.milestone import ApplicationMilestoneRead
 from ..schemas.notification import NotificationList, NotificationRead
 from ..schemas.payment import PaymentList, PaymentRead
 from ..schemas.portal_access import AccessFeeRead, PortalAccessCheckout, PortalAccessRead
 from ..schemas.preferences import DashboardSettingsRead, DashboardSettingsUpdate
 from ..schemas.progress import MilestoneRead, PointsEntryRead, PointsRead, ProgressRead
+from ..schemas.public import CourseFeed, CoursePublic, FeedSectionPublic
 from ..schemas.student_portal import (
     CompareCourseList,
     SavedCourseList,
@@ -152,11 +164,10 @@ from ..services.academic_service import (
     get_university_service,
 )
 from ..services.activity_service import ActivityService, get_activity_service
+from ..services.application_service import ApplicationService, get_application_service
 from ..services.apply_intent_service import ApplyIntentService, get_apply_intent_service
-from ..services.communication_service import CommunicationService, get_communication_service
-from ..services.milestone_service import MilestoneService, get_milestone_service
-from ..services.recommendation_service import RecommendationService, get_recommendation_service
 from ..services.checklist_service import ChecklistService, get_checklist_service
+from ..services.communication_service import CommunicationService, get_communication_service
 from ..services.dashboard_service import DashboardService, get_dashboard_service
 from ..services.finance_service import (
     BudgetService,
@@ -171,6 +182,7 @@ from ..services.finance_service import (
     get_savings_service,
 )
 from ..services.interview_service import InterviewService, get_interview_service
+from ..services.milestone_service import MilestoneService, get_milestone_service
 from ..services.notification_service import NotificationService, get_notification_service
 from ..services.portal_access_service import (
     SELF_SERVICE_METHODS,
@@ -184,7 +196,7 @@ from ..services.progress_service import (
     get_points_service,
     get_progress_service,
 )
-from ..services.application_service import ApplicationService, get_application_service
+from ..services.recommendation_service import RecommendationService, get_recommendation_service
 from ..services.student_profile_service import StudentProfileService, get_student_profile_service
 from ..services.visa_service import VisaService, get_visa_service
 from ..services.workflow_service import ApplicationWorkflowService
@@ -249,7 +261,74 @@ async def update_my_profile(
 # --- Applications --------------------------------------------------------------
 
 
-def _with_program_summary(application: Application) -> StudentApplicationRead:
+def _enum_value(value: Any) -> Any:
+    return getattr(value, "value", value)
+
+
+def _hero_image(university: University) -> str | None:
+    imagery = university.imagery or {}
+    hero = imagery.get("hero") if isinstance(imagery, dict) else None
+    return hero if isinstance(hero, str) and hero else None
+
+
+def _university_detail(university: University) -> ApplicationUniversityDetail:
+    return ApplicationUniversityDetail(
+        slug=university.slug,
+        logo_url=university.logo_url,
+        monogram=university.monogram,
+        city=university.city,
+        region=_enum_value(university.region),
+        kind=university.kind,
+        website=university.website,
+        tagline=university.tagline,
+        hero_image_url=_hero_image(university),
+        rankings=university.rankings,
+        highlights=university.highlights,
+        accommodation=university.accommodation,
+        living_cost_monthly=(
+            float(university.living_cost_monthly) if university.living_cost_monthly is not None else None
+        ),
+    )
+
+
+def _course_detail(program: Program) -> ApplicationCourseDetail:
+    profile = program.course_profile
+    route = program.route
+    return ApplicationCourseDetail(
+        slug=program.slug,
+        qualification=program.qualification or (profile.qualification if profile else None),
+        duration_months=program.duration_months,
+        duration_years=float(program.duration_years) if program.duration_years is not None else None,
+        tuition_fee=float(program.tuition_fee) if program.tuition_fee is not None else None,
+        currency=program.currency,
+        campus=program.campus,
+        course_type=program.course_type,
+        intakes_summary=program.intakes_summary,
+        overview=profile.overview if profile else None,
+        what_you_study=profile.what_you_study if profile else None,
+        modules=profile.modules if profile else None,
+        skills=profile.skills if profile else None,
+        career_outcomes=(profile.career_outcomes if profile else None) or program.outcomes,
+        highlights=program.highlights,
+        requirements=program.requirements,
+        extra_requirements=program.extra_requirements,
+        minimum_ielts=float(program.minimum_ielts) if program.minimum_ielts is not None else None,
+        fee_structure=route.fee_structure if route else None,
+        scholarship_text=route.scholarship_text if route else None,
+        cas_deposit=route.cas_deposit if route else None,
+        enrolment_fee=route.enrolment_fee if route else None,
+        academic_criteria=route.academic_criteria if route else None,
+        english_criteria=route.english_criteria if route else None,
+        english_waiver=route.english_waiver if route else None,
+        route_deadlines=route.deadlines if route else None,
+    )
+
+
+def _with_program_summary(application: Application, *, detail: bool = False) -> StudentApplicationRead:
+    """`detail` adds the university/course particulars the single-application
+    page renders. Only the detail read eager-loads what they need
+    (`_APPLICATION_FULL_OPTIONS`), so the list must never ask for them — it
+    would lazy-load outside the async greenlet."""
     read = StudentApplicationRead.model_validate(application)
     if application.program:
         university = application.program.university
@@ -261,11 +340,24 @@ def _with_program_summary(application: Application) -> StudentApplicationRead:
             university_id=application.program.university_id,
             university_name=university.name if university else "",
             university_country=university.country.name if university and university.country else None,
+            university_monogram=university.monogram if university else None,
+            university_logo_url=university.logo_url if university else None,
+            university=_university_detail(university) if detail and university else None,
+            course=_course_detail(application.program) if detail else None,
         )
     if application.counsellor:
         read.counsellor = ApplicationCounsellorSummary(
             id=application.counsellor.id,
             full_name=f"{application.counsellor.first_name} {application.counsellor.last_name}".strip(),
+            phone=application.counsellor.phone,
+            email=application.counsellor.email,
+        )
+    if detail and application.intake:
+        read.intake = ApplicationIntakeSummary(
+            id=application.intake.id,
+            name=application.intake.name,
+            start_date=application.intake.start_date,
+            application_deadline=application.intake.application_deadline,
         )
     return read
 
@@ -273,6 +365,14 @@ def _with_program_summary(application: Application) -> StudentApplicationRead:
 _APPLICATION_DETAIL_OPTIONS = [
     selectinload(Application.program).selectinload(Program.university).selectinload(University.country),
     selectinload(Application.counsellor),
+]
+
+#: Everything `_with_program_summary(detail=True)` reads.
+_APPLICATION_FULL_OPTIONS = [
+    *_APPLICATION_DETAIL_OPTIONS,
+    selectinload(Application.program).selectinload(Program.course_profile),
+    selectinload(Application.program).selectinload(Program.route),
+    selectinload(Application.intake),
 ]
 
 
@@ -503,9 +603,9 @@ async def get_my_application(
         Application,
         application_id,
         detail="Application not found",
-        options=_APPLICATION_DETAIL_OPTIONS,
+        options=_APPLICATION_FULL_OPTIONS,
     )
-    return _with_program_summary(application)
+    return _with_program_summary(application, detail=True)
 
 
 @router.get(
@@ -820,22 +920,126 @@ async def list_my_application_documents(
 # --- Documents ------------------------------------------------------------------
 
 
-@router.get("/me/documents", response_model=DocumentList, summary="My documents")
+def _with_applications(document: Document) -> StudentDocumentRead:
+    read = StudentDocumentRead.model_validate(document)
+    read.applications = [
+        DocumentApplicationRef(
+            id=application.id,
+            university_name=(
+                application.program.university.name
+                if application.program and application.program.university
+                else ""
+            ),
+            program_name=application.program.name if application.program else None,
+        )
+        for application in document.applications
+    ]
+    return read
+
+
+_DOCUMENT_OPTIONS = [
+    selectinload(Document.applications).selectinload(Application.program).selectinload(Program.university),
+]
+
+
+@router.get("/me/documents", response_model=StudentDocumentList, summary="My documents")
 async def list_my_documents(
     page: int = 1,
     limit: int = 20,
     repo: StudentScopedRepository = Depends(get_student_repository),
-) -> DocumentList:
-    items, total = await repo.list(Document, order_by=Document.created_at.desc(), page=page, limit=limit)
-    return DocumentList(items=[DocumentRead.model_validate(d) for d in items], total=total, page=page, limit=limit)
+) -> StudentDocumentList:
+    items, total = await repo.list(
+        Document, order_by=Document.created_at.desc(), page=page, limit=limit, options=_DOCUMENT_OPTIONS
+    )
+    return StudentDocumentList(items=[_with_applications(d) for d in items], total=total, page=page, limit=limit)
 
 
-@router.get("/me/documents/{document_id}", response_model=DocumentRead, summary="One of my documents")
+@router.get("/me/documents/{document_id}", response_model=StudentDocumentRead, summary="One of my documents")
 async def get_my_document(
     document_id: UUID,
     repo: StudentScopedRepository = Depends(get_student_repository),
-) -> DocumentRead:
-    return DocumentRead.model_validate(await repo.get_or_404(Document, document_id, detail="Document not found"))
+) -> StudentDocumentRead:
+    document = await repo.get_or_404(Document, document_id, detail="Document not found", options=_DOCUMENT_OPTIONS)
+    return _with_applications(document)
+
+
+async def _own_upload_or_403(repo: StudentScopedRepository, document_id: UUID) -> Document:
+    """A document the student may replace or remove: one they uploaded.
+
+    Offer and CAS letters Ignition filed for them are not theirs to change, and
+    neither is anything staff uploaded on their behalf — those are evidence
+    other people relied on.
+    """
+    document = await repo.get_or_404(Document, document_id, detail="Document not found", options=_DOCUMENT_OPTIONS)
+    if document.uploaded_by != repo.student.id or document.document_type in ISSUED_DOCUMENT_TYPES:
+        raise ForbiddenException("Only documents you uploaded yourself can be changed")
+    return document
+
+
+async def _reopen_checklist_items(repo: StudentScopedRepository, document_id: UUID) -> None:
+    """A checklist item fulfilled by this file is owed again once it changes."""
+    await repo.session.execute(
+        update(ApplicationChecklistItem)
+        .where(ApplicationChecklistItem.document_id == document_id)
+        .values(status=ChecklistItemStatus.PENDING, document_id=None)
+    )
+
+
+@router.post(
+    "/me/documents/{document_id}/replace",
+    response_model=StudentDocumentRead,
+    summary="Replace the file behind one of my documents",
+)
+async def replace_my_document(
+    document_id: UUID,
+    file: UploadFile = File(...),
+    repo: StudentScopedRepository = Depends(get_student_repository),
+) -> StudentDocumentRead:
+    """Swap the file, keep the record.
+
+    The row, its type and every application it is filed against stay; the file
+    and its review do not. A replaced file has not been checked by anyone, so
+    it goes back to `pending` whatever it was before — an approval belongs to
+    the bytes that were approved, not to the slot they sat in.
+    """
+    document = await _own_upload_or_403(repo, document_id)
+    stored = await store_upload(file, DOCUMENT_EXTENSIONS, folder=DOCUMENT_FOLDER, private=True)
+
+    document.original_file_name = file.filename or stored.stored_file_name
+    document.stored_file_name = stored.stored_file_name
+    document.mime_type = file.content_type
+    document.file_size = stored.size
+    if not document.title or document.title == document.original_file_name:
+        document.title = file.filename or document.title
+    document.status = DocumentStatus.PENDING
+    document.verified_by = None
+    document.verified_at = None
+    document.rejection_reason = None
+    await _reopen_checklist_items(repo, document.id)
+    await repo.session.commit()
+    # Only the server-stamped column: a full refresh would expire the eagerly
+    # loaded `applications` and lazy-load them outside the greenlet.
+    await repo.session.refresh(document, attribute_names=["updated_at"])
+    return _with_applications(document)
+
+
+@router.delete("/me/documents/{document_id}", status_code=204, summary="Delete one of my documents")
+async def delete_my_document(
+    document_id: UUID,
+    repo: StudentScopedRepository = Depends(get_student_repository),
+) -> None:
+    """Remove a file the student uploaded.
+
+    Approved documents are refused: once staff have verified a file it is
+    evidence on the student's applications, and deleting it would quietly
+    unpick work already done. Replacing it is the way to change it.
+    """
+    document = await _own_upload_or_403(repo, document_id)
+    if document.status is DocumentStatus.APPROVED:
+        raise ConflictException("Approved documents can't be deleted — replace the file instead")
+    await _reopen_checklist_items(repo, document.id)
+    await repo.session.delete(document)
+    await repo.session.commit()
 
 
 # --- Appointments ----------------------------------------------------------------

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..models.enums import DocumentStatus, DocumentType
 
@@ -62,6 +62,30 @@ class DocumentRead(DocumentBase):
     updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentApplicationRef(BaseModel):
+    """An application a document is filed against — the "Used in" list on the
+    student's Documents page."""
+
+    id: UUID
+    university_name: str
+    program_name: str | None = None
+
+
+class StudentDocumentRead(DocumentRead):
+    #: Aliased away from `Document.applications` so `model_validate(document)`
+    #: does not try to coerce ORM rows; the route builds these by hand.
+    applications: list[DocumentApplicationRef] = Field(
+        default_factory=list, validation_alias="_student_portal_applications"
+    )
+
+
+class StudentDocumentList(BaseModel):
+    items: list[StudentDocumentRead]
+    total: int
+    page: int
+    limit: int
 
 
 class DocumentList(BaseModel):

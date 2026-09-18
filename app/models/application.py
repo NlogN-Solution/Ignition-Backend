@@ -74,6 +74,18 @@ class Application(Base, UUIDPKMixin, TimestampMixin):
     intake_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("intakes.id"))
     remarks: Mapped[str | None] = mapped_column(Text)
 
+    #: Deadlines specific to this application, as opposed to the intake's
+    #: generic `application_deadline`. Real DATE for the same reason as the CAS
+    #: columns above. `application_deadline` falls back to the intake's in the
+    #: student portal when unset.
+    application_deadline: Mapped[date | None] = mapped_column(Date)
+    payment_deadline: Mapped[date | None] = mapped_column(Date)
+    #: The date an offer's conditions must be met by.
+    condition_deadline: Mapped[date | None] = mapped_column(Date)
+    #: Staff-written, student-facing "Please note". Distinct from `remarks`,
+    #: which is the student's own note to their counsellor. One point per line.
+    student_notice: Mapped[str | None] = mapped_column(Text)
+
     student: Mapped[User] = relationship(
         "User",
         foreign_keys=[student_id],

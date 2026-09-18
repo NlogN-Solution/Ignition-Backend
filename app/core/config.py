@@ -106,6 +106,14 @@ class Settings(BaseSettings):
         ]
     )
 
+    #: Extra origins matched by pattern. Left unset, development accepts any
+    #: localhost / 127.0.0.1 / private-LAN (192.168.*, 10.*, 172.16–31.*)
+    #: origin on any port — CRA and Vite both print an "On Your Network"
+    #: address, and opening the app through it was a CORS failure on every
+    #: request because no fixed list can name a DHCP-assigned IP. Production
+    #: never gets the default: there, only `CORS_ORIGINS` (plus this, if set).
+    CORS_ORIGIN_REGEX: str | None = None
+
     # ── Landing site ──────────────────────────────────────────────────────────
     # Where Ignition-Landing is served from, and the secret it shares with this
     # API. Both sides need it: the admin publishes a page and the Next cache
@@ -179,6 +187,17 @@ class Settings(BaseSettings):
     def database_url(self) -> str:
         """Sync URL — used by Alembic. psycopg understands `sslmode` natively."""
         return self._build_database_url("psycopg")
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        if self.CORS_ORIGIN_REGEX:
+            return self.CORS_ORIGIN_REGEX
+        if self.ENVIRONMENT == "development":
+            return (
+                r"^https?://(localhost|127\.0\.0\.1|\[::1\]|192\.168\.\d{1,3}\.\d{1,3}"
+                r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$"
+            )
+        return None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

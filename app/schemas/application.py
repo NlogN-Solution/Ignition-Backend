@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,6 +32,11 @@ class ApplicationBase(BaseModel):
     university_application_id: str | None = None
     intake_id: UUID | None = None
     remarks: str | None = None
+    #: Staff-set, shown to the student under "Key Deadlines" / "Please note".
+    application_deadline: date | None = None
+    payment_deadline: date | None = None
+    condition_deadline: date | None = None
+    student_notice: str | None = None
 
 
 class ApplicationCreate(ApplicationBase):
@@ -91,6 +97,11 @@ class ApplicationUpdate(BaseModel):
     university_application_id: str | None = None
     intake_id: UUID | None = None
     remarks: str | None = None
+    #: Staff-set, shown to the student under "Key Deadlines" / "Please note".
+    application_deadline: date | None = None
+    payment_deadline: date | None = None
+    condition_deadline: date | None = None
+    student_notice: str | None = None
 
 
 class ApplicationStatusHistoryRead(BaseModel):
@@ -119,6 +130,68 @@ class ApplicationList(BaseModel):
     limit: int
 
 
+class ApplicationUniversityDetail(BaseModel):
+    """The university facts the student's application page prints.
+
+    Only filled on the single-application read; the list carries just the
+    monogram and logo it needs for its avatar column.
+    """
+
+    slug: str | None = None
+    logo_url: str | None = None
+    monogram: str | None = None
+    city: str | None = None
+    region: str | None = None
+    kind: str | None = None
+    website: str | None = None
+    tagline: str | None = None
+    hero_image_url: str | None = None
+    rankings: list[dict[str, Any]] | None = None
+    highlights: list[str] | None = None
+    accommodation: dict[str, Any] | None = None
+    living_cost_monthly: float | None = None
+
+
+class ApplicationCourseDetail(BaseModel):
+    """What the Course Details / Fees / Requirements tabs render."""
+
+    slug: str | None = None
+    qualification: str | None = None
+    duration_months: int | None = None
+    duration_years: float | None = None
+    tuition_fee: float | None = None
+    currency: str | None = None
+    campus: str | None = None
+    course_type: str | None = None
+    intakes_summary: list[str] | None = None
+    overview: str | None = None
+    what_you_study: str | None = None
+    modules: list[dict[str, Any]] | None = None
+    skills: list[str] | None = None
+    career_outcomes: list[str] | None = None
+    highlights: list[str] | None = None
+    requirements: dict[str, Any] | None = None
+    extra_requirements: str | None = None
+    minimum_ielts: float | None = None
+    #: From the university's entry route: fees, deposits, criteria as the
+    #: institution publishes them, verbatim.
+    fee_structure: str | None = None
+    scholarship_text: str | None = None
+    cas_deposit: str | None = None
+    enrolment_fee: str | None = None
+    academic_criteria: str | None = None
+    english_criteria: str | None = None
+    english_waiver: str | None = None
+    route_deadlines: str | None = None
+
+
+class ApplicationIntakeSummary(BaseModel):
+    id: UUID
+    name: str
+    start_date: date | None = None
+    application_deadline: date | None = None
+
+
 class ApplicationProgramSummary(BaseModel):
     """Just enough of `Program` (plus its `University`/`Country`) to render an
     application row without a second round trip. Built by hand in the route,
@@ -132,6 +205,10 @@ class ApplicationProgramSummary(BaseModel):
     university_id: UUID
     university_name: str
     university_country: str | None = None
+    university_monogram: str | None = None
+    university_logo_url: str | None = None
+    university: ApplicationUniversityDetail | None = None
+    course: ApplicationCourseDetail | None = None
 
 
 class ApplicationCounsellorSummary(BaseModel):
@@ -140,6 +217,10 @@ class ApplicationCounsellorSummary(BaseModel):
 
     id: UUID
     full_name: str
+    #: The student's line to their advisor — printed on the application page
+    #: under "Assigned Advisor". Staff contact details, not the full record.
+    phone: str | None = None
+    email: str | None = None
 
 
 class StudentApplicationRead(ApplicationRead):
@@ -162,6 +243,7 @@ class StudentApplicationRead(ApplicationRead):
     counsellor: ApplicationCounsellorSummary | None = Field(
         default=None, validation_alias="_student_portal_counsellor_summary"
     )
+    intake: ApplicationIntakeSummary | None = Field(default=None, validation_alias="_student_portal_intake_summary")
 
 
 class StudentApplicationList(BaseModel):
