@@ -24,6 +24,7 @@ from ..routes.message import router as message_router
 from ..routes.notification import router as notification_router
 from ..routes.payment import router as payment_router
 from ..routes.payroll import router as payroll_router
+from ..routes.priority_tasks import router as priority_tasks_router
 from ..routes.public import router as public_router
 from ..routes.student import router as student_router
 from ..routes.student_profile import router as student_profile_router
@@ -57,6 +58,7 @@ router.include_router(document_router)
 router.include_router(appointment_router)
 router.include_router(payment_router)
 router.include_router(task_router)
+router.include_router(priority_tasks_router)
 router.include_router(notification_router)
 router.include_router(message_router)
 # The unified correspondence surface. `message_router` above is the older

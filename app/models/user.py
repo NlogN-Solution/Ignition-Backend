@@ -225,6 +225,9 @@ class User(Base, UUIDPKMixin, TimestampMixin, SoftDeleteMixin):
     checklist_items: Mapped[list[StudentChecklistItem]] = relationship(
         back_populates="student",
         cascade="all, delete-orphan",
+        # Checklist items also point at users through `assigned_by` (the staff
+        # member who set a priority task); this list is the student's own.
+        foreign_keys="StudentChecklistItem.student_id",
     )
     interview_sessions: Mapped[list[InterviewSession]] = relationship(
         back_populates="student",

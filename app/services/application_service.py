@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 from uuid import UUID
 
@@ -12,6 +13,23 @@ from ..core.events import ApplicationCreated, ApplicationStatusChanged, event_bu
 from ..models import Application, ApplicationStatusHistory
 from ..models.enums import ApplicationStatus
 from .partial_update import reject_null_on_required
+
+#: Date fields stored as `String(10)` ISO strings — an ED360 wart documented on
+#: the model — while the API schemas type them as `date`. asyncpg will not coerce
+#: a `date` into a VARCHAR parameter ("expected str, got date"), so every write
+#: path converts them here. `cas_received_date` and the deadline columns are
+#: real `Date` columns and are left alone.
+STRING_DATE_FIELDS = frozenset(
+    {"application_date", "submission_date", "offer_received_date", "visa_applied_date", "visa_decision_date", "enrollment_date"}
+)
+
+
+def normalise_string_dates(data: dict[str, Any]) -> dict[str, Any]:
+    """Render the `String(10)` date fields as ISO strings; everything else untouched."""
+    return {
+        key: value.isoformat() if key in STRING_DATE_FIELDS and isinstance(value, date) else value
+        for key, value in data.items()
+    }
 
 
 class ApplicationService:
@@ -55,7 +73,7 @@ class ApplicationService:
         return list(result.scalars().all()), total
 
     async def create_application(self, data: dict[str, Any]) -> Application:
-        application = Application(**data)
+        application = Application(**normalise_string_dates(data))
         self.session.add(application)
         await self.session.commit()
         await self.session.refresh(application)
@@ -77,7 +95,7 @@ class ApplicationService:
         history row.
         """
         reject_null_on_required(Application, data)
-        for key, value in data.items():
+        for key, value in normalise_string_dates(data).items():
             setattr(application, key, value)
 
         await self.session.commit()

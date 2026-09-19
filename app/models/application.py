@@ -71,6 +71,11 @@ class Application(Base, UUIDPKMixin, TimestampMixin):
     tuition_fee: Mapped[float | None] = mapped_column(Numeric(12, 2))
     scholarship_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
     university_application_id: Mapped[str | None] = mapped_column(String(100))
+    #: This student's mode of study ("Full-time", "Part-time", …). Per
+    #: application rather than an edit to the course's `course_type`, which is
+    #: shared by every student on that course; the portal shows this when set
+    #: and the course's own value otherwise.
+    study_mode: Mapped[str | None] = mapped_column(String(50))
     intake_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("intakes.id"))
     remarks: Mapped[str | None] = mapped_column(Text)
 

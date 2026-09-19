@@ -356,7 +356,8 @@ async def advance_progress_on_status(event: ApplicationStatusChanged, session: A
         "submitted": "apply",
         "offer_received": "offer",
         "visa_approved": "visa",
-        "enrolled": "departure",
+        # `enrolled` used to complete "departure"; the journey now ends at the
+        # visa, so enrolment has no milestone of its own.
     }
     key = milestone_by_status.get(event.new_status)
     if key:
@@ -376,7 +377,7 @@ async def award_points_for_application(event: ApplicationStatusChanged, session:
 
 async def advance_progress_on_interview(event: InterviewCompleted, session: AsyncSession) -> None:
     """Reaching an interview completes the milestone regardless of score —
-    same as offer/visa/departure, which mark the stage reached, not passed."""
+    same as offer/visa, which mark the stage reached, not passed."""
     await ProgressService(session).complete_milestone(event.student_id, "interview", source=event.name)
 
 

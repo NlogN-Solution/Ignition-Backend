@@ -18,6 +18,8 @@ class ChecklistItemRead(BaseModel):
     is_complete: bool = False
     completed_at: datetime | None = None
     is_custom: bool = False
+    #: Set by staff; the student dashboard leads "Priority tasks" with these.
+    is_priority: bool = False
     #: Computed per response, not stored: whether the prerequisite is still
     #: outstanding depends on the rest of the list, and a stored flag would go
     #: stale the moment the item it depends on is ticked.
@@ -47,3 +49,27 @@ class ChecklistItemUpdate(BaseModel):
     due_date: date | None = None
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
+
+
+class PriorityTaskCreate(BaseModel):
+    """A task staff set for a student. It lands on the student's checklist and
+    leads the dashboard's "Priority tasks"."""
+
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    due_date: date | None = None
+
+
+class PriorityTaskUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    due_date: date | None = None
+    completed: bool | None = None
+
+
+class PriorityTaskRead(ChecklistItemRead):
+    """What the staff console shows: the item plus who set it."""
+
+    assigned_by: UUID | None = None
+    assigned_by_name: str | None = None
+    created_at: datetime | None = None

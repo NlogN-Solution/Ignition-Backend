@@ -52,6 +52,7 @@ from ..api.exceptions import BadRequestException
 from ..core.events import ApplicationStatusChanged, MilestoneRecorded, event_bus
 from ..models import Application, ApplicationDocument, ApplicationMilestone, ApplicationStatusHistory, Document, Program
 from ..models.enums import ApplicationStatus, OfferType
+from .application_service import STRING_DATE_FIELDS
 from .status_requirements import WRITABLE_MILESTONE_FIELDS, requirement_for
 
 #: Fields that are dates on the application, and how to coerce them.
@@ -60,9 +61,7 @@ from .status_requirements import WRITABLE_MILESTONE_FIELDS, requirement_for
 #: the model — while `cas_received_date` is a real `Date`. Passing the wrong
 #: Python type to either gets an asyncpg DataError rather than a coercion, so
 #: the distinction has to be explicit here.
-_STRING_DATE_FIELDS = frozenset(
-    {"application_date", "submission_date", "offer_received_date", "visa_applied_date", "visa_decision_date", "enrollment_date"}
-)
+_STRING_DATE_FIELDS = STRING_DATE_FIELDS
 _REAL_DATE_FIELDS = frozenset({"cas_received_date"})
 _DECIMAL_FIELDS = frozenset({"tuition_fee", "scholarship_amount"})
 

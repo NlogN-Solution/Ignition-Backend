@@ -89,8 +89,16 @@ class StudentChecklistItem(Base, UUIDPKMixin, TimestampMixin):
     #: Custom items may be deleted; seeded ones may not, so the journey cannot
     #: be quietly emptied to reach 100%.
     is_custom: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    #: Set by staff through `/students/{id}/priority-tasks`: the tasks the
+    #: student dashboard leads with under "Priority tasks". Not `is_custom`, so
+    #: the student can tick one off but cannot reword or delete what their
+    #: counsellor asked for.
+    is_priority: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    #: The staff member who set it; NULL for template and student-written items.
+    assigned_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
-    student: Mapped[User] = relationship(back_populates="checklist_items")
+    student: Mapped[User] = relationship(back_populates="checklist_items", foreign_keys=[student_id])
+    assigner: Mapped[User | None] = relationship(foreign_keys=[assigned_by])
     template_item: Mapped[ChecklistTemplateItem | None] = relationship()
 
     __table_args__ = (

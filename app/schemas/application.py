@@ -30,6 +30,7 @@ class ApplicationBase(BaseModel):
     tuition_fee: float | None = None
     scholarship_amount: float | None = None
     university_application_id: str | None = None
+    study_mode: str | None = Field(default=None, max_length=50)
     intake_id: UUID | None = None
     remarks: str | None = None
     #: Staff-set, shown to the student under "Key Deadlines" / "Please note".
@@ -95,6 +96,7 @@ class ApplicationUpdate(BaseModel):
     tuition_fee: float | None = None
     scholarship_amount: float | None = None
     university_application_id: str | None = None
+    study_mode: str | None = Field(default=None, max_length=50)
     intake_id: UUID | None = None
     remarks: str | None = None
     #: Staff-set, shown to the student under "Key Deadlines" / "Please note".

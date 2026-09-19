@@ -12,12 +12,14 @@ through the event bus.
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from ..api.deps import get_db_session
 from ..api.exceptions import BadRequestException
@@ -173,6 +175,43 @@ class ChecklistService:
         self.session.add(item)
         await self.session.commit()
         await self.session.refresh(item)
+        return item
+
+    async def list_priority(self, student_id: uuid.UUID) -> list[StudentChecklistItem]:
+        """The tasks staff have set for this student, newest first."""
+        result = await self.session.scalars(
+            select(StudentChecklistItem)
+            .options(selectinload(StudentChecklistItem.assigner))
+            .where(StudentChecklistItem.student_id == student_id, StudentChecklistItem.is_priority.is_(True))
+            .order_by(StudentChecklistItem.completed_at.is_not(None), StudentChecklistItem.created_at.desc())
+        )
+        return list(result)
+
+    async def create_priority(
+        self,
+        student: User,
+        *,
+        title: str,
+        description: str | None,
+        due_date: date | None,
+        assigned_by: uuid.UUID,
+    ) -> StudentChecklistItem:
+        """A task a counsellor sets. Order 0 puts it ahead of the seeded ladder
+        wherever the checklist is listed in order; `is_custom` stays false so
+        the student can complete it but not reword or delete it."""
+        item = StudentChecklistItem(
+            student_id=student.id,
+            title=title,
+            description=description,
+            due_date=due_date,
+            order=0,
+            is_custom=False,
+            is_priority=True,
+            assigned_by=assigned_by,
+        )
+        self.session.add(item)
+        await self.session.commit()
+        await self.session.refresh(item, attribute_names=["assigner"])
         return item
 
     async def delete(self, item: StudentChecklistItem) -> None:

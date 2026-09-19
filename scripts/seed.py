@@ -103,8 +103,11 @@ LEAVE_TYPES = [
     ("Unpaid Leave", 0, False),
 ]
 
-#: The journey the student portal renders. Weighted so later, harder steps count
-#: for more than filling in a profile.
+#: The journey the student portal renders — profile to visa. Weighted so later,
+#: harder steps count for more than filling in a profile. It used to end with
+#: ("departure", "Ready to depart", 5); that step was retired from the dashboard
+#: (migration c9d2f4a8e1b3 deactivates it in existing databases), so a fresh
+#: database simply never creates it.
 MILESTONES = [
     ("profile", "Profile complete", 10),
     ("documents", "Core documents uploaded", 15),
@@ -113,7 +116,6 @@ MILESTONES = [
     ("interview", "Interview completed", 10),
     ("offer", "Offer received", 15),
     ("visa", "Visa approved", 15),
-    ("departure", "Ready to depart", 5),
 ]
 
 #: Points are awarded by event subscribers only — never by a client call.
