@@ -36,8 +36,10 @@ class LeadService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_lead(self, lead_id: UUID) -> Lead | None:
+    async def get_lead(self, lead_id: UUID, include_deleted: bool = False) -> Lead | None:
         query = select(Lead).where(Lead.id == lead_id)
+        if not include_deleted:
+            query = query.where(Lead.deleted_at.is_(None))
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
@@ -57,9 +59,19 @@ class LeadService:
         priority: str | None = None,
         assigned_to: UUID | None = None,
         exclude_status: str | None = None,
+        visible_to: UUID | None = None,
     ) -> tuple[list[Lead], int]:
-        query = select(Lead)
-        count_query = select(func.count()).select_from(Lead)
+        query = select(Lead).where(Lead.deleted_at.is_(None))
+        count_query = select(func.count()).select_from(Lead).where(Lead.deleted_at.is_(None))
+
+        # `visible_to` is the caller's own scope (see `api/scoping.py`), not a
+        # filter the client chose: their own leads plus the unclaimed queue.
+        # It is applied before every other clause so no combination of query
+        # parameters can widen it.
+        if visible_to is not None:
+            scope = or_(Lead.assigned_to == visible_to, Lead.assigned_to.is_(None))
+            query = query.where(scope)
+            count_query = count_query.where(scope)
 
         if search:
             search_value = f"%{search.strip().lower()}%"
@@ -135,9 +147,23 @@ class LeadService:
 
         return lead
 
-    async def delete_lead(self, lead: Lead) -> Lead:
-        await self.session.delete(lead)
+    async def delete_lead(self, lead: Lead, performed_by: UUID | None = None) -> Lead:
+        """Soft delete: gone from the product, kept in the database.
+
+        A hard `session.delete()` here cascaded to the lead's activity log and
+        its follow-ups — the record of what was said and promised, which is the
+        part you need precisely when someone asks why a lead was dropped.
+        """
+        lead.deleted_at = datetime.now(UTC)
+        await self._log_activity(
+            lead,
+            LeadActivityType.NOTE,
+            performed_by=performed_by,
+            title="Lead deleted",
+            description="Removed from the pipeline. The record is retained.",
+        )
         await self.session.commit()
+        await self.session.refresh(lead)
         return lead
 
     async def assign_lead(self, lead: Lead, counsellor_id: UUID, performed_by: UUID | None = None) -> Lead:

@@ -137,10 +137,25 @@ async def list_staff_directory(
 @router.get("/{user_id}", response_model=UserRead, summary="Get user")
 async def get_user(
     user_id: UUID,
+    include_deleted: bool = False,
     user_service: UserService = Depends(get_user_service),
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.COUNSELLOR, UserRole.MANAGER)),
 ) -> UserRead:
-    target = await user_service.get_user(user_id)
+    """`include_deleted` is for resolving a *name on a record that outlives the
+    account*.
+
+    Deleting a student is a soft delete, and the rows that pointed at them —
+    applications, documents, appointments — are not deleted with them. Staff
+    screens that list those rows resolve the applicant through here, so with
+    the default filter an application whose student has been removed renders as
+    `#21583416` and stops being findable by the name everyone knows it by.
+
+    It is read-only, it is already behind a staff role, and `deleted_at` comes
+    back on the response so a caller can say the account is gone rather than
+    quietly implying it is live. Nothing else changes: the lists still hide
+    deleted users, and a deleted account still cannot sign in.
+    """
+    target = await user_service.get_user(user_id, include_deleted=include_deleted)
     if target is None:
         raise NotFoundException("User not found")
     if current_user.role is UserRole.COUNSELLOR and target.role is not UserRole.STUDENT:

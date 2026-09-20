@@ -8,7 +8,7 @@ from sqlalchemy import TIMESTAMP, Date, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base import Base
-from ..db.mixins import TimestampMixin, UUIDPKMixin
+from ..db.mixins import SoftDeleteMixin, TimestampMixin, UUIDPKMixin
 from ..db.types import enum_type
 from .enums import ApplicationStatus, OfferType
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from .user import User
 
 
-class Application(Base, UUIDPKMixin, TimestampMixin):
+class Application(Base, UUIDPKMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "applications"
 
     student_id: Mapped[uuid.UUID] = mapped_column(

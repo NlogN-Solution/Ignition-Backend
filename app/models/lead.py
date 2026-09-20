@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base import Base
-from ..db.mixins import TimestampMixin, UUIDPKMixin
+from ..db.mixins import SoftDeleteMixin, TimestampMixin, UUIDPKMixin
 from ..db.types import enum_type
 from .enums import (
     ConversionSource,
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from .user import User
 
 
-class Lead(Base, UUIDPKMixin, TimestampMixin):
+class Lead(Base, UUIDPKMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "leads"
 
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)

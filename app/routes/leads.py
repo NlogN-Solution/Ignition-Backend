@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..api.auth import require_role
 from ..api.deps import get_db_session
 from ..api.exceptions import BadRequestException, NotFoundException
-from ..models import User
+from ..api.scoping import may_see_record, own_work_scope
+from ..models import Lead, User
 from ..schemas.lead import (
     DueFollowUpItem,
     DueFollowUpList,
@@ -61,6 +62,7 @@ async def list_leads(
         priority=priority,
         assigned_to=assigned_to,
         exclude_status=exclude_status,
+        visible_to=own_work_scope(user),
     )
     return LeadList(items=leads, total=total, page=page, limit=limit)
 
@@ -78,15 +80,30 @@ async def list_due_follow_ups(
     return DueFollowUpList(items=[DueFollowUpItem(**item) for item in items], total=total, page=page, limit=limit)
 
 
+async def _lead_for(lead_id: UUID, lead_service: LeadService, user: User) -> Lead:
+    """Load a lead, or refuse.
+
+    Every by-id route goes through here so that narrowing the list view cannot
+    be walked around by typing the id into the address bar — the list and the
+    record have to agree about what this caller may see.
+
+    A lead owned by another counsellor answers 404, not 403: "you may not see
+    this" and "this does not exist" have to be indistinguishable, or the id
+    becomes an oracle for how many leads the agency holds and who owns them.
+    """
+    lead = await lead_service.get_lead(lead_id)
+    if lead is None or not may_see_record(user, lead.assigned_to):
+        raise NotFoundException("Lead not found")
+    return lead
+
+
 @router.get("/{lead_id}", response_model=LeadRead, summary="Get lead")
 async def get_lead(
     lead_id: UUID,
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor", "marketing")),
 ) -> LeadRead:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    lead = await _lead_for(lead_id, lead_service, user)
     return LeadRead.model_validate(lead)
 
 
@@ -96,9 +113,8 @@ async def list_lead_activities(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> list[LeadActivityRead]:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    # Loaded only to enforce the caller's scope; the rows below come from the id.
+    await _lead_for(lead_id, lead_service, user)
     return [LeadActivityRead.model_validate(a) for a in await lead_service.list_activities(lead_id)]
 
 
@@ -122,9 +138,7 @@ async def assign_lead(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> LeadRead:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    lead = await _lead_for(lead_id, lead_service, user)
     return LeadRead.model_validate(await lead_service.assign_lead(lead, payload.assigned_to, performed_by=user.id))
 
 
@@ -135,9 +149,7 @@ async def change_lead_status(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> LeadRead:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    lead = await _lead_for(lead_id, lead_service, user)
     updated = await lead_service.change_lead_status(
         lead,
         payload.status,
@@ -154,9 +166,7 @@ async def qualify_lead(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> LeadRead:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    lead = await _lead_for(lead_id, lead_service, user)
     return LeadRead.model_validate(await lead_service.qualify_lead(lead, performed_by=user.id))
 
 
@@ -167,9 +177,7 @@ async def mark_lead_lost(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> LeadRead:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    lead = await _lead_for(lead_id, lead_service, user)
     return LeadRead.model_validate(
         await lead_service.mark_lost(lead, payload.reason, performed_by=user.id, remarks=payload.remarks)
     )
@@ -182,9 +190,7 @@ async def convert_lead(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> LeadConvertResult:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    lead = await _lead_for(lead_id, lead_service, user)
     updated_lead, created_new_user, portal_account_created, generated_password = await lead_service.convert_lead(
         lead,
         converted_user_id=payload.converted_user_id,
@@ -209,9 +215,7 @@ async def update_lead(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> LeadRead:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    lead = await _lead_for(lead_id, lead_service, user)
     return LeadRead.model_validate(await lead_service.update_lead(lead, payload.model_dump(exclude_unset=True)))
 
 
@@ -221,10 +225,8 @@ async def delete_lead(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin")),
 ) -> LeadRead:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
-    return LeadRead.model_validate(await lead_service.delete_lead(lead))
+    lead = await _lead_for(lead_id, lead_service, user)
+    return LeadRead.model_validate(await lead_service.delete_lead(lead, performed_by=user.id))
 
 
 # --- Follow-ups -----------------------------------------------------------
@@ -236,9 +238,8 @@ async def list_lead_follow_ups(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> LeadFollowUpList:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    # Loaded only to enforce the caller's scope; the rows below come from the id.
+    await _lead_for(lead_id, lead_service, user)
     items = await lead_service.list_follow_ups(lead_id)
     return LeadFollowUpList(items=items, total=len(items))
 
@@ -250,9 +251,7 @@ async def create_lead_follow_up(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> LeadFollowUpRead:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    lead = await _lead_for(lead_id, lead_service, user)
     try:
         return LeadFollowUpRead.model_validate(
             await lead_service.create_follow_up(lead, payload.model_dump(), performed_by=user.id)
@@ -269,9 +268,7 @@ async def complete_lead_follow_up(
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> LeadFollowUpRead:
-    lead = await lead_service.get_lead(lead_id)
-    if lead is None:
-        raise NotFoundException("Lead not found")
+    lead = await _lead_for(lead_id, lead_service, user)
     follow_up = await lead_service.get_follow_up(follow_up_id)
     if follow_up is None or follow_up.lead_id != lead_id:
         raise NotFoundException("Follow-up not found")

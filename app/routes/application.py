@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from ..api.auth import require_role
 from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
+from ..api.scoping import may_see_record, own_work_scope
 from ..core.uploads import DOCUMENT_EXTENSIONS, DOCUMENT_FOLDER, store_upload
 from ..models import Application, Document, User
 from ..models.enums import ApplicationStatus, DocumentStatus, DocumentType, UserRole
@@ -37,8 +38,20 @@ _MANAGE_ROLES = require_role(UserRole.ADMIN, UserRole.COUNSELLOR, UserRole.ADMIS
 
 
 def _assert_visible_to(user: User, application: Application) -> None:
-    if user.role is UserRole.STUDENT and application.student_id != user.id:
-        raise ForbiddenException("Forbidden")
+    """The by-id counterpart of the list's scoping.
+
+    Two different rules, because the two roles are wrong in different ways: a
+    student reaching for another student's file is a straightforward refusal,
+    while a counsellor reaching for a colleague's file must not even learn that
+    it exists — otherwise the narrowed list is undone by typing an id into the
+    address bar, and the id becomes an oracle for the agency's caseload.
+    """
+    if user.role is UserRole.STUDENT:
+        if application.student_id != user.id:
+            raise ForbiddenException("Forbidden")
+        return
+    if not may_see_record(user, application.counsellor_id):
+        raise NotFoundException("Application not found")
 
 
 @router.get("", response_model=ApplicationList, summary="List applications")
@@ -49,6 +62,7 @@ async def list_applications(
     counsellor_id: UUID | None = None,
     program_id: UUID | None = None,
     status: str | None = None,
+    search: str | None = None,
     service: ApplicationService = Depends(get_application_service),
     user: User = Depends(_VIEW_ROLES),
 ) -> ApplicationList:
@@ -64,6 +78,10 @@ async def list_applications(
         counsellor_id=counsellor_id,
         program_id=program_id,
         status=status,
+        search=search,
+        # A student is already pinned to their own rows above; scoping is about
+        # which *staff* see which files.
+        visible_to=None if user.role is UserRole.STUDENT else own_work_scope(user),
     )
     return ApplicationList(
         items=[ApplicationRead.model_validate(a) for a in applications],
@@ -168,6 +186,7 @@ async def accept_application_request(
     application = await service.get_application(application_id)
     if application is None:
         raise NotFoundException("Application not found")
+    _assert_visible_to(user, application)
 
     if application.status is not ApplicationStatus.REQUESTED:
         return ApplicationRead.model_validate(application)
@@ -198,6 +217,7 @@ async def change_application_status(
     application = await service.get_application(application_id)
     if application is None:
         raise NotFoundException("Application not found")
+    _assert_visible_to(user, application)
 
     if requirement_for(payload.status) is not None:
         raise BadRequestException(
@@ -348,6 +368,7 @@ async def update_application(
     application = await service.get_application(application_id)
     if application is None:
         raise NotFoundException("Application not found")
+    _assert_visible_to(user, application)
     updated = await service.update_application(application, payload.model_dump(exclude_unset=True))
     return ApplicationRead.model_validate(updated)
 

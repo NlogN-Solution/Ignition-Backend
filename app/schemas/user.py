@@ -97,6 +97,10 @@ class UserRead(UserBase):
     has_portal_access: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    #: Set only on a soft-deleted account, and only reachable through
+    #: `GET /users/{id}?include_deleted=true`. Present so a staff screen
+    #: resolving a name on a record that outlived its account can say so.
+    deleted_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

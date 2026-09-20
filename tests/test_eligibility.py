@@ -211,6 +211,35 @@ async def test_staff_can_search_and_filter(client: AsyncClient, user_factory, au
     assert (await client.get(STAFF, params={"unassigned": True}, headers=headers)).json()["total"] == 2
 
 
+async def test_staff_can_find_an_assessment_by_the_reference_the_student_was_given(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """The one number a student has. If the staff queue cannot match it, the
+    confirmation screen is handing out a reference that leads nowhere."""
+    await client.post(SUBMIT, json=_submission())
+    mine = await client.post(
+        SUBMIT,
+        json=_submission(
+            contact={"full_name": "Bikash Shrestha", "email": "bikash@example.com", "phone": "+9779811111111"},
+        ),
+    )
+    reference = mine.json()["reference"]
+    headers = await auth_headers(await user_factory(UserRole.ADMIN))
+
+    found = await client.get(STAFF, params={"search": reference}, headers=headers)
+    assert found.json()["total"] == 1
+    assert found.json()["items"][0]["contact"]["full_name"] == "Bikash Shrestha"
+
+    # Read back over the phone in pairs, and typed in lower case.
+    spaced = f"{reference[:4]}-{reference[4:]}".lower()
+    assert (await client.get(STAFF, params={"search": spaced}, headers=headers)).json()["total"] == 1
+
+    # A name is not a reference, even when its letters happen to be hex: a
+    # one-character prefix match would return a sixteenth of the table.
+    by_name = await client.get(STAFF, params={"search": "Bikash"}, headers=headers)
+    assert by_name.json()["total"] == 1
+
+
 async def test_the_existing_lead_workflow_drives_the_assessment(
     client: AsyncClient, user_factory, auth_headers
 ) -> None:

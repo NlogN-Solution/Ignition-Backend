@@ -13,6 +13,7 @@ from ..api.deps import get_db_session
 from ..models import Message, User
 from ..models.enums import NotificationType
 from ..schemas.message import MessageCreate, MessageList, MessageRead, MessageSenderSummary, MessageThreadSummary
+from ..services.message_scope import assert_thread_visible, visible_students_condition
 from ..services.notification_service import NotificationService, get_notification_service
 
 router = APIRouter(prefix="/messages", tags=["Messages"])
@@ -36,11 +37,15 @@ def _with_sender_summary(message: Message) -> MessageRead:
 @router.get("/threads", response_model=list[MessageThreadSummary], summary="List student conversations")
 async def list_message_threads(
     session: AsyncSession = Depends(get_db_session),
-    _: User = Depends(require_role(*STAFF_MESSAGE_ROLES)),
+    staff: User = Depends(require_role(*STAFF_MESSAGE_ROLES)),
 ) -> list[MessageThreadSummary]:
-    result = await session.execute(
-        select(Message, User).join(User, User.id == Message.student_id).order_by(Message.created_at.desc())
-    )
+    query = select(Message, User).join(User, User.id == Message.student_id).order_by(Message.created_at.desc())
+    # Narrowed to this caller's conversations plus the unclaimed queue; `None`
+    # means an admin, who sees the lot. See `services/message_scope.py`.
+    condition = visible_students_condition(staff)
+    if condition is not None:
+        query = query.where(condition)
+    result = await session.execute(query)
     threads: dict[UUID, MessageThreadSummary] = {}
     for message, student in result.all():
         if message.is_from_student and not message.is_read:
@@ -71,8 +76,9 @@ async def list_message_threads(
 async def get_student_thread(
     student_id: UUID,
     session: AsyncSession = Depends(get_db_session),
-    _: User = Depends(require_role(*STAFF_MESSAGE_ROLES)),
+    staff: User = Depends(require_role(*STAFF_MESSAGE_ROLES)),
 ) -> MessageList:
+    await assert_thread_visible(session, staff, student_id)
     result = await session.execute(
         select(Message)
         .options(selectinload(Message.sender))
@@ -93,6 +99,9 @@ async def send_staff_message(
     notification_service: NotificationService = Depends(get_notification_service),
     staff: User = Depends(require_role(*STAFF_MESSAGE_ROLES)),
 ) -> MessageRead:
+    # Replying is how a thread gets claimed, so this both refuses a colleague's
+    # conversation and allows an unclaimed one to be picked up.
+    await assert_thread_visible(session, staff, student_id)
     message = Message(
         student_id=student_id,
         sender_id=staff.id,
@@ -119,8 +128,9 @@ async def send_staff_message(
 async def mark_thread_read(
     student_id: UUID,
     session: AsyncSession = Depends(get_db_session),
-    _: User = Depends(require_role(*STAFF_MESSAGE_ROLES)),
+    staff: User = Depends(require_role(*STAFF_MESSAGE_ROLES)),
 ) -> dict[str, int]:
+    await assert_thread_visible(session, staff, student_id)
     result = cast(
         "CursorResult[Any]",
         await session.execute(

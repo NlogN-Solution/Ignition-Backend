@@ -82,7 +82,9 @@ class DashboardService:
         applications = (
             await self.session.scalars(
                 select(Application)
-                .where(Application.student_id == student.id)
+                # A deleted application is gone from the student's dashboard
+                # too, not just from the staff console.
+                .where(Application.student_id == student.id, Application.deleted_at.is_(None))
                 .options(selectinload(Application.program))
             )
         ).all()

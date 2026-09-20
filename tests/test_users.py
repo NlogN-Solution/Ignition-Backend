@@ -229,6 +229,35 @@ async def test_admin_deactivates_and_restores_a_user(client: AsyncClient, user_f
     assert (await client.get(f"{USERS}/{target.id}", headers=headers)).status_code == 200
 
 
+async def test_a_deleted_applicant_can_still_be_named_on_the_records_they_left(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    """Deleting a student does not delete their applications.
+
+    Those rows are still staff-facing and still have to say whose they are, so
+    the applicant column resolves the name with `include_deleted` rather than
+    falling back to an id fragment. `deleted_at` comes back with it, so the
+    screen can label the account as gone instead of implying it is live.
+    """
+    admin = await user_factory(UserRole.ADMIN)
+    target = await user_factory(UserRole.STUDENT)
+    headers = await auth_headers(admin)
+
+    assert (await client.delete(f"{USERS}/{target.id}", headers=headers)).status_code == 200
+    assert (await client.get(f"{USERS}/{target.id}", headers=headers)).status_code == 404
+
+    resolved = await client.get(f"{USERS}/{target.id}", params={"include_deleted": True}, headers=headers)
+    assert resolved.status_code == 200
+    body = resolved.json()
+    assert body["first_name"] == target.first_name
+    assert body["deleted_at"] is not None
+
+    # It does not leak the flag into the listing, which stays a list of live
+    # accounts.
+    listed = await client.get(USERS, params={"role": UserRole.STUDENT.value}, headers=headers)
+    assert all(item["id"] != str(target.id) for item in listed.json()["items"])
+
+
 async def test_an_admin_cannot_deactivate_themselves(client: AsyncClient, user_factory, auth_headers) -> None:
     admin = await user_factory(UserRole.ADMIN)
     response = await client.delete(f"{USERS}/{admin.id}", headers=await auth_headers(admin))

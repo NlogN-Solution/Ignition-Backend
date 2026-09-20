@@ -68,6 +68,18 @@ async def require_paid_portal_access(
 setattr(require_paid_portal_access, AUTH_MARKER, "roles:student")
 
 
+def _exclude_soft_deleted(model: type[Any], query: Any) -> Any:
+    """Drop soft-deleted rows, for the models that have a `deleted_at`.
+
+    Applied here rather than at each call site because this repository is the
+    student portal's only door to its own data: a model gaining soft delete
+    should not require auditing a dozen handlers to stop a deleted record
+    reappearing on the student's screen.
+    """
+    deleted_at = getattr(model, "deleted_at", None)
+    return query if deleted_at is None else query.where(deleted_at.is_(None))
+
+
 class StudentScopedRepository:
     """Query helper that cannot return another student's row.
 
@@ -92,6 +104,7 @@ class StudentScopedRepository:
         options: Sequence[Any] | None = None,
     ) -> Select[tuple[ModelT]]:
         query = select(model).where(getattr(model, column) == self.student.id)
+        query = _exclude_soft_deleted(model, query)
         # Loader options belong here rather than at the call site: a response
         # model with a nested relationship will otherwise lazy-load during
         # serialization, outside the async greenlet, and raise MissingGreenlet.
@@ -109,7 +122,10 @@ class StudentScopedRepository:
         limit: int = 20,
     ) -> tuple[list[ModelT], int]:
         query = self.scoped(model, column, options)
-        count_query = select(func.count()).select_from(model).where(getattr(model, column) == self.student.id)
+        count_query = _exclude_soft_deleted(
+            model,
+            select(func.count()).select_from(model).where(getattr(model, column) == self.student.id),
+        )
         for condition in conditions or []:
             query = query.where(condition)
             count_query = count_query.where(condition)

@@ -9,12 +9,13 @@ to. What lives here is creating the pair, and reading them back joined.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -52,6 +53,21 @@ def _split_name(full_name: str) -> tuple[str, str | None]:
     if len(parts) == 1:
         return parts[0], None
     return parts[0], " ".join(parts[1:])
+
+
+#: A reference is the first group of a UUID: eight hex characters. Four is the
+#: fewest worth prefix-matching on — below that almost any short word qualifies.
+_REFERENCE = re.compile(r"^[0-9a-f]{4,8}$")
+
+
+def _reference_prefix(search: str) -> str | None:
+    """`search` as an assessment-reference prefix, or None if it is not one.
+
+    Spaces and dashes are forgiven because people read a reference aloud in
+    pairs and type it back the same way.
+    """
+    candidate = re.sub(r"[\s-]", "", search).lower()
+    return candidate if _REFERENCE.match(candidate) else None
 
 
 class EligibilityService:
@@ -245,15 +261,28 @@ class EligibilityService:
         filters = []
         if search:
             needle = f"%{search.lower()}%"
-            filters.append(
-                or_(
-                    func.lower(Lead.first_name).like(needle),
-                    func.lower(func.coalesce(Lead.last_name, "")).like(needle),
-                    func.lower(func.coalesce(Lead.email, "")).like(needle),
-                    Lead.phone.like(needle),
-                    func.lower(func.coalesce(EligibilityAssessment.preferred_course, "")).like(needle),
-                )
-            )
+            clauses = [
+                func.lower(Lead.first_name).like(needle),
+                func.lower(func.coalesce(Lead.last_name, "")).like(needle),
+                func.lower(func.coalesce(Lead.email, "")).like(needle),
+                Lead.phone.like(needle),
+                func.lower(func.coalesce(EligibilityAssessment.preferred_course, "")).like(needle),
+            ]
+            # The reference a student quotes on the phone ("28C7D3CD") is the
+            # first group of this row's UUID, uppercased — see the public
+            # `/eligibility` response. Staff type it into the same box they
+            # type a name into, so it has to match here or the number the
+            # student was given leads nowhere.
+            #
+            # Only input *shaped* like a reference gets the extra clause. A
+            # looser rule — strip the non-hex characters from whatever was
+            # typed and prefix-match the rest — turns a search for "Rajiv" into
+            # `id LIKE 'a%'` and quietly returns a sixteenth of the table
+            # alongside the actual Rajivs.
+            reference = _reference_prefix(search)
+            if reference:
+                clauses.append(cast(EligibilityAssessment.id, String).like(f"{reference}%"))
+            filters.append(or_(*clauses))
         if overall_status:
             filters.append(EligibilityAssessment.overall_status == overall_status)
         if lead_status:
