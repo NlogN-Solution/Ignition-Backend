@@ -232,23 +232,6 @@ VALUES
     ('interview.complete',  'Mock interview completed',   15, 'interviews',   false)
 ON CONFLICT (action) DO NOTHING;
 
--- ------------------------------------------------- journey checklist template
--- Students receive their copy on first read of /student/me/checklist, so adding
--- a rung here reaches everyone without a backfill. `due_after_days` is an offset
--- from the day the student joined, not an absolute date.
-INSERT INTO checklist_template_items (key, title, description, stage, "order", depends_on_key, due_after_days)
-VALUES
-    ('passport',  'Secure your passport',                'Apply for or renew a passport valid for at least six months beyond your intake.', 'Passport',  1, NULL,        30),
-    ('ielts',     'Sit the IELTS exam',                  'Book and complete IELTS with a band score of 7.0 or higher.',                     'IELTS',     2, 'passport',  75),
-    ('sop',       'Write your Statement of Purpose',     'Draft, review with your counsellor and finalise your SOP.',                       'SOP',       3, 'ielts',    105),
-    ('lor',       'Collect Letters of Recommendation',   'Request two academic references and upload the signed letters.',                  'LOR',       4, 'sop',      120),
-    ('apply',     'Submit your applications',            'Complete and submit applications to every shortlisted university.',               'Apply',     5, 'lor',      150),
-    ('interview', 'Pass the admission interview',        'Practise with the AI interview module, then attend the university interview.',    'Interview', 6, 'apply',    180),
-    ('offer',     'Accept your offer',                   'Review offer letters, compare conditions and confirm your place.',                'Offer',     7, 'interview',210),
-    ('visa',      'Apply for your student visa',         'Assemble financial documents and lodge the student visa application.',            'Visa',      8, 'offer',    240),
-    ('departure', 'Prepare for departure',               'Book flights, arrange accommodation and complete pre-departure briefing.',        'Departure', 9, 'visa',     270)
-ON CONFLICT (key) DO NOTHING;
-
 -- ---------------------------------------------------------- interview types
 INSERT INTO interview_types (key, name, description, duration_minutes, passing_score)
 VALUES
@@ -418,7 +401,7 @@ seeded database should show at least:
 | attendance_policies | 1 |
 | progress_milestones | 8 |
 | points_rules | 5 |
-| checklist_template_items | 9 |
+| checklist_template_items | 0 |
 | interview_types | 3 |
 | interview_questions | 11 |
 | interview_feedback_bands | 4 |
@@ -526,7 +509,6 @@ This file is a hand-maintained transcription. If you change the data in
 | — | `attendance_policies` | `is_singleton` |
 | `MILESTONES` | `progress_milestones` | `key` |
 | `POINTS_RULES` | `points_rules` | `action` |
-| `CHECKLIST_TEMPLATE` | `checklist_template_items` | `key` |
 | `INTERVIEW_TYPES` | `interview_types` | `key` |
 | `INTERVIEW_QUESTIONS` | `interview_questions` | `(type_id, order)` (no DB constraint — `NOT EXISTS`) |
 | `INTERVIEW_FEEDBACK_BANDS` | `interview_feedback_bands` | `key` |

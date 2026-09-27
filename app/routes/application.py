@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from ..api.auth import require_role
 from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..api.scoping import may_see_record, own_work_scope
 from ..core.uploads import DOCUMENT_EXTENSIONS, DOCUMENT_FOLDER, store_upload
 from ..models import Application, Document, User
@@ -56,8 +57,8 @@ def _assert_visible_to(user: User, application: Application) -> None:
 
 @router.get("", response_model=ApplicationList, summary="List applications")
 async def list_applications(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     student_id: UUID | None = None,
     counsellor_id: UUID | None = None,
     program_id: UUID | None = None,
@@ -151,7 +152,9 @@ async def create_application(
     decided to work it. Only the student-facing route opens one as `requested`,
     which is the queue this endpoint's caller is on the other side of.
     """
-    application = await service.create_application(payload.model_dump())
+    data = payload.model_dump()
+    await service.validate_references(data)
+    application = await service.create_application(data)
     return ApplicationRead.model_validate(application)
 
 
@@ -369,7 +372,9 @@ async def update_application(
     if application is None:
         raise NotFoundException("Application not found")
     _assert_visible_to(user, application)
-    updated = await service.update_application(application, payload.model_dump(exclude_unset=True))
+    data = payload.model_dump(exclude_unset=True)
+    await service.validate_references(data, current=application)
+    updated = await service.update_application(application, data)
     return ApplicationRead.model_validate(updated)
 
 

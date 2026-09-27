@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 
 from ..api.auth import require_public
 from ..api.exceptions import NotFoundException
+from ..api.pagination import MAX_PAGE
 from ..core.public_cache import CachedRoute
 from ..core.rate_limit import APPLY_INTENT_RATE_LIMIT, ELIGIBILITY_RATE_LIMIT, limiter
 from ..models.enums import EligibilityOverall
@@ -36,6 +37,7 @@ from ..schemas.eligibility import EligibilityResultPublic, EligibilitySubmission
 from ..schemas.public import (
     ContentListPublic,
     ContentPublic,
+    CourseDetailPublic,
     CourseFacets,
     CourseProfileDetail,
     CourseProfileListPublic,
@@ -44,10 +46,9 @@ from ..schemas.public import (
     CourseSearchResult,
     CourseUniversity,
     CourseUniversityProfile,
+    IntakePublic,
     PostListPublic,
     PostPublic,
-    CourseDetailPublic,
-    IntakePublic,
     ScholarshipListPublic,
     Taxonomies,
     UniversityDetail,
@@ -84,7 +85,7 @@ def _cache(response: Response) -> None:
 #: `limit` is clamped on every paginated public route. There is no max-limit
 #: anywhere else in this API, and `?limit=999999` against ~4,800 offerings is a
 #: free denial of service — see this module's docstring, property 4.
-PageParam = Annotated[int, Query(ge=1)]
+PageParam = Annotated[int, Query(ge=1, le=MAX_PAGE)]
 LimitParam = Annotated[int, Query(ge=1, le=100)]
 
 
@@ -573,8 +574,10 @@ def _content_payload(page: Any, *, with_blocks: bool = True) -> dict[str, Any]:
         "related": page.related,
         "reading_minutes": page.reading_minutes,
         "published_at": page.published_at,
+        "cover_image_url": page.cover_image_url,
     }
     if with_blocks:
+        payload["body_html"] = page.body_html
         blocks = [
             {"block_type": block.block_type.value, "data": block.data}
             for block in sorted(page.blocks, key=lambda item: (item.display_order, item.created_at))

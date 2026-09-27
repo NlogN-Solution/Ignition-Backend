@@ -63,8 +63,14 @@ class LeaveRequest(Base, UUIDPKMixin, TimestampMixin):
     # what an already-submitted request "costs" against the balance.
     requested_days: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str | None] = mapped_column(Text)
+    #: Legacy only: the public URL of an attachment uploaded before
+    #: FAPI-SEC-006 was fixed. New attachments are private and leave this null.
     attachment_url: Mapped[str | None] = mapped_column(Text)
     attachment_name: Mapped[str | None] = mapped_column(String(255))
+    #: Generated name of a private (`authenticated`) Cloudinary asset. Served
+    #: only through `GET /leave-requests/{id}/attachment`, which checks the
+    #: caller is the requester or a manager first.
+    attachment_stored_file_name: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[LeaveStatus] = mapped_column(
         enum_type(LeaveStatus, "leave_status", create_type=False),
         nullable=False,
@@ -79,6 +85,10 @@ class LeaveRequest(Base, UUIDPKMixin, TimestampMixin):
 
     user: Mapped[User] = relationship("User", foreign_keys=[user_id])
     leave_type: Mapped[LeaveType] = relationship("LeaveType")
+
+    @property
+    def has_attachment(self) -> bool:
+        return bool(self.attachment_stored_file_name or self.attachment_url)
     reviewer: Mapped[User | None] = relationship("User", foreign_keys=[reviewed_by])
 
     __table_args__ = (

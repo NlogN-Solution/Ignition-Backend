@@ -438,6 +438,9 @@ class ContentPublic(BaseModel):
     related: list[dict[str, Any]] | None = None
     reading_minutes: int | None = None
     published_at: datetime | None = None
+    cover_image_url: str | None = None
+    #: Only on the single-page read, like `blocks`.
+    body_html: str | None = None
     blocks: list[BlockPublic] | None = None
 
     model_config = _FROM_ORM

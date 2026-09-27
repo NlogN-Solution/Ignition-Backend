@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from ..api.auth import require_role
+from ..api.pagination import LimitParam, PageParam
 from ..models import User
 from ..models.enums import UserRole
 from ..schemas.employees import EmployeeDirectoryEntry, EmployeeDirectoryList
@@ -15,8 +16,8 @@ router = APIRouter(prefix="/employees", tags=["People Directory"])
 
 @router.get("", response_model=EmployeeDirectoryList, summary="List staff directory (People > Directory)")
 async def list_employees(
-    page: int = 1,
-    limit: int = 24,
+    page: PageParam = 1,
+    limit: LimitParam = 24,
     search: str | None = None,
     department_id: UUID | None = None,
     employment_status: str | None = None,

@@ -56,6 +56,11 @@ from ..models import (
 )
 from ..models.enums import CourseLevel, CourseSubject
 
+#: Onboarding wording for a catalogue subject, lower-cased. The student
+#: portal's "Preferred course" dropdown says "Computer Science" for the
+#: catalogue's `Computing` (student-frontend src/api/catalogue.js, subjectLabel).
+SUBJECT_ALIASES: dict[str, CourseSubject] = {"computer science": CourseSubject.COMPUTING}
+
 #: How many offerings a row on the feed holds. A horizontal row that scrolls
 #: forever is a grid with extra steps; twelve is enough to feel browsable and
 #: few enough that the section still reads as a curated answer.
@@ -198,10 +203,11 @@ class RecommendationService:
                 stated = (profile.preferences or {}).get("intendedStudyArea")
                 if isinstance(stated, str) and stated.strip():
                     needle = stated.strip().lower()
-                    for subject in CourseSubject:
-                        if subject.value.lower() == needle:
-                            signals.subjects = [subject]
-                            break
+                    matched = SUBJECT_ALIASES.get(needle) or next(
+                        (subject for subject in CourseSubject if subject.value.lower() == needle), None
+                    )
+                    if matched is not None:
+                        signals.subjects = [matched]
         return signals
 
     # --- section builders ---------------------------------------------------

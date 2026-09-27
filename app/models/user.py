@@ -14,6 +14,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    func,
     text,
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB
@@ -267,6 +268,11 @@ class User(Base, UUIDPKMixin, TimestampMixin, SoftDeleteMixin):
         Index("idx_users_status", "status"),
         Index("idx_users_role", "role"),
         Index("idx_users_last_login_at", "last_login_at"),
+        # One account per mailbox, whatever the capitalisation (FAPI-SEC-009).
+        # The plain `unique=True` on the column compares bytes, so it let
+        # `A@x.com` and `a@x.com` coexist. Inputs are lower-cased on the way
+        # in (schemas/email.py); this is what holds when something forgets.
+        Index("uq_users_email_lower", func.lower(email), unique=True),
     )
 
     def __repr__(self) -> str:
@@ -326,23 +332,9 @@ class StudentProfile(Base, UUIDPKMixin, TimestampMixin, SoftDeleteMixin):
     #: columns above remain canonical for anything staff or reports read.
     education: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
-    #: Ported from the Django backend's `profile_completion`. Counts the fields
-    #: the portal's completeness meter treats as required.
-    @property
-    def profile_completion(self) -> int:
-        required = (
-            self.nationality,
-            self.passport_number,
-            self.current_address,
-            self.education_level,
-            self.graduation_year,
-            self.preferred_country,
-            self.preferred_program,
-            self.emergency_contact_name,
-            self.emergency_contact_phone,
-        )
-        filled = sum(1 for value in required if value not in (None, ""))
-        return round(filled / len(required) * 100)
+    # Completion is computed by services/profile_completion.py, not here: it
+    # reads the account and three related tables, which a property cannot do
+    # under asyncio.
 
     user: Mapped[User] = relationship(back_populates="student_profile")
     english_tests: Mapped[list[StudentEnglishTest]] = relationship(

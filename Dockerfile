@@ -40,4 +40,10 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
 
 # Render (and some other hosts) assign the listen port via $PORT at runtime
 # rather than honoring EXPOSE; default to 8000 for docker-compose/local use.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+#
+# Client IPs behind the proxy are resolved in the app (core/client_ip.py,
+# TRUSTED_PROXY_HOPS), NOT with uvicorn's `--forwarded-allow-ips='*'`: that
+# trusts the *leftmost* X-Forwarded-For entry, which the client controls, and
+# would make every per-IP rate limit spoofable (FAPI-SEC-010).
+# `--no-server-header` drops the version banner.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --no-server-header"]

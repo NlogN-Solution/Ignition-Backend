@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import uuid
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import TypeVar
 
 import jwt
-from fastapi import Depends, Security
+from fastapi import Depends, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.security import verify_token
-from ..models import User
+from ..models import User, UserSession
 from ..models.enums import STAFF_ROLES, UserRole, UserStatus
 from .deps import get_db_session
 from .exceptions import ForbiddenException, UnauthorizedException
@@ -32,7 +34,15 @@ def _marks_auth(func: F, level: str) -> F:
     return func
 
 
+#: What a staff account holding a temporary password may still do: see who it
+#: is, change the password, or leave.
+_PASSWORD_CHANGE_ALLOWED_PATHS = frozenset(
+    {"/api/v1/auth/me", "/api/v1/auth/change-password", "/api/v1/auth/logout"}
+)
+
+
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Security(security),
     session: AsyncSession = Depends(get_db_session),
 ) -> User:
@@ -50,10 +60,32 @@ async def get_current_user(
         raise UnauthorizedException("Invalid access token")
 
     user_id = payload.get("sub")
-    if not user_id:
+    session_id = payload.get("sid")
+    if not user_id or not session_id:
         raise UnauthorizedException("Invalid token payload")
+    try:
+        user_uuid = uuid.UUID(str(user_id))
+        session_uuid = uuid.UUID(str(session_id))
+    except ValueError:
+        raise UnauthorizedException("Invalid token payload") from None
 
-    result = await session.execute(select(User).where(User.id == user_id, User.deleted_at.is_(None)))
+    # The session the token was issued with must still be live (FAPI-SEC-016).
+    # Logout, password change, an admin reset and refresh-token reuse all
+    # revoke sessions; checking here makes that take effect on the next request
+    # instead of when the access token happens to expire. One indexed
+    # primary-key lookup per request.
+    live_session = await session.scalar(
+        select(UserSession.id).where(
+            UserSession.id == session_uuid,
+            UserSession.user_id == user_uuid,
+            UserSession.revoked_at.is_(None),
+            UserSession.expires_at > datetime.now(UTC),
+        )
+    )
+    if live_session is None:
+        raise UnauthorizedException("Session has ended")
+
+    result = await session.execute(select(User).where(User.id == user_uuid, User.deleted_at.is_(None)))
     user = result.scalar_one_or_none()
     if user is None:
         raise UnauthorizedException("User not found")
@@ -63,10 +95,35 @@ async def get_current_user(
     if user.status is not UserStatus.ACTIVE:
         raise ForbiddenException("This account is not active")
 
+    # `must_change_password` used to be enforced only by the admin console's
+    # router, so a temporary password — or the published seed password on a
+    # hosted database (scripts/SEED_NEON.md) — gave full API access to anyone
+    # calling the API directly. For staff it is now a server-side gate. Student
+    # temporary passwords are random, per-account and shown once, and the
+    # student portal has no forced-change screen, so they are not gated here.
+    if user.must_change_password and user.role in STAFF_ROLES and request.url.path not in _PASSWORD_CHANGE_ALLOWED_PATHS:
+        raise ForbiddenException("Password change required")
+
     return user
 
 
 _marks_auth(get_current_user, "authenticated")
+
+
+async def get_current_session_id(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+) -> uuid.UUID | None:
+    """The `user_sessions` id behind the presented access token.
+
+    Only meaningful alongside `get_current_user`, which has already verified
+    the token and that the session is live; this just reads the claim so a
+    handler can act on *this* session (keep it on password change, end it on
+    logout).
+    """
+    try:
+        return uuid.UUID(str(verify_token(credentials.credentials).get("sid")))
+    except (jwt.PyJWTError, ValueError):
+        return None
 
 
 def require_role(*roles: UserRole | str) -> Callable[..., Awaitable[User]]:

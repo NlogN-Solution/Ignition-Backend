@@ -71,6 +71,11 @@ class ContentPage(Base, UUIDPKMixin, TimestampMixin):
     #: [{label, href}]
     related: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     reading_minutes: Mapped[int | None] = mapped_column(Integer)
+    #: The article or guide body written in the admin's rich-text editor.
+    #: Sanitised on the way in (core/html.py). When set, the public site renders
+    #: it instead of the blocks; blocks stay for pages built from components.
+    body_html: Mapped[str | None] = mapped_column(Text)
+    cover_image_url: Mapped[str | None] = mapped_column(Text)
 
     published_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")

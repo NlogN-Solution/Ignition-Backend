@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends
 
 from ..api.auth import get_current_user, require_role
 from ..api.exceptions import NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..core.public_cache import PurgingRoute
+from ..models import User
 from ..models.enums import UserRole
 from ..schemas.academic import (
     CountryCreate,
@@ -47,6 +49,10 @@ from ..services.academic_service import (
 #: `core/public_cache.py`.
 router = APIRouter(tags=["Academic"], route_class=PurgingRoute)
 
+
+def _is_student(user: User) -> bool:
+    return user.role is UserRole.STUDENT
+
 # Reads are open to any authenticated user, writes to admin/super_admin. Note
 # that "any authenticated user" includes students here, and deliberately so —
 # browsing countries, universities and programs is what the student portal's
@@ -68,8 +74,8 @@ _MANAGE_PUBLIC_CATALOG = require_role(UserRole.ADMIN, UserRole.MARKETING)
 
 @router.get("/countries", response_model=CountryList, summary="List countries")
 async def list_countries(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     is_active: bool | None = None,
     service: CountryService = Depends(get_country_service),
@@ -130,14 +136,14 @@ async def delete_country(
 
 @router.get("/universities", response_model=UniversityList, summary="List universities")
 async def list_universities(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     country_id: UUID | None = None,
     is_active: bool | None = None,
     is_partner: bool | None = None,
     service: UniversityService = Depends(get_university_service),
-    _: object = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> UniversityList:
     items, total = await service.list(
         page,
@@ -146,6 +152,10 @@ async def list_universities(
         country_id=country_id,
         is_active=is_active,
         is_partner=is_partner,
+        # Students browse the catalogue too, but only what is live: a
+        # self-registered account must not be a window onto unpublished
+        # drafts (the FAPI-SEC-008 class of leak).
+        published_only=_is_student(user),
     )
     return UniversityList(items=items, total=total, page=page, limit=limit)
 
@@ -154,10 +164,10 @@ async def list_universities(
 async def get_university(
     university_id: UUID,
     service: UniversityService = Depends(get_university_service),
-    _: object = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> UniversityRead:
     university = await service.get(university_id)
-    if university is None:
+    if university is None or (_is_student(user) and not university.is_published):
         raise NotFoundException("University not found")
     return UniversityRead.model_validate(university)
 
@@ -201,14 +211,14 @@ async def delete_university(
 
 @router.get("/programs", response_model=ProgramList, summary="List programs")
 async def list_programs(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     university_id: UUID | None = None,
     degree_level: str | None = None,
     is_active: bool | None = None,
     service: ProgramService = Depends(get_program_service),
-    _: object = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> ProgramList:
     items, total = await service.list(
         page,
@@ -217,6 +227,7 @@ async def list_programs(
         university_id=university_id,
         degree_level=degree_level,
         is_active=is_active,
+        published_only=_is_student(user),
     )
     return ProgramList(items=items, total=total, page=page, limit=limit)
 
@@ -225,10 +236,10 @@ async def list_programs(
 async def get_program(
     program_id: UUID,
     service: ProgramService = Depends(get_program_service),
-    _: object = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> ProgramRead:
     program = await service.get(program_id)
-    if program is None:
+    if program is None or (_is_student(user) and not await service.is_public(program)):
         raise NotFoundException("Program not found")
     return ProgramRead.model_validate(program)
 
@@ -272,14 +283,16 @@ async def delete_program(
 
 @router.get("/intakes", response_model=IntakeList, summary="List intakes")
 async def list_intakes(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     program_id: UUID | None = None,
     is_active: bool | None = None,
     service: IntakeService = Depends(get_intake_service),
-    _: object = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> IntakeList:
-    items, total = await service.list(page, limit, program_id=program_id, is_active=is_active)
+    items, total = await service.list(
+        page, limit, program_id=program_id, is_active=is_active, published_only=_is_student(user)
+    )
     return IntakeList(items=items, total=total, page=page, limit=limit)
 
 
@@ -287,11 +300,15 @@ async def list_intakes(
 async def get_intake(
     intake_id: UUID,
     service: IntakeService = Depends(get_intake_service),
-    _: object = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> IntakeRead:
     intake = await service.get(intake_id)
     if intake is None:
         raise NotFoundException("Intake not found")
+    if _is_student(user):
+        program = await ProgramService(service.session).get(intake.program_id)
+        if program is None or not await ProgramService(service.session).is_public(program):
+            raise NotFoundException("Intake not found")
     return IntakeRead.model_validate(intake)
 
 

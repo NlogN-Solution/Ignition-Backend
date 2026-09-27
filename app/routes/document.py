@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response
+from sqlalchemy import select
 
 from ..api.auth import require_role
-from ..api.exceptions import ForbiddenException, NotFoundException, PaymentRequiredException
+from ..api.exceptions import (
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    NotFoundException,
+    PaymentRequiredException,
+)
+from ..api.pagination import LimitParam, PageParam
+from ..api.scoping import assert_may_see_student, student_visibility_condition
 from ..core.uploads import (
     DOCUMENT_EXTENSIONS,
     DOCUMENT_FOLDER,
@@ -15,7 +25,7 @@ from ..core.uploads import (
     build_download_url,
     store_upload,
 )
-from ..models import Document, User
+from ..models import Application, Document, User
 from ..models.enums import DocumentStatus, DocumentType, NotificationType, UserRole
 from ..schemas.document import (
     DocumentCommentRequest,
@@ -73,6 +83,23 @@ def _assert_visible_to(user: User, document: Document) -> None:
         raise ForbiddenException("Forbidden")
 
 
+async def _document_or_404(service: DocumentService, user: User, document_id: UUID) -> Document:
+    """Load a document and apply both halves of the visibility rule.
+
+    Students: their own documents only (403, as before). Staff: a counsellor
+    only for their own or unclaimed students (FAPI-SEC-014), with a 404 so the
+    id does not confirm whose file it is. A staff member's own record is
+    always theirs.
+    """
+    document = await service.get_document(document_id)
+    if document is None:
+        raise NotFoundException("Document not found")
+    _assert_visible_to(user, document)
+    if user.role is not UserRole.STUDENT and document.student_id != user.id:
+        await assert_may_see_student(service.session, user, document.student_id, "Document not found")
+    return document
+
+
 async def _assert_entitled(user: User, document: Document, access: PortalAccessService) -> None:
     """The paywall, enforced where the bytes are.
 
@@ -105,8 +132,8 @@ async def _assert_entitled(user: User, document: Document, access: PortalAccessS
 
 @router.get("", response_model=DocumentList, summary="List documents")
 async def list_documents(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     student_id: UUID | None = None,
     uploaded_by: UUID | None = None,
     status: str | None = None,
@@ -126,6 +153,7 @@ async def list_documents(
         status=status,
         document_type=document_type,
         search=search,
+        visible=None if user.role is UserRole.STUDENT else student_visibility_condition(user, Document.student_id),
     )
     return DocumentList(
         items=[DocumentRead.model_validate(d) for d in documents],
@@ -138,14 +166,16 @@ async def list_documents(
 # Registered before `/{document_id}` so these literal paths always win.
 @router.get("/folders", response_model=DocumentFolderList, summary="List student document folders")
 async def list_document_folders(
-    page: int = 1,
-    limit: int = 24,
+    page: PageParam = 1,
+    limit: LimitParam = 24,
     search: str | None = None,
     sort: str = "recent",
     service: DocumentService = Depends(get_document_service),
     user: User = Depends(_REVIEW_ROLES),
 ) -> DocumentFolderList:
-    folders, total = await service.list_student_folders(page, limit, search=search, sort=sort)
+    folders, total = await service.list_student_folders(
+        page, limit, search=search, sort=sort, visible=student_visibility_condition(user, User.id)
+    )
     return DocumentFolderList(
         items=[DocumentFolderRead(**dict(folder)) for folder in folders],
         total=total,
@@ -160,6 +190,7 @@ async def get_document_folder(
     service: DocumentService = Depends(get_document_service),
     user: User = Depends(_REVIEW_ROLES),
 ) -> DocumentFolderRead:
+    await assert_may_see_student(service.session, user, student_id, "No documents found for this student")
     folder = await service.get_student_folder(student_id)
     if folder is None:
         raise NotFoundException("No documents found for this student")
@@ -183,6 +214,25 @@ async def upload_document(
     # too — it let any caller attribute an upload to someone else.
     if user.role is UserRole.STUDENT:
         student_id = user.id
+    else:
+        # Staff name the student in the form; it has to be a student. It used
+        # to accept any id — a staff account, or one that does not exist (a 500
+        # from the foreign key).
+        # Their own record is allowed too (it lands `pending` — see below).
+        if student_id != user.id:
+            target = await service.session.get(User, student_id)
+            if target is None or target.deleted_at is not None or target.role is not UserRole.STUDENT:
+                raise NotFoundException("Student not found")
+            await assert_may_see_student(service.session, user, student_id, "Student not found")
+
+    if application_id is not None:
+        # The application the file is filed against must be that student's
+        # (FAPI-SEC-004). Checked for staff too: filing one student's passport
+        # on another's application is a data leak whoever does it. Done
+        # *before* the upload so a refused request stores nothing.
+        application = await service.session.get(Application, application_id)
+        if application is None or application.deleted_at is not None or application.student_id != student_id:
+            raise NotFoundException("Application not found")
 
     stored = await store_upload(file, DOCUMENT_EXTENSIONS, folder=DOCUMENT_FOLDER, private=True)
 
@@ -251,10 +301,7 @@ async def get_document_link(
     401 before they ever reached the redirect. This hands the caller the signed
     URL to open instead, so the auth happens on the XHR where the token lives.
     """
-    document = await service.get_document(document_id)
-    if document is None:
-        raise NotFoundException("Document not found")
-    _assert_visible_to(user, document)
+    document = await _document_or_404(service, user, document_id)
     await _assert_entitled(user, document, access)
 
     url = build_download_url(
@@ -287,10 +334,7 @@ async def download_document(
     rule as the metadata, then redirects to a Cloudinary URL that is itself
     signed and short-lived rather than public.
     """
-    document = await service.get_document(document_id)
-    if document is None:
-        raise NotFoundException("Document not found")
-    _assert_visible_to(user, document)
+    document = await _document_or_404(service, user, document_id)
     await _assert_entitled(user, document, access)
 
     return build_download_response(
@@ -308,10 +352,7 @@ async def get_document(
     service: DocumentService = Depends(get_document_service),
     user: User = Depends(_VIEW_ROLES),
 ) -> DocumentRead:
-    document = await service.get_document(document_id)
-    if document is None:
-        raise NotFoundException("Document not found")
-    _assert_visible_to(user, document)
+    document = await _document_or_404(service, user, document_id)
     return DocumentRead.model_validate(document)
 
 
@@ -322,8 +363,36 @@ async def create_document(
     notification_service: NotificationService = Depends(get_notification_service),
     user: User = Depends(_REVIEW_ROLES),
 ) -> DocumentRead:
-    """Staff-only — see `DocumentCreate` for why this is not open to students."""
-    document = await service.create_document(payload.model_dump())
+    """Staff-only — see `DocumentCreate` for why this is not open to students.
+
+    The body names a stored file directly, so two more checks keep it from
+    being a way round the ownership rule: the file may not already belong to a
+    *different* student (a row pointing at student B's passport, owned by
+    student A, would let A download it), and the attribution fields are
+    stamped with the caller rather than taken on trust.
+    """
+    data = payload.model_dump()
+    target = await service.session.get(User, data["student_id"])
+    if target is None or target.deleted_at is not None or target.role is not UserRole.STUDENT:
+        raise NotFoundException("Student not found")
+    await assert_may_see_student(service.session, user, target.id, "Student not found")
+    stored_name = Path(data["stored_file_name"]).name
+    if not stored_name or stored_name in {".", ".."}:
+        raise BadRequestException("Invalid stored_file_name")
+    owner = await service.session.scalar(
+        select(Document.student_id).where(Document.stored_file_name == stored_name).limit(1)
+    )
+    if owner is not None and owner != data["student_id"]:
+        raise ConflictException("That file belongs to another student's record")
+    data["stored_file_name"] = stored_name
+    data["uploaded_by"] = user.id
+    if data.get("status") is DocumentStatus.APPROVED:
+        data["verified_by"] = user.id
+        data["verified_at"] = datetime.now(UTC)
+    else:
+        data["verified_by"] = None
+        data["verified_at"] = None
+    document = await service.create_document(data)
     return DocumentRead.model_validate(document)
 
 
@@ -334,9 +403,7 @@ async def update_document(
     service: DocumentService = Depends(get_document_service),
     user: User = Depends(require_role(UserRole.ADMIN)),
 ) -> DocumentRead:
-    document = await service.get_document(document_id)
-    if document is None:
-        raise NotFoundException("Document not found")
+    document = await _document_or_404(service, user, document_id)
     updated = await service.update_document(document, payload.model_dump(exclude_unset=True))
     return DocumentRead.model_validate(updated)
 
@@ -349,9 +416,7 @@ async def verify_document(
     notification_service: NotificationService = Depends(get_notification_service),
     user: User = Depends(_REVIEW_ROLES),
 ) -> DocumentRead:
-    document = await service.get_document(document_id)
-    if document is None:
-        raise NotFoundException("Document not found")
+    document = await _document_or_404(service, user, document_id)
 
     # The student notification is raised by the DocumentApproved subscriber, not
     # here — see app/core/subscribers.py. Keeping it inline meant any other
@@ -368,9 +433,7 @@ async def reject_document(
     notification_service: NotificationService = Depends(get_notification_service),
     user: User = Depends(_REVIEW_ROLES),
 ) -> DocumentRead:
-    document = await service.get_document(document_id)
-    if document is None:
-        raise NotFoundException("Document not found")
+    document = await _document_or_404(service, user, document_id)
 
     rejected = await service.reject_document(
         document,
@@ -390,9 +453,7 @@ async def comment_document(
     notification_service: NotificationService = Depends(get_notification_service),
     user: User = Depends(_REVIEW_ROLES),
 ) -> DocumentRead:
-    document = await service.get_document(document_id)
-    if document is None:
-        raise NotFoundException("Document not found")
+    document = await _document_or_404(service, user, document_id)
 
     commented = await service.comment_document(document, payload.remarks)
     await notification_service.notify_many(
@@ -414,10 +475,7 @@ async def extract_document_data(
     service: DocumentService = Depends(get_document_service),
     user: User = Depends(_VIEW_ROLES),
 ) -> DocumentExtractionResult:
-    document = await service.get_document(document_id)
-    if document is None:
-        raise NotFoundException("Document not found")
-    _assert_visible_to(user, document)
+    document = await _document_or_404(service, user, document_id)
     return DocumentExtractionResult(**await service.extract_profile_data(document))
 
 
@@ -427,7 +485,5 @@ async def delete_document(
     service: DocumentService = Depends(get_document_service),
     user: User = Depends(require_role(UserRole.ADMIN)),
 ) -> DocumentRead:
-    document = await service.get_document(document_id)
-    if document is None:
-        raise NotFoundException("Document not found")
+    document = await _document_or_404(service, user, document_id)
     return DocumentRead.model_validate(await service.delete_document(document))

@@ -42,6 +42,8 @@ MESSAGE_ATTACHMENT_EXTENSIONS = DOCUMENT_EXTENSIONS | frozenset(
 
 _IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 
+_READ_CHUNK_BYTES = 1024 * 1024
+
 #: Cloudinary folders, one per kind of upload — keeps the dashboard on
 #: Cloudinary's side navigable and lets each kind carry its own retention
 #: policy later without touching the others.
@@ -96,7 +98,7 @@ async def store_upload(
     allowed_extensions: frozenset[str],
     *,
     folder: str,
-    private: bool = False,
+    private: bool,
 ) -> StoredFile:
     """Validate an upload and push it to Cloudinary under a generated name.
 
@@ -108,16 +110,31 @@ async def store_upload(
     which serves no public URL: the asset is only reachable through a signed
     URL (`build_download_url`), minted only after whatever ownership check the
     caller applies first.
+
+    `private` has **no default**. It used to default to False, and the leave
+    route took that default for employees' medical notes, which became public
+    CDN assets (FAPI-SEC-006). Every caller now has to say which it means.
+
+    The file is read in chunks and abandoned the moment it passes the size
+    limit, rather than read whole and measured afterwards (FAPI-SEC-012).
+    Starlette has already spooled large parts to disk, so this bounds what is
+    held in memory to the limit itself.
     """
     extension = Path(file.filename or "").suffix.lower()
     if extension not in allowed_extensions:
         raise BadRequestException(f"Unsupported file type. Allowed: {', '.join(sorted(allowed_extensions))}")
 
-    content = await file.read()
+    limit = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(_READ_CHUNK_BYTES):
+        total += len(chunk)
+        if total > limit:
+            raise BadRequestException(f"File exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB limit")
+        chunks.append(chunk)
+    content = b"".join(chunks)
     if not content:
         raise BadRequestException("Uploaded file is empty")
-    if len(content) > settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024:
-        raise BadRequestException(f"File exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB limit")
 
     stored_file_name = f"{uuid4()}{extension}"
 
@@ -173,7 +190,8 @@ def build_download_url(
     lets staff set that column directly, so a `folder`-escaping public_id must
     not reach Cloudinary unsanitized.
 
-    **These URLs are signed, not time-limited.** This used to pass
+    **Without `CLOUDINARY_AUTH_TOKEN_KEY` these URLs are signed, not
+    time-limited** (set it to make them expire — see config). This used to pass
     `expires_at=now+300` and describe itself as expiring in a few minutes. It
     does not: `cloudinary_url` silently ignores `expires_at` for the
     `authenticated` delivery type — the parameter is only honoured with
@@ -194,13 +212,26 @@ def build_download_url(
         return None
 
     extension = Path(safe_name).suffix.lower()
+    options: dict[str, object] = {} if inline else {"flags": f"attachment:{_attachment_name(download_name)}"}
+    if settings.CLOUDINARY_AUTH_TOKEN_KEY:
+        # FAPI-SEC-013: with token-based authentication enabled on the account,
+        # the URL carries an `__cld_token__` that expires — so a link that
+        # leaks through history, a referrer or a pasted ticket stops working
+        # after a few minutes instead of forever.
+        #
+        # The SDK only mints the token when `sign_url` is *also* set; with
+        # `auth_token` alone it silently returns a bare, unsigned URL.
+        options["auth_token"] = {
+            "key": settings.CLOUDINARY_AUTH_TOKEN_KEY,
+            "duration": settings.CLOUDINARY_URL_TTL_SECONDS,
+        }
     url, _ = cloudinary.utils.cloudinary_url(
         f"{folder}/{safe_name}",
         resource_type=_resource_type_for(extension),
         type="authenticated",
         sign_url=True,
         secure=True,
-        **({} if inline else {"flags": f"attachment:{_attachment_name(download_name)}"}),
+        **options,
     )
     return url
 
@@ -237,4 +268,6 @@ def build_download_response(
     url = build_download_url(safe_name, folder=folder, download_name=download_name, inline=inline)
     if url is None:  # pragma: no cover - only reachable if ENVIRONMENT flips mid-request
         raise NotFoundException("File not found")
-    return RedirectResponse(url, status_code=307)
+    # The redirect target is a bearer credential for the file; keep it out of
+    # every cache between here and the browser.
+    return RedirectResponse(url, status_code=307, headers={"Cache-Control": "private, no-store"})

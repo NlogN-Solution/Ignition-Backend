@@ -17,7 +17,6 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.exc import IntegrityError
 
 from app.models.enums import UserRole
 
@@ -145,8 +144,14 @@ async def test_slug_is_unique(client: AsyncClient, user_factory, auth_headers) -
     country = await _country(client, headers)
     await _university(client, headers, country["id"])
 
-    with pytest.raises(IntegrityError):
-        await _university(client, headers, country["id"], name="A Different Name")
+    # A duplicate is a 409 from the integrity backstop in `main.py`, not an
+    # unhandled IntegrityError (which a real client would see as a 500).
+    duplicate = await client.post(
+        UNIVERSITIES,
+        json={"country_id": country["id"], "name": "A Different Name", "slug": "york-st-john"},
+        headers=headers,
+    )
+    assert duplicate.status_code == 409
 
 
 # ── Entry routes: the criteria matrix ────────────────────────────────────────
@@ -188,8 +193,7 @@ async def test_one_route_per_university_route_and_country(client: AsyncClient, u
     first = await client.post(ROUTES, json=payload, headers=headers)
     assert first.status_code == 200
 
-    with pytest.raises(IntegrityError):
-        await client.post(ROUTES, json=payload, headers=headers)
+    assert (await client.post(ROUTES, json=payload, headers=headers)).status_code == 409
 
 
 async def test_deleting_a_university_deletes_its_routes(client: AsyncClient, user_factory, auth_headers) -> None:

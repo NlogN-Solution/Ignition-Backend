@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import selectinload
 
 from ..api.deps import get_db_session
 from ..models import (

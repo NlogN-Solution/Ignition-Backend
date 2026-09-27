@@ -22,10 +22,15 @@ narrows one role deliberately rather than quietly re-permissioning the console.
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
-from ..models import User
+from sqlalchemy import ColumnElement, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..models import Application, Lead, User
 from ..models.enums import UserRole
+from .exceptions import NotFoundException
 
 #: Roles whose lists are narrowed to their own records plus unassigned ones.
 OWN_WORK_ONLY_ROLES = frozenset({UserRole.COUNSELLOR})
@@ -50,3 +55,57 @@ def may_see_record(user: User, owner_id: UUID | None) -> bool:
     """
     scope = own_work_scope(user)
     return scope is None or owner_id is None or owner_id == scope
+
+
+# --- People (FAPI-SEC-014) ---------------------------------------------------
+#
+# The rule above covered leads, applications and conversations but not the
+# people behind them: any counsellor could open any student's profile —
+# passport and citizenship numbers, family, addresses — and their document
+# vault, including students a colleague was working. That undid the narrowed
+# lists, because the by-id routes still answered. A student "belongs" to a
+# counsellor through the same two links the message scope uses: an application
+# they counsel, or a lead assigned to them that converted into this account.
+# A student with neither link to anyone is unclaimed and visible to all, for
+# the same reason unclaimed leads are.
+
+
+def student_visibility_condition(user: User, student_id_column: Any) -> ColumnElement[bool] | None:
+    """A condition on a column holding a student's user id, or `None` for "all".
+
+    The subqueries select only non-null ids, so `NOT IN` cannot be defeated by
+    a NULL in the list (which would make it match nothing).
+    """
+    scope = own_work_scope(user)
+    if scope is None:
+        return None
+    own = select(Application.student_id).where(
+        Application.counsellor_id == scope, Application.deleted_at.is_(None)
+    ).union(
+        select(Lead.converted_user_id).where(
+            Lead.assigned_to == scope, Lead.converted_user_id.is_not(None), Lead.deleted_at.is_(None)
+        )
+    )
+    claimed = select(Application.student_id).where(
+        Application.counsellor_id.is_not(None), Application.deleted_at.is_(None)
+    ).union(
+        select(Lead.converted_user_id).where(
+            Lead.assigned_to.is_not(None), Lead.converted_user_id.is_not(None), Lead.deleted_at.is_(None)
+        )
+    )
+    return or_(student_id_column.in_(own), student_id_column.not_in(claimed))
+
+
+async def may_see_student(session: AsyncSession, user: User, student_id: UUID) -> bool:
+    """By-id form of `student_visibility_condition`."""
+    condition = student_visibility_condition(user, User.id)
+    if condition is None:
+        return True
+    return await session.scalar(select(User.id).where(User.id == student_id, condition)) is not None
+
+
+async def assert_may_see_student(session: AsyncSession, user: User, student_id: UUID, detail: str) -> None:
+    """404, like the other scoped by-id reads: a 403 would confirm the student
+    exists and that a colleague is working them."""
+    if not await may_see_student(session, user, student_id):
+        raise NotFoundException(detail)

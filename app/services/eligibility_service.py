@@ -86,7 +86,7 @@ class EligibilityService:
         """
         clauses = [Lead.phone == phone]
         if email:
-            clauses.append(Lead.email == email)
+            clauses.append(func.lower(Lead.email) == email.strip().lower())
         return await self.session.scalar(select(Lead).where(or_(*clauses)).order_by(Lead.created_at.desc()).limit(1))
 
     async def _recent_duplicate(self, lead: Lead, payload: dict[str, Any]) -> EligibilityAssessment | None:
@@ -118,6 +118,11 @@ class EligibilityService:
         first_name, last_name = _split_name(contact["full_name"])
 
         lead = await self._find_lead(contact.get("email"), contact["phone"])
+        # Whether the person submitting is provably the person on the lead.
+        # Contact details are self-asserted, so an anonymous form naming a
+        # known prospect's phone number is not evidence that it is them
+        # (FAPI-SEC-018).
+        verified_submitter = lead is None or (user is not None and lead.converted_user_id == user.id)
         if lead is None:
             lead = Lead(
                 first_name=first_name,
@@ -151,12 +156,18 @@ class EligibilityService:
             if existing is not None:
                 return existing
             # A returning student is new information, not a new person. Only
-            # fill blanks; never overwrite what staff may have corrected.
-            if not lead.interested_course and course.get("preferred_course"):
-                lead.interested_course = course["preferred_course"]
-            if lead.email is None and contact.get("email"):
-                lead.email = contact["email"]
-            await self.session.commit()
+            # fill blanks; never overwrite what staff may have corrected — and
+            # only when the submitter is provably this lead. An anonymous
+            # submission matched by phone may be anybody, so it attaches its
+            # assessment (flagged as unverified, below) and changes nothing on
+            # the lead itself. Writing its e-mail onto the lead also used to be
+            # a 500 when that address already belonged to another lead.
+            if verified_submitter:
+                if not lead.interested_course and course.get("preferred_course"):
+                    lead.interested_course = course["preferred_course"]
+                if lead.email is None and contact.get("email"):
+                    lead.email = contact["email"]
+                await self.session.commit()
 
         verdict = assess(payload)
         assessment = EligibilityAssessment(
@@ -181,25 +192,33 @@ class EligibilityService:
         await self.session.commit()
         await self.session.refresh(assessment)
 
-        await self._log_submission(lead, assessment)
+        await self._log_submission(lead, assessment, verified=verified_submitter)
         await self._notify_staff(lead, assessment)
         return assessment
 
-    async def _log_submission(self, lead: Lead, assessment: EligibilityAssessment) -> None:
+    async def _log_submission(self, lead: Lead, assessment: EligibilityAssessment, *, verified: bool = True) -> None:
         """Put the submission on the lead's own timeline.
 
         A counsellor opening the lead should see that an assessment arrived
-        without having to know this feature exists.
+        without having to know this feature exists — and, when it was matched
+        to this lead only by self-asserted contact details, that it may not be
+        from this person at all.
         """
+        description = (
+            f"Preliminary assessment: {assessment.overall_status.value.replace('_', ' ')}. "
+            f"Document readiness {assessment.document_readiness}%."
+        )
+        if not verified:
+            description += (
+                " UNVERIFIED: submitted anonymously and matched to this lead only by the email/phone "
+                "the submitter typed. Confirm with the student before relying on these answers."
+            )
         self.session.add(
             LeadActivity(
                 lead_id=lead.id,
                 activity_type=LeadActivityType.NOTE,
-                title="Eligibility assessment submitted",
-                description=(
-                    f"Preliminary assessment: {assessment.overall_status.value.replace('_', ' ')}. "
-                    f"Document readiness {assessment.document_readiness}%."
-                ),
+                title="Eligibility assessment submitted" + ("" if verified else " (unverified)"),
+                description=description,
             )
         )
         await self.session.commit()

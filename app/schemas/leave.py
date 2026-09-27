@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from ..models.enums import LeaveStatus
 
@@ -43,8 +43,13 @@ class LeaveRequestRead(BaseModel):
     end_date: date
     requested_days: int
     reason: str | None
-    attachment_url: str | None
+    #: Always null now (FAPI-SEC-006). It used to be a public CDN URL for the
+    #: attachment — a medical note, typically — readable by anyone holding it.
+    #: Kept in the shape so existing clients do not break; open the file via
+    #: `GET /leave-requests/{id}/attachment/link` when `has_attachment` is true.
+    attachment_url: str | None = None
     attachment_name: str | None
+    has_attachment: bool = False
     status: LeaveStatus
     reviewed_by: UUID | None
     reviewed_at: datetime | None
@@ -53,6 +58,11 @@ class LeaveRequestRead(BaseModel):
     updated_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("attachment_url", mode="before")
+    @classmethod
+    def _never_expose_a_public_url(cls, value: object) -> None:
+        return None
 
 
 class LeaveRequestList(BaseModel):

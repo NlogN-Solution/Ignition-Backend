@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -375,6 +375,21 @@ class ApplicationWorkflowService:
         )
         return result.scalar_one_or_none()
 
+    async def get_step_for_application(self, step_id: UUID, application_id: UUID) -> ApplicationWorkflowStep | None:
+        """A step, only if it belongs to this application's workflow.
+
+        The routes authorise the caller against the application in the URL;
+        this is what makes that authorisation cover the step too. Looking the
+        step up by id alone let a student who owns *any* application read the
+        staff comments on someone else's workflow by pairing their own
+        application id with a foreign step id (FAPI-SEC-003).
+        """
+        return await self.session.scalar(
+            select(ApplicationWorkflowStep)
+            .join(ApplicationWorkflow, ApplicationWorkflow.id == ApplicationWorkflowStep.application_workflow_id)
+            .where(ApplicationWorkflowStep.id == step_id, ApplicationWorkflow.application_id == application_id)
+        )
+
     async def update_step(
         self, step: ApplicationWorkflowStep, data: dict[str, Any], performed_by: UUID | None
     ) -> ApplicationWorkflowStep:
@@ -505,7 +520,10 @@ class ApplicationWorkflowService:
         template_id: UUID | None = None,
         assigned_to: UUID | None = None,
         application_id: UUID | None = None,
+        visible_to: UUID | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
+        """`visible_to` is `api.scoping.own_work_scope(user)`: when set, only
+        steps of applications that counsellor owns, or that nobody owns."""
         query = (
             select(
                 ApplicationWorkflowStep,
@@ -537,6 +555,15 @@ class ApplicationWorkflowService:
         if application_id:
             query = query.where(ApplicationWorkflow.application_id == application_id)
             count_query = count_query.where(ApplicationWorkflow.application_id == application_id)
+        if visible_to is not None:
+            visible = ApplicationWorkflow.application_id.in_(
+                select(Application.id).where(
+                    Application.deleted_at.is_(None),
+                    or_(Application.counsellor_id == visible_to, Application.counsellor_id.is_(None)),
+                )
+            )
+            query = query.where(visible)
+            count_query = count_query.where(visible)
 
         total = await self.session.scalar(count_query) or 0
         query = query.order_by(ApplicationWorkflowStep.order).offset((page - 1) * limit).limit(limit)
@@ -600,8 +627,15 @@ class ChecklistService:
         item: ApplicationChecklistItem,
         data: dict[str, Any],
         acting_user_id: UUID | None = None,
+        *,
+        acting_is_staff: bool = False,
     ) -> ApplicationChecklistItem:
         """Apply an update, keeping the item and its document telling one story.
+
+        Callers must already have checked that a `document_id` in `data`
+        belongs to the application's student and matches the item's type (see
+        `routes/workflow.update_application_checklist_item`); this method
+        decides only what linking it *means* for the item's status.
 
         A requested document has two rows behind it: the `ApplicationChecklistItem`
         that asked for it and the `Document` that answers it. Until now each was
@@ -650,17 +684,29 @@ class ChecklistService:
         linked_document = (
             await document_service.get_document(data["document_id"]) if newly_linked else None
         )
+        #
+        # An approval only carries over when it was an approval *of this kind
+        # of document* (FAPI-SEC-002). It used to carry over for any approved
+        # file, so a student whose photo had been approved could link it to
+        # the passport request and see "verified" without anyone ever looking
+        # at a passport. A custom item with no document type has nothing to
+        # match against, so only staff linking it counts as verification.
         if newly_linked and requested_status is None:
-            item.status = (
-                ChecklistItemStatus.VERIFIED
-                if linked_document is not None and linked_document.status is DocumentStatus.APPROVED
-                else ChecklistItemStatus.SUBMITTED
+            approval_applies = (
+                linked_document is not None
+                and linked_document.status is DocumentStatus.APPROVED
+                and (
+                    linked_document.document_type == item.document_type
+                    if item.document_type is not None
+                    else acting_is_staff
+                )
             )
+            item.status = ChecklistItemStatus.VERIFIED if approval_applies else ChecklistItemStatus.SUBMITTED
 
         await self.session.commit()
         await self.session.refresh(item)
 
-        if newly_linked:
+        if newly_linked and item.document_id is not None:
             await document_service.link_to_application(item.document_id, item.application_id)
 
         if item.document_id and requested_status in _DOCUMENT_MIRRORED_STATUSES and acting_user_id is not None:

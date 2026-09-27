@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import LeaveRequest, LeaveType
@@ -99,33 +99,73 @@ class LeaveService:
         await self.session.refresh(request)
         return request
 
-    async def approve(self, request: LeaveRequest, reviewed_by: UUID, notes: str | None) -> LeaveRequest:
-        request.status = LeaveStatus.APPROVED
-        request.reviewed_by = reviewed_by
-        request.reviewed_at = datetime.now(UTC)
-        request.review_notes = notes
+    async def _transition(
+        self,
+        request: LeaveRequest,
+        *,
+        allowed_from: tuple[LeaveStatus, ...],
+        values: dict[str, Any],
+    ) -> bool:
+        """Move a request's status in one conditional UPDATE.
+
+        The routes used to read the status, check it, then write — so two
+        managers pressing Approve and Reject at the same moment could both pass
+        the check and the later write would win (FAPI-SEC-015). `WHERE status IN
+        (...)` makes the check and the write one statement; `False` means the
+        request had already moved on and nothing was written.
+        """
+        moved = await self.session.scalar(
+            update(LeaveRequest)
+            .where(LeaveRequest.id == request.id, LeaveRequest.status.in_(allowed_from))
+            .values(**values)
+            .returning(LeaveRequest.id)
+        )
         await self.session.commit()
         await self.session.refresh(request)
+        return moved is not None
+
+    async def approve(self, request: LeaveRequest, reviewed_by: UUID, notes: str | None) -> LeaveRequest | None:
+        """Approve a pending request. Returns None if it was no longer pending."""
+        moved = await self._transition(
+            request,
+            allowed_from=(LeaveStatus.PENDING,),
+            values={
+                "status": LeaveStatus.APPROVED,
+                "reviewed_by": reviewed_by,
+                "reviewed_at": datetime.now(UTC),
+                "review_notes": notes,
+            },
+        )
+        if not moved:
+            return None
 
         work_days = await self.get_work_days()
         dates = work_day_dates(request.start_date, request.end_date, work_days)
         await self.attendance_service.mark_leave_days(request.user_id, dates, reviewed_by)
         return request
 
-    async def reject(self, request: LeaveRequest, reviewed_by: UUID, notes: str | None) -> LeaveRequest:
-        request.status = LeaveStatus.REJECTED
-        request.reviewed_by = reviewed_by
-        request.reviewed_at = datetime.now(UTC)
-        request.review_notes = notes
-        await self.session.commit()
-        await self.session.refresh(request)
-        return request
+    async def reject(self, request: LeaveRequest, reviewed_by: UUID, notes: str | None) -> LeaveRequest | None:
+        """Reject a pending request. Returns None if it was no longer pending."""
+        moved = await self._transition(
+            request,
+            allowed_from=(LeaveStatus.PENDING,),
+            values={
+                "status": LeaveStatus.REJECTED,
+                "reviewed_by": reviewed_by,
+                "reviewed_at": datetime.now(UTC),
+                "review_notes": notes,
+            },
+        )
+        return request if moved else None
 
-    async def cancel(self, request: LeaveRequest) -> LeaveRequest:
-        request.status = LeaveStatus.CANCELLED
-        await self.session.commit()
-        await self.session.refresh(request)
-        return request
+    async def cancel(self, request: LeaveRequest) -> LeaveRequest | None:
+        """Cancel a pending or approved request. Returns None if it had already moved on."""
+        moved = await self._transition(
+            request,
+            allowed_from=(LeaveStatus.PENDING, LeaveStatus.APPROVED),
+            values={"status": LeaveStatus.CANCELLED},
+        )
+        return request if moved else None
 
     # --- Balance ---------------------------------------------------------------
 

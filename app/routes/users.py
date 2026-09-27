@@ -5,7 +5,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Request, UploadFile
 
 from ..api.auth import get_current_user, require_role
-from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
+from ..api.exceptions import BadRequestException, ConflictException, ForbiddenException, NotFoundException
+from ..api.pagination import LimitParam, PageParam
+from ..api.scoping import assert_may_see_student, student_visibility_condition
+from ..core.client_ip import client_ip
 from ..core.config import get_settings
 from ..core.rbac import can_manage_target
 from ..core.uploads import AVATAR_EXTENSIONS, AVATAR_FOLDER, store_upload
@@ -23,6 +26,7 @@ from ..schemas.user import (
     UserUpdate,
 )
 from ..services.activity_log_service import ActivityLogService, get_activity_log_service
+from ..services.auth_service import AuthService
 from ..services.user_service import UserService, get_user_service
 
 settings = get_settings()
@@ -31,7 +35,8 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 
 def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
+    # Proxy-aware: `request.client.host` is Render's proxy for every caller.
+    return client_ip(request)
 
 
 async def _store_avatar(file: UploadFile) -> str:
@@ -41,15 +46,16 @@ async def _store_avatar(file: UploadFile) -> str:
     <img> tags all over the dashboard. Documents deliberately are not — see
     `routes/document.py:download_document`.
     """
-    stored = await store_upload(file, AVATAR_EXTENSIONS, folder=AVATAR_FOLDER)
-    assert stored.url is not None  # public upload (private=False, the default): Cloudinary always returns a URL
+    stored = await store_upload(file, AVATAR_EXTENSIONS, folder=AVATAR_FOLDER, private=False)
+    if stored.url is None:  # pragma: no cover - public uploads always carry a URL
+        raise BadRequestException("The avatar could not be stored")
     return stored.url
 
 
 @router.get("", response_model=UserList, summary="List users")
 async def list_users(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     role: str | None = None,
     status: str | None = None,
@@ -71,6 +77,8 @@ async def list_users(
         role=role,
         status=status,
         deleted=deleted,
+        # ...and only the students that are theirs or unclaimed (FAPI-SEC-014).
+        visible=student_visibility_condition(user, User.id),
     )
     return UserList(
         items=[UserRead.model_validate(u) for u in users],
@@ -86,7 +94,23 @@ async def update_my_profile(
     user_service: UserService = Depends(get_user_service),
     current_user: User = Depends(get_current_user),
 ) -> UserRead:
-    user = await user_service.update_user(current_user, payload.model_dump(exclude_unset=True))
+    data = payload.model_dump(exclude_unset=True)
+    new_email = data.get("email")
+    if new_email is not None and new_email != current_user.email.lower():
+        # The e-mail address is the account's identity. Changing it needs the
+        # password, so a briefly hijacked access token cannot quietly move the
+        # account somewhere its owner cannot follow (FAPI-SEC-009). The console
+        # sends the unchanged address on every profile save, which is why this
+        # fires only on an actual change.
+        if not payload.current_password or not await AuthService(user_service.session).verify_reauth(
+            current_user, payload.current_password
+        ):
+            raise BadRequestException("Enter your current password to change your email address")
+        if await user_service.email_taken(new_email, exclude_user_id=current_user.id):
+            raise ConflictException("An account with this email already exists")
+    elif new_email is not None:
+        data.pop("email")
+    user = await user_service.update_user(current_user, data)
     return UserRead.model_validate(user)
 
 
@@ -111,7 +135,7 @@ async def list_staff_directory(
     search: str | None = None,
     role: str | None = None,
     user_id: UUID | None = None,
-    limit: int = 20,
+    limit: LimitParam = 20,
     user_service: UserService = Depends(get_user_service),
     current_user: User = Depends(get_current_user),
 ) -> StaffDirectoryList:
@@ -158,8 +182,10 @@ async def get_user(
     target = await user_service.get_user(user_id, include_deleted=include_deleted)
     if target is None:
         raise NotFoundException("User not found")
-    if current_user.role is UserRole.COUNSELLOR and target.role is not UserRole.STUDENT:
-        raise ForbiddenException("Forbidden")
+    if current_user.role is UserRole.COUNSELLOR:
+        if target.role is not UserRole.STUDENT:
+            raise ForbiddenException("Forbidden")
+        await assert_may_see_student(user_service.session, current_user, target.id, "User not found")
     return UserRead.model_validate(target)
 
 
@@ -179,7 +205,7 @@ async def create_user(
     if not can_manage_target(current_user.role.value, payload.role.value, payload.role.value):
         raise ForbiddenException("You cannot create a user with that role")
 
-    if await user_service.get_by_email(payload.email):
+    if await user_service.email_taken(payload.email):
         raise BadRequestException("An account with this email already exists")
 
     user, _generated = await user_service.create_user(payload.model_dump())
@@ -214,6 +240,7 @@ async def update_user(
     if current_user.role is UserRole.COUNSELLOR:
         if user.role is not UserRole.STUDENT:
             raise ForbiddenException("You do not have permission to modify this user")
+        await assert_may_see_student(user_service.session, current_user, user.id, "User not found")
         if payload.role is not None or payload.status is not None:
             raise ForbiddenException("Only an admin can change a user's role or status")
 
@@ -222,6 +249,8 @@ async def update_user(
         raise ForbiddenException("You do not have permission to modify this user")
 
     data = payload.model_dump(exclude_unset=True)
+    if data.get("email") is not None and await user_service.email_taken(data["email"], exclude_user_id=user.id):
+        raise ConflictException("An account with this email already exists")
     previous_role = user.role
     role_changed = payload.role is not None and payload.role is not previous_role
 
@@ -295,6 +324,7 @@ async def enable_student_portal(
         raise NotFoundException("User not found")
     if user.role is not UserRole.STUDENT:
         raise ForbiddenException("Portal access can only be enabled for student accounts")
+    await assert_may_see_student(user_service.session, current_user, user.id, "User not found")
     if user.has_portal_access:
         raise BadRequestException("This student already has portal access")
 
@@ -384,8 +414,10 @@ async def upload_user_avatar(
     user = await user_service.get_user(user_id)
     if user is None:
         raise NotFoundException("User not found")
-    if current_user.role is UserRole.COUNSELLOR and user.role is not UserRole.STUDENT:
-        raise ForbiddenException("You do not have permission to modify this user")
+    if current_user.role is UserRole.COUNSELLOR:
+        if user.role is not UserRole.STUDENT:
+            raise ForbiddenException("You do not have permission to modify this user")
+        await assert_may_see_student(user_service.session, current_user, user.id, "User not found")
 
     avatar_url = await _store_avatar(file)
     user = await user_service.update_user(user, {"avatar_url": avatar_url})

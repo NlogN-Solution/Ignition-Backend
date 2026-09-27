@@ -4,9 +4,11 @@ Two role-shaped surfaces on one service, which is the whole point: the lead
 page, the student page, the application tab and the student's own mailbox are
 four views of the *same* rows, not four stores that have to be kept in step.
 
-Authorisation is asymmetric and deliberately so. Staff may read any thread and
-may write internal notes; a student may read a thread only if it is theirs
-**and** shared. That second check runs through
+Authorisation is asymmetric and deliberately so. Staff may read the threads
+their own-work scope allows (admins: all; everyone else: their own students,
+leads and applications, threads they wrote in, and unclaimed ones — see
+`message_scope.visible_threads_condition`, FAPI-SEC-005) and may write internal
+notes there; a student may read a thread only if it is theirs **and** shared. That second check runs through
 `CommunicationService.student_can_see`, never inline here, because "theirs"
 means "theirs or their pre-conversion lead's" and that is not something a
 route handler should be re-deriving.
@@ -22,6 +24,7 @@ from fastapi.responses import Response
 
 from ..api.auth import get_current_user, require_role
 from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
+from ..api.pagination import PageParam
 from ..core.uploads import (
     MESSAGE_ATTACHMENT_EXTENSIONS,
     MESSAGE_ATTACHMENT_FOLDER,
@@ -29,7 +32,7 @@ from ..core.uploads import (
     build_download_url,
     store_upload,
 )
-from ..models import MessageAttachment, ThreadMessage, User
+from ..models import Application, Lead, MessageAttachment, ThreadMessage, User
 from ..models.communication import MessageAttachmentKind
 from ..models.enums import UserRole
 from ..schemas.communication import (
@@ -41,6 +44,7 @@ from ..schemas.communication import (
 )
 from ..schemas.document import DocumentLinkRead
 from ..services.communication_service import CommunicationService, get_communication_service
+from ..services.message_scope import may_open_thread_about
 
 router = APIRouter(prefix="/communication", tags=["Communication"])
 
@@ -129,13 +133,13 @@ async def _store_attachments(
 async def list_threads(
     search: str | None = None,
     unread_only: bool = False,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: PageParam = 1,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
     service: CommunicationService = Depends(get_communication_service),
     user: User = Depends(_STAFF),
 ) -> ThreadList:
     threads, total = await service.staff_inbox(
-        search=search, unread_only=unread_only, page=page, limit=limit
+        search=search, unread_only=unread_only, page=page, limit=limit, viewer=user
     )
     return ThreadList(
         items=[ThreadRead.of(thread, viewer_is_student=False) for thread in threads],
@@ -162,7 +166,7 @@ async def list_lead_threads(
     other way: the student page would show everything and the lead page would
     stop at the conversion date.
     """
-    threads = await service.threads_for_lead(lead_id)
+    threads = await service.threads_for_lead(lead_id, viewer=user)
     return [ThreadRead.of(thread, viewer_is_student=False) for thread in threads]
 
 
@@ -184,7 +188,7 @@ async def list_student_threads(
     nothing joined the two. `threads_for_student` resolves by person, so three
     weeks of pre-application correspondence is still here.
     """
-    threads = await service.threads_for_student(student_id, include_internal=include_internal)
+    threads = await service.threads_for_student(student_id, include_internal=include_internal, viewer=user)
     return [ThreadRead.of(thread, viewer_is_student=False) for thread in threads]
 
 
@@ -198,7 +202,7 @@ async def list_application_threads(
     service: CommunicationService = Depends(get_communication_service),
     user: User = Depends(_STAFF),
 ) -> list[ThreadRead]:
-    threads = await service.threads_for_application(application_id)
+    threads = await service.threads_for_application(application_id, viewer=user)
     return [ThreadRead.of(thread, viewer_is_student=False) for thread in threads]
 
 
@@ -210,6 +214,7 @@ async def create_thread(
 ) -> ThreadDetail:
     if payload.student_id is None and payload.lead_id is None:
         raise BadRequestException("A thread needs either a student or a lead.")
+    await _assert_thread_targets(service, user, payload)
 
     thread = await service.create_thread(
         subject=payload.subject,
@@ -244,8 +249,11 @@ async def get_thread(
         # 404, not 403: whether a thread exists is itself information about
         # somebody else's correspondence.
         raise NotFoundException("Thread not found")
-    if not is_student and user.role not in _STAFF_ROLES:
-        raise ForbiddenException("Forbidden")
+    if not is_student:
+        if user.role not in _STAFF_ROLES:
+            raise ForbiddenException("Forbidden")
+        if not await service.staff_can_see(thread, user):
+            raise NotFoundException("Thread not found")
 
     await service.mark_read(thread, by_student=is_student)
     return ThreadDetail.of(await service.get_thread(thread_id), viewer_is_student=is_student)
@@ -283,6 +291,8 @@ async def post_message(
             raise NotFoundException("Thread not found")
     elif user.role not in _STAFF_ROLES:
         raise ForbiddenException("Forbidden")
+    elif not await service.staff_can_see(thread, user):
+        raise NotFoundException("Thread not found")
 
     if thread.is_closed:
         raise BadRequestException("This conversation has been closed.")
@@ -384,4 +394,51 @@ async def _attachment_for(
             raise NotFoundException("Attachment not found")
     elif user.role not in _STAFF_ROLES:
         raise ForbiddenException("Forbidden")
+    elif not await service.staff_can_see(thread, user):
+        raise NotFoundException("Attachment not found")
     return attachment, thread
+
+
+async def _assert_thread_targets(service: CommunicationService, user: User, payload: ThreadCreate) -> None:
+    """Every id a new thread points at must exist, agree, and be in scope.
+
+    The body's ids went into the row unchecked (FAPI-SEC-004): a thread could
+    name a staff account as its "student", pair a student with somebody else's
+    application, or reference ids that do not exist (a 500 from the foreign
+    key). And a scoped staff member could open a thread about a colleague's
+    student, which `created_by` would then make visible to them (FAPI-SEC-005).
+    """
+    from sqlalchemy import select  # local, like `_attachment_for`
+
+    session = service.session
+    if payload.student_id is not None:
+        student = await session.get(User, payload.student_id)
+        if student is None or student.deleted_at is not None or student.role is not UserRole.STUDENT:
+            raise NotFoundException("Student not found")
+    if payload.lead_id is not None:
+        lead = await session.get(Lead, payload.lead_id)
+        if lead is None or lead.deleted_at is not None:
+            raise NotFoundException("Lead not found")
+        if payload.student_id is not None and lead.converted_user_id != payload.student_id:
+            raise BadRequestException("That lead did not convert into this student.")
+    if payload.application_id is not None:
+        application_student = await session.scalar(
+            select(Application.student_id).where(
+                Application.id == payload.application_id, Application.deleted_at.is_(None)
+            )
+        )
+        if application_student is None:
+            raise NotFoundException("Application not found")
+        person = payload.student_id
+        if person is None and payload.lead_id is not None:
+            person = await session.scalar(select(Lead.converted_user_id).where(Lead.id == payload.lead_id))
+        if person != application_student:
+            raise BadRequestException("That application belongs to a different student.")
+    if not await may_open_thread_about(
+        session,
+        user,
+        student_id=payload.student_id,
+        lead_id=payload.lead_id,
+        application_id=payload.application_id,
+    ):
+        raise NotFoundException("Student not found")

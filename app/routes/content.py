@@ -14,12 +14,14 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from sqlalchemy import select
 
-from ..api.auth import get_current_user, require_role
-from ..api.exceptions import NotFoundException
+from ..api.auth import require_role, require_staff
+from ..api.exceptions import ConflictException, NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..core.landing import TAG_CONTENT, preview_url, revalidate
 from ..core.uploads import AVATAR_EXTENSIONS, CONTENT_FOLDER, store_upload
-from ..models import User
+from ..models import ContentPage, User
 from ..models.enums import UserRole
 from ..schemas.academic import (
     BlogPostCreate,
@@ -73,14 +75,14 @@ _MANAGE_WEBSITE = require_role(UserRole.ADMIN, UserRole.MARKETING)
 
 @router.get("/content-pages", response_model=ContentPageList, summary="List content pages")
 async def list_content_pages(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     kind: str | None = None,
     tag: str | None = None,
     is_published: bool | None = None,
     service: ContentPageService = Depends(get_content_page_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> ContentPageList:
     items, total = await service.list(page, limit, search=search, kind=kind, tag=tag, is_published=is_published)
     return ContentPageList(items=items, total=total, page=page, limit=limit)
@@ -90,12 +92,25 @@ async def list_content_pages(
 async def get_content_page(
     page_id: UUID,
     service: ContentPageService = Depends(get_content_page_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> ContentPageDetail:
     content_page = await service.get_with_blocks(page_id)
     if content_page is None:
         raise NotFoundException("Content page not found")
     return ContentPageDetail.model_validate(content_page)
+
+
+async def _assert_slug_free(service: ContentPageService, kind: object, slug: str | None, exclude: UUID | None) -> None:
+    """Two articles (or two guides) on one slug would leave one unreachable:
+    the site serves whichever it finds first. The key is unique in the
+    database; the slug is only unique per kind, so it is checked here."""
+    if not slug:
+        return
+    query = select(ContentPage.id).where(ContentPage.kind == kind, ContentPage.slug == slug)
+    if exclude is not None:
+        query = query.where(ContentPage.id != exclude)
+    if await service.session.scalar(query.limit(1)) is not None:
+        raise ConflictException(f"Another {getattr(kind, 'value', kind)} already uses the slug “{slug}”.")
 
 
 @router.post("/content-pages", response_model=ContentPageRead, summary="Create content page")
@@ -104,6 +119,7 @@ async def create_content_page(
     service: ContentPageService = Depends(get_content_page_service),
     _: object = Depends(_MANAGE_WEBSITE),
 ) -> ContentPageRead:
+    await _assert_slug_free(service, payload.kind, payload.slug, None)
     return ContentPageRead.model_validate(await service.create(payload.model_dump()))
 
 
@@ -117,7 +133,12 @@ async def update_content_page(
     content_page = await service.get(page_id)
     if content_page is None:
         raise NotFoundException("Content page not found")
-    return ContentPageRead.model_validate(await service.update(content_page, payload.model_dump(exclude_unset=True)))
+    fields = payload.model_dump(exclude_unset=True)
+    if "slug" in fields or "kind" in fields:
+        await _assert_slug_free(
+            service, fields.get("kind", content_page.kind), fields.get("slug", content_page.slug), content_page.id
+        )
+    return ContentPageRead.model_validate(await service.update(content_page, fields))
 
 
 @router.delete("/content-pages/{page_id}", response_model=ContentPageRead, summary="Delete content page")
@@ -209,12 +230,12 @@ async def reorder_content_blocks(
 
 @router.get("/content-blocks", response_model=ContentBlockList, summary="List content blocks")
 async def list_content_blocks(
-    page: int = 1,
-    limit: int = 50,
+    page: PageParam = 1,
+    limit: LimitParam = 50,
     page_id: UUID | None = None,
     block_type: str | None = None,
     service: ContentBlockService = Depends(get_content_block_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> ContentBlockList:
     items, total = await service.list(page, limit, page_id=page_id, block_type=block_type)
     return ContentBlockList(items=items, total=total, page=page, limit=limit)
@@ -224,7 +245,7 @@ async def list_content_blocks(
 async def get_content_block(
     block_id: UUID,
     service: ContentBlockService = Depends(get_content_block_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> ContentBlockRead:
     block = await service.get(block_id)
     if block is None:
@@ -271,13 +292,13 @@ async def delete_content_block(
 
 @router.get("/media-assets", response_model=MediaAssetList, summary="List media assets")
 async def list_media_assets(
-    page: int = 1,
-    limit: int = 40,
+    page: PageParam = 1,
+    limit: LimitParam = 40,
     search: str | None = None,
     kind: str | None = None,
     folder: str | None = None,
     service: MediaAssetService = Depends(get_media_asset_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> MediaAssetList:
     items, total = await service.list(page, limit, search=search, kind=kind, folder=folder)
     return MediaAssetList(items=items, total=total, page=page, limit=limit)
@@ -287,7 +308,7 @@ async def list_media_assets(
 async def get_media_asset(
     asset_id: UUID,
     service: MediaAssetService = Depends(get_media_asset_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> MediaAssetRead:
     asset = await service.get(asset_id)
     if asset is None:
@@ -369,13 +390,13 @@ async def delete_media_asset(
 
 @router.get("/blog-posts", response_model=BlogPostList, summary="List blog posts")
 async def list_blog_posts(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     category: str | None = None,
     is_published: bool | None = None,
     service: BlogPostService = Depends(get_blog_post_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> BlogPostList:
     items, total = await service.list(page, limit, search=search, category=category, is_published=is_published)
     return BlogPostList(items=items, total=total, page=page, limit=limit)
@@ -385,7 +406,7 @@ async def list_blog_posts(
 async def get_blog_post(
     post_id: UUID,
     service: BlogPostService = Depends(get_blog_post_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> BlogPostRead:
     post = await service.get(post_id)
     if post is None:
@@ -432,13 +453,13 @@ async def delete_blog_post(
 
 @router.get("/country-guides", response_model=CountryGuideList, summary="List country guides")
 async def list_country_guides(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     country_id: UUID | None = None,
     is_published: bool | None = None,
     service: CountryGuideService = Depends(get_country_guide_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> CountryGuideList:
     items, total = await service.list(page, limit, search=search, country_id=country_id, is_published=is_published)
     return CountryGuideList(items=items, total=total, page=page, limit=limit)
@@ -448,7 +469,7 @@ async def list_country_guides(
 async def get_country_guide(
     guide_id: UUID,
     service: CountryGuideService = Depends(get_country_guide_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> CountryGuideRead:
     guide = await service.get(guide_id)
     if guide is None:

@@ -9,11 +9,6 @@ from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.orm import selectinload
 
 from ..api.exceptions import BadRequestException, ConflictException, ForbiddenException, NotFoundException
-from ..api.student import (
-    StudentScopedRepository,
-    get_current_student,
-    get_student_repository,
-)
 
 # NOTE: `require_paid_portal_access` is deliberately not imported or applied.
 #
@@ -25,8 +20,15 @@ from ..api.student import (
 # be able to apply, upload and correspond before there is anything worth
 # paying for. The guard is left in `api/student.py` rather than deleted, since
 # a future "premium workflow" tier is exactly what it is for.
+from ..api.pagination import LimitParam, PageParam
+from ..api.student import (
+    StudentScopedRepository,
+    get_current_student,
+    get_student_repository,
+)
 from ..core.config import get_settings
 from ..core.events import ApplicationSubmitted, event_bus
+from ..core.subscribers import APPOINTMENT_DESK_ROLES, LEAD_DESK_ROLES
 from ..core.uploads import DOCUMENT_EXTENSIONS, DOCUMENT_FOLDER, store_upload
 from ..models import (
     Application,
@@ -37,6 +39,8 @@ from ..models import (
     BlogPost,
     CountryGuide,
     Document,
+    Intake,
+    Lead,
     Message,
     Notification,
     Payment,
@@ -59,6 +63,7 @@ from ..models.enums import (
     NotificationType,
     SavingsGoalKind,
     TaskStatus,
+    UserStatus,
 )
 from ..models.student_portal import MAX_COMPARE_COURSES
 from ..schemas.academic import (
@@ -190,6 +195,7 @@ from ..services.portal_access_service import (
     get_portal_access_service,
 )
 from ..services.preferences_service import PreferencesService, get_preferences_service
+from ..services.profile_completion import read_profile
 from ..services.progress_service import (
     PointsService,
     ProgressService,
@@ -221,7 +227,7 @@ async def get_me(student: User = Depends(get_current_student)) -> UserRead:
 
 @router.get("/me/profile", response_model=StudentProfileRead, summary="My student profile")
 async def get_my_profile(repo: StudentScopedRepository = Depends(get_student_repository)) -> StudentProfileRead:
-    return StudentProfileRead.model_validate(await repo.profile_or_404())
+    return await read_profile(repo.session, await repo.profile_or_404())
 
 
 @router.get(
@@ -255,7 +261,7 @@ async def update_my_profile(
         profile = await service.upsert(student.id, payload.model_dump(exclude_unset=True))
     except ValueError as exc:
         raise BadRequestException(str(exc)) from exc
-    return StudentProfileRead.model_validate(profile)
+    return await read_profile(service.session, profile)
 
 
 # --- Applications --------------------------------------------------------------
@@ -378,8 +384,8 @@ _APPLICATION_FULL_OPTIONS = [
 
 @router.get("/me/applications", response_model=StudentApplicationList, summary="My applications")
 async def list_my_applications(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     repo: StudentScopedRepository = Depends(get_student_repository),
 ) -> StudentApplicationList:
     items, total = await repo.list(
@@ -461,6 +467,12 @@ async def create_my_application(
     )
     if program is None:
         raise NotFoundException("Course not found")
+    if payload.intake_id is not None:
+        # The intake has to be one of *this* course's intakes (FAPI-SEC-004);
+        # an unrelated or made-up id used to be stored as-is (or 500 on the FK).
+        intake_program_id = await repo.session.scalar(select(Intake.program_id).where(Intake.id == payload.intake_id))
+        if intake_program_id != program.id:
+            raise NotFoundException("Intake not found for this course")
 
     existing = await repo.session.scalar(
         repo.scoped(Application).where(
@@ -486,7 +498,7 @@ async def create_my_application(
         }
     )
 
-    try:
+    try:  # noqa: SIM105 — the except branch documents why failure is tolerated
         # Built here rather than injected: the `ApplicationWorkflowService`
         # dependency factory lives in `routes/workflow.py`, and a route module
         # importing another route module to borrow one is a worse dependency
@@ -731,6 +743,13 @@ async def create_my_thread(
     there is no `student_id` to supply (it is theirs by construction) and no
     `visibility` (an internal note is not something a student can write).
     """
+    if payload.application_id is not None:
+        # Only one of *their own* applications (FAPI-SEC-004). The id went
+        # straight into the thread before, so a student could file a thread
+        # against somebody else's application.
+        await StudentScopedRepository(service.session, student).get_or_404(
+            Application, payload.application_id, detail="Application not found"
+        )
     thread = await service.create_thread(
         subject=payload.subject,
         student_id=student.id,
@@ -905,7 +924,12 @@ async def list_my_application_documents(
 
     result = await repo.session.execute(
         select(Document)
-        .where(Document.id.in_(linked.union(unlinked_issued)))
+        .where(
+            Document.id.in_(linked.union(unlinked_issued)),
+            # Belt and braces (FAPI-SEC-002/004): whatever ended up linked to
+            # this application, the student is only ever shown their own files.
+            Document.student_id == application.student_id,
+        )
         .order_by(Document.created_at.desc())
     )
     documents = list(result.scalars().all())
@@ -944,8 +968,8 @@ _DOCUMENT_OPTIONS = [
 
 @router.get("/me/documents", response_model=StudentDocumentList, summary="My documents")
 async def list_my_documents(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     repo: StudentScopedRepository = Depends(get_student_repository),
 ) -> StudentDocumentList:
     items, total = await repo.list(
@@ -1047,8 +1071,8 @@ async def delete_my_document(
 
 @router.get("/me/appointments", response_model=StudentAppointmentList, summary="My appointments")
 async def list_my_appointments(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     repo: StudentScopedRepository = Depends(get_student_repository),
 ) -> StudentAppointmentList:
     items, total = await repo.list(
@@ -1075,8 +1099,8 @@ async def list_my_appointments(
 
 @router.get("/me/tasks", response_model=TaskList, summary="Tasks assigned to me")
 async def list_my_tasks(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     repo: StudentScopedRepository = Depends(get_student_repository),
 ) -> TaskList:
     items, total = await repo.list(Task, order_by=Task.due_date.asc().nullslast(), page=page, limit=limit)
@@ -1105,8 +1129,8 @@ async def complete_my_task(
 
 @router.get("/me/payments", response_model=PaymentList, summary="My payments")
 async def list_my_payments(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     repo: StudentScopedRepository = Depends(get_student_repository),
 ) -> PaymentList:
     items, total = await repo.list(Payment, order_by=Payment.created_at.desc(), page=page, limit=limit)
@@ -1118,8 +1142,8 @@ async def list_my_payments(
 
 @router.get("/me/notifications", response_model=NotificationList, summary="My notifications")
 async def list_my_notifications(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     is_read: bool | None = None,
     repo: StudentScopedRepository = Depends(get_student_repository),
 ) -> NotificationList:
@@ -1170,7 +1194,7 @@ def _with_sender_summary(message: Message) -> MessageRead:
 
 @router.get("/me/messages", response_model=MessageList, summary="My support messages")
 async def list_my_messages(
-    limit: int = 200,
+    limit: LimitParam = 200,
     repo: StudentScopedRepository = Depends(get_student_repository),
 ) -> MessageList:
     items, total = await repo.list(
@@ -1270,6 +1294,36 @@ async def request_my_appointment(
         title="Appointment requested",
         message=f"We received your request: {appointment.title}",
     )
+
+    # The office has to hear about it too, or a request sits unseen until
+    # someone happens to open Appointments. The student's own counsellor (their
+    # lead's owner) plus the people who book slots; with no owner yet, the whole
+    # lead desk — the same audience a new registration reaches.
+    owner_id = await repo.session.scalar(
+        select(Lead.assigned_to).where(Lead.converted_user_id == student.id, Lead.deleted_at.is_(None)).limit(1)
+    )
+    roles = APPOINTMENT_DESK_ROLES if owner_id else LEAD_DESK_ROLES
+    staff_ids = set(
+        (
+            await repo.session.scalars(
+                select(User.id).where(
+                    User.role.in_(roles),
+                    User.status == UserStatus.ACTIVE.value,
+                    User.deleted_at.is_(None),
+                )
+            )
+        ).all()
+    )
+    if owner_id:
+        staff_ids.add(owner_id)
+    name = f"{student.first_name} {student.last_name or ''}".strip() or student.email
+    when = appointment.preferred_date.strftime("%d %b %Y") if appointment.preferred_date else "a date to be agreed"
+    await notification_service.notify_many(
+        staff_ids,
+        notification_type=NotificationType.APPOINTMENT,
+        title="New appointment request",
+        message=f"{name} requested “{appointment.title}” for {when}.",
+    )
     return AppointmentRead.model_validate(appointment)
 
 
@@ -1283,8 +1337,8 @@ async def request_my_appointment(
 
 @router.get("/catalog/countries", response_model=CountryList, summary="Browse destinations")
 async def browse_countries(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     service: CountryService = Depends(get_country_service),
     _: User = Depends(get_current_student),
@@ -1295,8 +1349,8 @@ async def browse_countries(
 
 @router.get("/catalog/universities", response_model=UniversityList, summary="Browse universities")
 async def browse_universities(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     country_id: UUID | None = None,
     service: UniversityService = Depends(get_university_service),
@@ -1308,8 +1362,8 @@ async def browse_universities(
 
 @router.get("/catalog/programs", response_model=ProgramList, summary="Search courses")
 async def browse_programs(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     university_id: UUID | None = None,
     degree_level: str | None = None,
@@ -1324,8 +1378,8 @@ async def browse_programs(
 
 @router.get("/catalog/guides", response_model=CountryGuideList, summary="Destination guides")
 async def browse_country_guides(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     repo: StudentScopedRepository = Depends(get_student_repository),
 ) -> CountryGuideList:
     # Unpublished drafts must not reach students.
@@ -1343,8 +1397,8 @@ async def browse_country_guides(
 
 @router.get("/catalog/blog", response_model=BlogPostList, summary="Articles")
 async def browse_blog_posts(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     repo: StudentScopedRepository = Depends(get_student_repository),
 ) -> BlogPostList:
     total = await repo.session.scalar(select(func.count()).select_from(BlogPost).where(BlogPost.is_published.is_(True)))
@@ -1612,8 +1666,6 @@ async def list_my_checklist(
     student: User = Depends(get_current_student),
     service: ChecklistService = Depends(get_checklist_service),
 ) -> ChecklistRead:
-    # The seeded items are materialised here rather than at signup, so a student
-    # who registered before a rung existed still receives it.
     items = await service.list_items(student)
     return _checklist_payload(items, service.locked_keys(items))
 
@@ -1642,10 +1694,10 @@ async def update_my_checklist_item(
     fields = payload.model_dump(exclude_unset=True)
 
     # Re-dating is always the student's call — a deadline they set for
-    # themselves. Rewording is not: a seeded rung's wording is the journey
-    # everyone is measured against, and only their own items are theirs to edit.
+    # themselves. Rewording is not: a task their counsellor set says what the
+    # counsellor asked for, and only their own items are theirs to edit.
     if ("title" in fields or "description" in fields) and not item.is_custom:
-        raise BadRequestException("This is part of your journey. You can change its due date, but not its wording.")
+        raise BadRequestException("Your advisor set this task. You can change its due date, but not its wording.")
     if "due_date" in fields:
         item.due_date = fields["due_date"]
     if fields.get("title") is not None:
@@ -1964,7 +2016,7 @@ async def list_currency_rates(
 
 @router.get("/me/activity", response_model=ActivityList, summary="My activity feed")
 async def list_my_activity(
-    limit: int = 50,
+    limit: LimitParam = 50,
     student: User = Depends(get_current_student),
     service: ActivityService = Depends(get_activity_service),
 ) -> ActivityList:
@@ -2028,7 +2080,7 @@ async def get_my_portal_access(
         paid_at=state.paid_at,
         payment_id=state.payment_id,
         methods=list(SELF_SERVICE_METHODS),
-        simulated=settings.SIMULATED_PAYMENTS,
+        simulated=settings.SIMULATED_PAYMENTS and not settings.is_production,
     )
 
 
@@ -2049,10 +2101,13 @@ async def checkout_my_portal_access(
     student: User = Depends(get_current_student),
     access: PortalAccessService = Depends(get_portal_access_service),
 ) -> PortalAccessRead:
-    if not settings.SIMULATED_PAYMENTS:
+    if not settings.SIMULATED_PAYMENTS or settings.is_production:
         # There is no gateway integration yet. Refusing is the only honest
         # behaviour: the alternative is recording a payment that never
-        # happened while claiming it was real.
+        # happened while claiming it was real. Production is refused
+        # regardless of the flag (which config validation also forbids there),
+        # so the paywall cannot be reopened by one mistyped env var
+        # (FAPI-SEC-001).
         raise BadRequestException(
             "Online payment is not available yet. Contact Ignition to pay your access fee."
         )

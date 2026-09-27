@@ -31,14 +31,23 @@ BCRYPT_ROUNDS = 4 if settings.ENVIRONMENT == "test" else 12
 def create_access_token(
     subject: str,
     role: str | None = None,
+    *,
+    session_id: str,
 ) -> str:
     """Short-lived bearer token.
 
     ED360's version also carried `organization_id`; there is one tenant here, so
     the claim has no meaning (strip rule R7).
+
+    `sid` names the `user_sessions` row this token was issued alongside, and
+    `get_current_user` refuses the token once that row is revoked. Without it an
+    access token outlived logout and password change by up to its full lifetime
+    (FAPI-SEC-016): revoking the session killed the refresh token and nothing
+    else.
     """
-    expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload: dict[str, Any] = {"sub": subject, "exp": expire, "type": "access"}
+    now = datetime.now(UTC)
+    expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload: dict[str, Any] = {"sub": subject, "exp": expire, "iat": now, "type": "access", "sid": session_id}
     if role:
         payload["role"] = role
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
@@ -78,8 +87,18 @@ def hash_refresh_token(token: str) -> str:
 
 
 def verify_token(token: str) -> dict[str, Any]:
-    """Decode and verify a JWT. Raises `jwt.PyJWTError` if invalid or expired."""
-    return jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+    """Decode and verify a JWT. Raises `jwt.PyJWTError` if invalid or expired.
+
+    `exp` and `sub` are *required*, not merely checked when present: PyJWT
+    only validates `exp` if the claim exists, so a token minted without one
+    (by a bug here, or with a leaked key) would otherwise never expire.
+    """
+    return jwt.decode(
+        token,
+        settings.JWT_SECRET_KEY,
+        algorithms=[settings.JWT_ALGORITHM],
+        options={"require": ["exp", "sub"]},
+    )
 
 
 def _prepare(password: str) -> bytes:

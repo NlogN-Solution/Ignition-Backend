@@ -15,6 +15,7 @@ from ..services.portal_access_service import PortalAccessService
 from .auth import AUTH_MARKER, get_current_user
 from .deps import get_db_session
 from .exceptions import ForbiddenException, NotFoundException, PaymentRequiredException
+from .pagination import clamp_page
 
 ModelT = TypeVar("ModelT", bound=Base)
 
@@ -121,6 +122,9 @@ class StudentScopedRepository:
         page: int = 1,
         limit: int = 20,
     ) -> tuple[list[ModelT], int]:
+        # The routes already bound these; clamping here as well means a new
+        # caller that forgets cannot reach Postgres with a negative OFFSET.
+        page, limit = clamp_page(page, limit)
         query = self.scoped(model, column, options)
         count_query = _exclude_soft_deleted(
             model,

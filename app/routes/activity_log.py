@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from ..api.auth import require_role
+from ..api.pagination import LimitParam, PageParam
 from ..models import User
 from ..schemas.activity_log import ActivityLogList, ActivityLogRead
 from ..services.activity_log_service import ActivityLogService, get_activity_log_service
@@ -14,8 +15,8 @@ router = APIRouter(prefix="/activity-logs", tags=["Activity Logs"])
 
 @router.get("", response_model=ActivityLogList, summary="List activity logs")
 async def list_activity_logs(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     user_id: UUID | None = None,
     activity_type: str | None = None,
     entity_type: str | None = None,

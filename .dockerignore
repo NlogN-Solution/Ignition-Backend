@@ -20,3 +20,9 @@ uploads/
 *.log
 *.sqlite3
 docker-compose.yml
+
+# Not needed at runtime, and the audit material in particular has no business
+# inside a production image.
+tests/
+security-audit/
+*.pdf

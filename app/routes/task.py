@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from ..api.auth import require_role, require_staff
 from ..api.exceptions import NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..models import User
 from ..models.enums import UserRole
 from ..schemas.task import TaskCreate, TaskList, TaskRead, TaskUpdate
@@ -20,8 +21,8 @@ _STAFF = require_staff
 
 @router.get("", response_model=TaskList, summary="List tasks")
 async def list_tasks(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     assigned_to: UUID | None = None,
     assigned_by: UUID | None = None,
     student_id: UUID | None = None,

@@ -99,6 +99,33 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
+@pytest.fixture(autouse=True)
+def _reset_login_throttle():
+    """The failed-login counters live in-process under ENVIRONMENT=test, and the
+    user factory reuses addresses across tests, so a wrong password in one test
+    would otherwise count against the next."""
+    from app.core.login_throttle import login_throttle
+
+    store = getattr(login_throttle, "_store", None)
+    if hasattr(store, "_data"):
+        store._data.clear()
+    yield
+    if hasattr(store, "_data"):
+        store._data.clear()
+
+
+@pytest.fixture
+def simulated_payments(monkeypatch):
+    """Turn the demo checkout on for one test.
+
+    Off by default everywhere (FAPI-SEC-001), and impossible in production;
+    tests that exercise the unlock flow opt in explicitly.
+    """
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "SIMULATED_PAYMENTS", True)
+
+
 # ── Factories ─────────────────────────────────────────────────────────────────
 
 DEFAULT_PASSWORD = "correct-horse-battery"

@@ -35,6 +35,9 @@ dependencies = [
     # Runtime, not just test: core/landing.py imports httpx to fire the
     # Next.js revalidation webhook. Keep it out of the dev extra only.
     "httpx==0.28.1",
+    # Sanitises the admin's rich-text article bodies before they are stored
+    # (core/html.py). Rust-backed (ammonia), maintained; bleach is deprecated.
+    "nh3==0.3.1",
 ]
 
 [project.optional-dependencies]
@@ -56,8 +59,9 @@ packages = ["app"]
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-# Alembic boilerplate and generated revisions: not ours to style.
-extend-exclude = ["migrations"]
+# Alembic boilerplate and generated revisions: not ours to style. The audit's
+# one-off helper scripts under security-audit/ are evidence, not app code.
+extend-exclude = ["migrations", "security-audit"]
 
 [tool.ruff.lint]
 select = [

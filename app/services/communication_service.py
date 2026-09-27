@@ -61,6 +61,7 @@ from ..models import (
     User,
 )
 from ..models.communication import MessageAttachmentKind, ThreadVisibility
+from .message_scope import visible_threads_condition
 
 #: Preview length on the mailbox list. Long enough to tell two replies apart.
 PREVIEW_LENGTH = 300
@@ -110,12 +111,36 @@ class CommunicationService:
     def _student_visible(query: Select[Any]) -> Select[Any]:
         return query.where(MessageThread.visibility == ThreadVisibility.SHARED)
 
+    @staticmethod
+    def _staff_visible(query: Select[Any], viewer: User | None) -> Select[Any]:
+        """Narrow a staff read to what this staff member may see.
+
+        `viewer=None` means "no staff narrowing" and is only for callers that
+        have already scoped by other means (the student portal, which filters
+        by the student's own id). Every staff route passes the caller.
+        """
+        if viewer is None:
+            return query
+        condition = visible_threads_condition(viewer)
+        return query if condition is None else query.where(condition)
+
+    async def staff_can_see(self, thread: MessageThread, viewer: User) -> bool:
+        """The by-id form of the staff rule, for one already-loaded thread."""
+        condition = visible_threads_condition(viewer)
+        if condition is None:
+            return True
+        visible = await self.session.scalar(
+            select(MessageThread.id).where(MessageThread.id == thread.id, condition)
+        )
+        return visible is not None
+
     async def threads_for_student(
         self,
         student_id: uuid.UUID,
         *,
         include_internal: bool = False,
         application_id: uuid.UUID | None = None,
+        viewer: User | None = None,
     ) -> list[MessageThread]:
         """Everything this person has ever corresponded about.
 
@@ -128,10 +153,11 @@ class CommunicationService:
             query = self._student_visible(query)
         if application_id is not None:
             query = query.where(MessageThread.application_id == application_id)
+        query = self._staff_visible(query, viewer)
         result = await self.session.execute(query.order_by(MessageThread.last_message_at.desc()))
         return list(result.scalars().unique().all())
 
-    async def threads_for_lead(self, lead_id: uuid.UUID) -> list[MessageThread]:
+    async def threads_for_lead(self, lead_id: uuid.UUID, *, viewer: User | None = None) -> list[MessageThread]:
         """A lead's threads, including any opened after they converted.
 
         The mirror of `threads_for_student`: once converted, new threads are
@@ -145,14 +171,17 @@ class CommunicationService:
         if converted_user_id is not None:
             clauses.append(MessageThread.student_id == converted_user_id)
         result = await self.session.execute(
-            self._base().where(or_(*clauses)).order_by(MessageThread.last_message_at.desc())
+            self._staff_visible(self._base().where(or_(*clauses)), viewer).order_by(
+                MessageThread.last_message_at.desc()
+            )
         )
         return list(result.scalars().unique().all())
 
-    async def threads_for_application(self, application_id: uuid.UUID) -> list[MessageThread]:
+    async def threads_for_application(
+        self, application_id: uuid.UUID, *, viewer: User | None = None
+    ) -> list[MessageThread]:
         result = await self.session.execute(
-            self._base()
-            .where(MessageThread.application_id == application_id)
+            self._staff_visible(self._base().where(MessageThread.application_id == application_id), viewer)
             .order_by(MessageThread.last_message_at.desc())
         )
         return list(result.scalars().unique().all())
@@ -164,12 +193,16 @@ class CommunicationService:
         unread_only: bool = False,
         page: int = 1,
         limit: int = 30,
+        viewer: User | None = None,
     ) -> tuple[list[MessageThread], int]:
-        """The console's mailbox: every thread, newest activity first."""
+        """The console's mailbox, newest activity first — every thread this
+        staff member may see (see `message_scope.visible_threads_condition`)."""
         query = self._base()
         count_query = select(func.count()).select_from(MessageThread)
 
         conditions: list[ColumnElement[bool]] = []
+        if viewer is not None and (scope := visible_threads_condition(viewer)) is not None:
+            conditions.append(scope)
         if search and search.strip():
             needle = f"%{search.strip().lower()}%"
             conditions.append(
@@ -349,7 +382,7 @@ class CommunicationService:
             select(ThreadMessage)
             .options(selectinload(ThreadMessage.attachments))
             .where(ThreadMessage.id == message.id)
-        )
+        ) or message
 
     async def mark_read(self, thread: MessageThread, *, by_student: bool) -> int:
         """Mark the other side's messages read. Returns how many changed."""

@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from ..models.enums import Gender, UserRole, UserStatus
+from .email import NormalizedEmail
 
 
 class UserBase(BaseModel):
@@ -27,7 +28,7 @@ class UserCreate(BaseModel):
     lead-conversion path: a student record exists before portal access does.
     """
 
-    email: EmailStr
+    email: NormalizedEmail
     password: str | None = Field(default=None, min_length=8)
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
@@ -39,7 +40,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
-    email: EmailStr | None = None
+    email: NormalizedEmail | None = None
     phone: str | None = None
     bio: str | None = None
     date_of_birth: date | None = None
@@ -60,11 +61,15 @@ class UserSelfUpdate(BaseModel):
 
     first_name: str | None = None
     last_name: str | None = None
-    email: EmailStr | None = None
+    email: NormalizedEmail | None = None
     phone: str | None = None
     bio: str | None = None
     date_of_birth: date | None = None
     gender: Gender | None = None
+    #: Required only when `email` actually changes (FAPI-SEC-009). The address
+    #: is the account's identity — and, once recovery exists, the way back into
+    #: it — so a briefly stolen access token must not be enough to move it.
+    current_password: str | None = None
 
 
 class ResetPasswordRequest(BaseModel):

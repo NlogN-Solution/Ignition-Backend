@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from ..api.auth import get_current_user
 from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
+from ..api.scoping import assert_may_see_student
 from ..models import StudentProfile, User
 from ..models.enums import UserRole
 from ..schemas.student_profile import (
@@ -18,6 +19,7 @@ from ..schemas.student_profile import (
     StudentWorkExperienceRead,
     StudentWorkExperienceUpsert,
 )
+from ..services.profile_completion import read_profile
 from ..services.student_profile_service import StudentProfileService, get_student_profile_service
 
 router = APIRouter(prefix="/users", tags=["Student Profile"])
@@ -26,17 +28,20 @@ router = APIRouter(prefix="/users", tags=["Student Profile"])
 STUDENT_PROFILE_ROLES = frozenset({UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.COUNSELLOR})
 
 
-def _assert_can_access(current_user: User, user_id: UUID) -> None:
-    """Owner, or staff with a student-facing role.
+async def _assert_can_access(current_user: User, user_id: UUID, service: StudentProfileService) -> None:
+    """Owner, or staff with a student-facing role — within their own work.
 
     ED360's version also compares organizations; single-tenant there is no
     second organization to be in, so what remains is the ownership check that
-    was always doing the real work.
+    was always doing the real work. A counsellor is additionally held to the
+    own-work rule (FAPI-SEC-014): their students and unclaimed ones, a 404 for
+    a colleague's.
     """
     if current_user.id == user_id:
         return
     if current_user.role not in STUDENT_PROFILE_ROLES:
         raise ForbiddenException("You do not have access to this student profile")
+    await assert_may_see_student(service.session, current_user, user_id, "Student profile not found")
 
 
 async def _resolve_profile(
@@ -50,7 +55,7 @@ async def _resolve_profile(
     alone, so an entry belonging to another student can never be reached by
     pairing your own `user_id` with their `entry_id`.
     """
-    _assert_can_access(current_user, user_id)
+    await _assert_can_access(current_user, user_id, service)
     profile = await service.get_by_user_id(user_id)
     if profile is None:
         raise NotFoundException("Student profile not found")
@@ -67,7 +72,7 @@ async def get_student_profile(
     current_user: User = Depends(get_current_user),
 ) -> StudentProfileRead:
     profile = await _resolve_profile(current_user, user_id, service)
-    return StudentProfileRead.model_validate(profile)
+    return await read_profile(service.session, profile)
 
 
 @router.patch(
@@ -81,12 +86,12 @@ async def upsert_student_profile(
     service: StudentProfileService = Depends(get_student_profile_service),
     current_user: User = Depends(get_current_user),
 ) -> StudentProfileRead:
-    _assert_can_access(current_user, user_id)
+    await _assert_can_access(current_user, user_id, service)
     try:
         profile = await service.upsert(user_id, payload.model_dump(exclude_unset=True))
     except ValueError as exc:
         raise BadRequestException(str(exc)) from exc
-    return StudentProfileRead.model_validate(profile)
+    return await read_profile(service.session, profile)
 
 
 @router.get(
@@ -105,7 +110,7 @@ async def get_research_shortlist(
     still a counsellor's act, in the applications API, against a course they
     pick — a shortlist is where a conversation starts, not its conclusion.
     """
-    _assert_can_access(current_user, user_id)
+    await _assert_can_access(current_user, user_id, service)
     profile = await service.get_by_user_id(user_id)
     if profile is None:
         # Not an error: a student who has not been through onboarding has no
@@ -136,7 +141,7 @@ async def get_portal_shortlist(
     Reading is all it does. Opening an application against a shortlisted course
     is still a counsellor's act in the applications API.
     """
-    _assert_can_access(current_user, user_id)
+    await _assert_can_access(current_user, user_id, service)
     return StudentShortlist.model_validate(await service.portal_shortlist(user_id))
 
 

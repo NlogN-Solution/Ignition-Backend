@@ -6,13 +6,14 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import ColumnElement, String, cast, func, or_, select, text
+from sqlalchemy import ColumnElement, String, TextClause, cast, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.deps import get_db_session
+from ..api.exceptions import BadRequestException, NotFoundException
 from ..core.events import ApplicationCreated, ApplicationStatusChanged, event_bus
-from ..models import Application, ApplicationStatusHistory, Program, University, User
-from ..models.enums import ApplicationStatus
+from ..models import Application, ApplicationStatusHistory, Intake, Program, University, User
+from ..models.enums import STAFF_ROLES, ApplicationStatus, UserRole
 from .partial_update import reject_null_on_required
 
 #: Date fields stored as `String(10)` ISO strings — an ED360 wart documented on
@@ -79,7 +80,7 @@ class ApplicationService:
         reference and never on an ordinary name search.
         """
         needle = f"%{search.lower()}%"
-        clauses: list[ColumnElement[bool]] = [
+        clauses: list[ColumnElement[bool] | TextClause] = [
             func.lower(User.first_name).like(needle),
             func.lower(func.coalesce(User.last_name, "")).like(needle),
             func.lower(func.coalesce(User.email, "")).like(needle),
@@ -164,6 +165,43 @@ class ApplicationService:
         query = query.order_by(Application.created_at.desc(), Application.id).limit(limit).offset((page - 1) * limit)
         result = await self.session.execute(query)
         return list(result.scalars().all()), total
+
+    async def validate_references(self, data: dict[str, Any], current: Application | None = None) -> None:
+        """Check every foreign key in a staff create/update before writing it.
+
+        The ids arrive in the request body, and only the path parameter used to
+        be checked (FAPI-SEC-004): an application could be opened for a staff
+        account as its "student", handed to a student as its "counsellor", or
+        given an intake belonging to a different course — and a made-up id was
+        a 500 from the foreign key rather than a 404.
+        """
+        student_id = data.get("student_id")
+        if student_id is not None:
+            student = await self.session.get(User, student_id)
+            if student is None or student.deleted_at is not None or student.role is not UserRole.STUDENT:
+                raise NotFoundException("Student not found")
+
+        counsellor_id = data.get("counsellor_id")
+        if counsellor_id is not None:
+            counsellor = await self.session.get(User, counsellor_id)
+            if counsellor is None or counsellor.deleted_at is not None or counsellor.role not in STAFF_ROLES:
+                raise BadRequestException("counsellor_id must be an active staff member")
+
+        program_id = data.get("program_id") or (current.program_id if current else None)
+        if data.get("program_id") is not None and await self.session.get(Program, data["program_id"]) is None:
+            raise NotFoundException("Program not found")
+
+        if "intake_id" in data:
+            intake_id = data["intake_id"]
+        elif current is not None and data.get("program_id") is not None:
+            # Moving to another course must not leave the old course's intake behind.
+            intake_id = current.intake_id
+        else:
+            intake_id = None
+        if intake_id is not None:
+            intake_program_id = await self.session.scalar(select(Intake.program_id).where(Intake.id == intake_id))
+            if intake_program_id is None or intake_program_id != program_id:
+                raise BadRequestException("That intake does not belong to this application's program")
 
     async def create_application(self, data: dict[str, Any]) -> Application:
         application = Application(**normalise_string_dates(data))

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..api.auth import require_role
 from ..api.deps import get_db_session
 from ..api.exceptions import BadRequestException, ConflictException, ForbiddenException, NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..models import User
 from ..models.enums import PayrollRunStatus
 from ..schemas.payroll import (
@@ -89,8 +90,8 @@ async def upsert_salary_structure(
 
 @router.get("/payroll-runs", response_model=PayrollRunList, summary="List payroll runs")
 async def list_payroll_runs(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     service: PayrollService = Depends(get_payroll_service),
     user: User = Depends(require_role(*VIEW_ROLES)),
 ) -> PayrollRunList:

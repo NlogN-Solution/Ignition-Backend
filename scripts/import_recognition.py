@@ -44,7 +44,6 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.db.session import session_factory  # noqa: E402
 from app.models import University  # noqa: E402
-
 from scripts.import_catalogue import Report, apply_fields  # noqa: E402
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "catalogue"

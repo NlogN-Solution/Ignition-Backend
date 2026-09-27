@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from ..api.auth import require_role, require_staff
 from ..api.exceptions import BadRequestException, NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..models import Department, User
 from ..models.enums import UserRole
 from ..schemas.department import DepartmentCreate, DepartmentList, DepartmentRead, DepartmentUpdate
@@ -28,8 +29,8 @@ def _to_read(department: Department, employee_count: int) -> DepartmentRead:
 
 @router.get("", response_model=DepartmentList, summary="List departments")
 async def list_departments(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     service: DepartmentService = Depends(get_department_service),
     _: User = Depends(require_staff),

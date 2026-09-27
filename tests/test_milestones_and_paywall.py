@@ -18,7 +18,9 @@ from httpx import AsyncClient
 
 from app.models.enums import UserRole
 
-pytestmark = pytest.mark.asyncio
+# The unlock flow is the simulated checkout, which is off unless a deployment
+# opts in (FAPI-SEC-001) — so this module opts in.
+pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("simulated_payments")]
 
 APPLICATIONS = "/api/v1/applications"
 DOCUMENTS = "/api/v1/documents"

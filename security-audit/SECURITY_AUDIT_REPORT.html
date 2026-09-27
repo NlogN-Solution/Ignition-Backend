@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ignition Security Audit</title>
+<style>
+:root{--bg:#fff;--fg:#1b1f24;--muted:#57606a;--line:#d8dee4;--code:#f6f8fa;--accent:#0b5cad;
+--crit:#8b0000;--high:#c62828;--med:#b45309;--low:#1d6f42;--info:#4b5563}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#30363d;--code:#161b22;--accent:#58a6ff}}
+:root[data-theme="dark"]{--bg:#0d1117;--fg:#e6edf3;--muted:#9da7b3;--line:#30363d;--code:#161b22;--accent:#58a6ff}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;margin:0 auto;max-width:980px;padding:24px 16px}
+h1{font-size:28px;margin:8px 0 16px}h2{font-size:21px;border-bottom:1px solid var(--line);padding-bottom:4px;margin-top:36px}
+h3{font-size:17px;margin-top:28px;color:var(--accent)}p,li{overflow-wrap:anywhere}
+code{background:var(--code);padding:1px 4px;border-radius:4px;font-size:.9em}
+pre{background:var(--code);border:1px solid var(--line);border-radius:6px;padding:10px;overflow-x:auto;white-space:pre-wrap;word-break:break-word}
+pre code{padding:0;background:none}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top;}td.brk{overflow-wrap:anywhere}td.nw,th.nw{white-space:nowrap}th{background:var(--code)}
+dl.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:8px 0}dl.kv dt{font-weight:600;color:var(--muted)}dl.kv dd{margin:0}
+.sev{font-weight:700;padding:1px 6px;border-radius:4px;color:#fff;font-size:12px;white-space:nowrap}
+.sev.critical{background:var(--crit)}.sev.high{background:var(--high)}.sev.medium{background:var(--med)}.sev.low{background:var(--low)}.sev.informational{background:var(--info)}
+.pb{break-after:page}
+@media print{body{max-width:none;font-size:11.5px}.tw{overflow:visible}h3{break-after:avoid}pre,table{break-inside:auto}tr{break-inside:avoid}}
+</style></head><body>
+<h1>FastAPI Backend Security Audit — Ignition</h1>
+<dl class="kv"><dt>Repository</dt><dd>Ignition backend (github.com/NlogN-Solution/Ignition-Backend)</dd><dt>Branch</dt><dd>main</dd><dt>Commit SHA</dt><dd>1e58579de9f53f9bce5494e1528e3aae74b0e057</dd><dt>Audit date</dt><dd>2026-09-25</dd><dt>Auditor</dt><dd>Claude Code (claude-opus-5-5)</dd><dt>Specification</dt><dd>FastAPI_Backend_Security_Audit_Claude_Code.pdf (hybrid review, OWASP API Security Top 10 2023)</dd><dt>Scope</dt><dd>Whole backend repository: app/ (30.8k LOC, 339 HTTP endpoints across 29 routers), configuration, Dockerfile, docker-compose.yml, render.yaml, migrations (inventory only), scripts/ (import tooling), tests/.</dd></dl>
+<div class="pb"></div>
+<h2>1. Executive summary</h2>
+<p>Ignition&#x27;s backend is well defended at the level most APIs get wrong. Every one of the 339 routes declares an authentication dependency, and a test fails the build if one does not. Public self-registration cannot set a role. JWT handling is correct, refresh tokens are rotated and stored server-side, uploaded file names are discarded, message HTML is sanitised on input, and the student portal reads through a repository that always filters by the calling student.</p>
+<p>The weaknesses are in the next layer down: checks on which object a request may touch, and on business flows. The audit confirmed 12 vulnerabilities (no Critical or High; 4 Medium, 8 Low) and 6 informational hardening items. All confirmed vulnerabilities except the two that depend on the deployment environment were reproduced with local, non-destructive regression tests against the ignition_test database.</p>
+<p>The highest-priority problems:</p>
+<ul><li>FAPI-SEC-001: the simulated checkout is on by default and nothing turns it off in production, so any self-registered student can unlock the paid portal for free.</li><li>FAPI-SEC-002: a checklist item accepts any document id. Students can self-verify requirements with an unrelated approved file, or link another student&#x27;s document.</li><li>FAPI-SEC-005: the counsellor &#x27;own work only&#x27; privacy rule, enforced on /applications, /leads and the legacy /messages, is missing from the new /communication router (including internal staff notes) and from the application workflow/checklist routes.</li><li>FAPI-SEC-010 (needs environment verification): rate limits key on the Render proxy&#x27;s IP, which turns per-client login limits into one global bucket that an anonymous caller can exhaust.</li></ul>
+<h3>Overall risk posture</h3>
+<p>Moderate. No finding gives an unauthenticated attacker access to personal data or privileged functions. The confirmed issues need an account (free for students) or a staff role, and several need a victim&#x27;s random UUID. The business-flow bypass (FAPI-SEC-001) and the internal-privacy gap (FAPI-SEC-005) are the ones with direct real-world consequences. No numeric score is given, by design.</p>
+<h2>2. Scope and exclusions</h2>
+<p>In scope: Whole backend repository: app/ (30.8k LOC, 339 HTTP endpoints across 29 routers), configuration, Dockerfile, docker-compose.yml, render.yaml, migrations (inventory only), scripts/ (import tooling), tests/.</p>
+<p>Excluded: Frontends (Ignition-AdminFrontend, Ignition-StudentDashboard, Ignition-Landing), the landing site&#x27;s /api/revalidate and /api/preview handlers, Cloudinary/Neon/Render account configuration, production runtime. No production or third-party system was contacted; all verification ran against the local ignition_test database inside a rolled-back transaction.</p>
+<h2>3. Repository and architecture overview</h2>
+<ul><li>Stack: Python 3.12, FastAPI 0.141.1 / Starlette 1.3.1, Uvicorn 0.52, Pydantic 2.13, SQLAlchemy 2.0 (asyncpg), Alembic, PyJWT 2.13 (HS256), bcrypt 5.0, slowapi (Redis-backed), Cloudinary for media, httpx for the landing revalidation webhook.</li><li>Entry point app/main.py: CORS (explicit origins; LAN regex only in development), a request-id middleware, a generic 500 handler (no stack traces to clients), and OpenAPI/docs disabled when ENVIRONMENT=production.</li><li>29 routers mounted under /api/v1 by app/api/router.py; no WebSockets, SSE, static mounts or background workers (events run in-process after commit; the docker-compose Celery worker points to a module that does not exist).</li><li>Data: single-tenant PostgreSQL (Neon in production), Redis (rate limits, dashboard cache, public response cache).</li><li>Deployment: Docker (non-root uid 1001, slim image), Render Blueprint (render.yaml) running <code>alembic upgrade head</code> before each deploy.</li><li>Trust boundaries: anonymous (public catalogue, eligibility, apply-intent, register/login); student (self-registered); staff roles (viewer, counsellor, frontdesk, staff, finance, marketing, support, admissions, manager, admin, super_admin); external services (Cloudinary, landing site webhook).</li></ul>
+<h2>4. Authentication and authorization architecture</h2>
+<ul><li>Bearer JWT (HTTPBearer). Access tokens last 15 minutes with type=access; refresh tokens last 30 days, carry a jti, are stored as a SHA-256 hash in user_sessions, rotate on every use and are revoked on logout and password change. Algorithms are pinned to settings.JWT_ALGORITHM, so alg=none is rejected (verified). A refresh token used as a bearer token is rejected (verified).</li><li>Production refuses to boot with a missing, weak (&lt;32 chars) or placeholder JWT secret, or without Cloudinary keys. Development generates a per-process secret.</li><li>Passwords: bcrypt (cost 12) over base64(SHA-256(password)), which avoids 72-byte truncation. Timing is equalised for unknown accounts. Lockout after 5 failures for 15 minutes (see FAPI-SEC-011).</li><li>Authorization dependencies: get_current_user (active, not deleted, checked per request), require_role (super_admin always passes), require_owner, require_staff, get_current_student, require_public. tests/test_endpoint_authorization.py fails the build if a route has no marker or if the public set changes.</li><li>Object level: StudentScopedRepository for the student portal; inline owner checks on documents, appointments, payments, notifications, leave, payroll and attendance; can_manage_target rank rule for user administration; counsellor own-work scoping (api/scoping.py, services/message_scope.py) on leads, applications and legacy messages.</li><li>No cookies, so CSRF does not apply. There are no password-reset or e-mail-verification flows yet: staff reset passwords administratively and temporary passwords are returned once.</li></ul>
+<h2>5. Attack surface and endpoint inventory summary</h2>
+<div class="tw"><table><thead><tr><th>Metric</th><th class=nw>Count</th></tr></thead><tbody><tr><td>HTTP endpoints discovered (method + path)</td><td class=nw>339</td></tr><tr><td>Route decorators in app/routes (cross-check)</td><td class=nw>339</td></tr><tr><td>Unauthenticated endpoints</td><td class=nw>21</td></tr><tr><td>Authenticated, no role restriction (object checks inline)</td><td class=nw>59</td></tr><tr><td>Student-role endpoints</td><td class=nw>95</td></tr><tr><td>Endpoints mapped to at least one finding</td><td class=nw>55</td></tr><tr><td>Endpoints marked Reviewed in endpoint-security-matrix.csv</td><td class=nw>339</td></tr></tbody></table></div>
+<p>Unauthenticated surface:</p>
+<div class="tw"><table><thead><tr><th class=nw>Method</th><th>Path</th></tr></thead><tbody><tr><td class=nw>POST</td><td class=brk>/api/v1/auth/login</td></tr><tr><td class=nw>POST</td><td class=brk>/api/v1/auth/refresh</td></tr><tr><td class=nw>POST</td><td class=brk>/api/v1/auth/register</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/health</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/health/ready</td></tr><tr><td class=nw>POST</td><td class=brk>/api/v1/public/apply-intents</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/apply-intents/{intent_id}</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/content</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/content/{key}</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/course-profiles</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/course-profiles/{slug}</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/courses</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/courses/facets</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/courses/{slug}</td></tr><tr><td class=nw>POST</td><td class=brk>/api/v1/public/eligibility</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/posts</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/posts/{slug}</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/scholarships</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/taxonomies</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/universities</td></tr><tr><td class=nw>GET</td><td class=brk>/api/v1/public/universities/{slug}</td></tr></tbody></table></div>
+<p>The full per-route matrix (authentication, role dependency, object ids, object-level control, body, response model, review status, findings) is in endpoint-security-matrix.csv.</p>
+<h2>6. Methodology and tools actually executed</h2>
+<ul><li>Phase 0, inventory: repository layout, configuration, deployment files. The route inventory was built by introspecting the live FastAPI app with the project&#x27;s own traversal (FastAPI 0.141 nests included routers) and cross-checked against the 339 decorators in app/routes.</li><li>Phase 1, deterministic: pytest (existing suite), ruff, mypy. Bandit, pip-audit, Semgrep and a secret scanner are not installed, and per the specification were not installed silently (see section 10).</li><li>Phase 2, manual semantic review of every router and the services behind each object-level decision, against OWASP API Top 10 2023 and the FastAPI-specific checklist.</li><li>Phase 3, source-to-sink tracing for each candidate: request input, dependency, ownership check, service, then SQL/storage sink.</li><li>Phase 4, safe verification: 30 pytest cases in security-audit/tests/security/ using the project&#x27;s rolled-back ignition_test harness and synthetic users only. 16 reproduce findings; 14 are positive controls that pass.</li><li>Phase 5, triage: severity by likelihood and impact, grouped by root cause, false positives recorded.</li></ul>
+<div class="pb"></div>
+<h2>7. Findings summary</h2>
+<div class="tw"><table><thead><tr><th class=nw>Severity</th><th class=nw>Count</th></tr></thead><tbody><tr><td class=nw><span class="sev critical">Critical</span></td><td class=nw>0</td></tr><tr><td class=nw><span class="sev high">High</span></td><td class=nw>0</td></tr><tr><td class=nw><span class="sev medium">Medium</span></td><td class=nw>4</td></tr><tr><td class=nw><span class="sev low">Low</span></td><td class=nw>8</td></tr><tr><td class=nw><span class="sev informational">Informational</span></td><td class=nw>6</td></tr></tbody></table></div>
+<div class="tw"><table><thead><tr><th class=nw>ID</th><th class=nw>Severity</th><th class=nw>Confidence</th><th>Title</th><th>Affected area</th><th>Status</th></tr></thead><tbody><tr><td class=nw>FAPI-SEC-001</td><td class=nw><span class="sev medium">Medium</span></td><td class=nw>High</td><td>Simulated portal checkout is enabled by default in production, so any student can unlock the paid portal without paying</td><td class=brk>POST /api/v1/student/me/access/checkout</td><td>Confirmed</td></tr><tr><td class=nw>FAPI-SEC-002</td><td class=nw><span class="sev medium">Medium</span></td><td class=nw>High</td><td>Checklist items accept any document_id: students can self-verify requirements and link other students&#x27; documents</td><td class=brk>PATCH /api/v1/applications/{application_id}/checklist/{item_id}</td><td>Confirmed</td></tr><tr><td class=nw>FAPI-SEC-005</td><td class=nw><span class="sev medium">Medium</span></td><td class=nw>High</td><td>Counsellor own-work scoping is not enforced on the /communication router or the application workflow/checklist routes</td><td class=brk>GET /api/v1/communication/threads</td><td>Confirmed</td></tr><tr><td class=nw>FAPI-SEC-010</td><td class=nw><span class="sev medium">Medium</span></td><td class=nw>Medium</td><td>Rate limits and audit IPs are keyed on the reverse proxy&#x27;s address, not the client&#x27;s</td><td class=brk>POST /api/v1/auth/login (10/min)</td><td>Needs Environment Verification</td></tr><tr><td class=nw>FAPI-SEC-003</td><td class=nw><span class="sev low">Low</span></td><td class=nw>High</td><td>Workflow step ids are not tied to the application in the URL (cross-application read and write)</td><td class=brk>GET /api/v1/applications/{application_id}/workflow/steps/{step_id}/activities</td><td>Confirmed</td></tr><tr><td class=nw>FAPI-SEC-004</td><td class=nw><span class="sev low">Low</span></td><td class=nw>High</td><td>Client-supplied application_id and intake_id are not ownership-checked when documents, threads and applications are created</td><td class=brk>POST /api/v1/documents/upload (form field application_id)</td><td>Confirmed</td></tr><tr><td class=nw>FAPI-SEC-006</td><td class=nw><span class="sev low">Low</span></td><td class=nw>High</td><td>Leave-request attachments (e.g. medical notes) are uploaded as public Cloudinary assets</td><td class=brk>POST /api/v1/leave-requests</td><td>Confirmed</td></tr><tr><td class=nw>FAPI-SEC-007</td><td class=nw><span class="sev low">Low</span></td><td class=nw>High</td><td>Pagination parameters are unbounded and unvalidated on about 45 list endpoints</td><td class=brk>Every authenticated list route declaring <code>page: int = 1, limit: int = N</code> without Query(ge/le): users, documents, documents/folders, applications, leads, appointments, payments, tasks, notifications, content-*, catalogue, academic, attendance, leave, payroll, activity-logs, workflow, student/me/* lists (see endpoint-security-matrix.csv)</td><td>Confirmed</td></tr><tr><td class=nw>FAPI-SEC-008</td><td class=nw><span class="sev low">Low</span></td><td class=nw>High</td><td>Unpublished CMS and catalogue drafts are readable by any authenticated account, including self-registered students</td><td class=brk>GET /api/v1/content-pages[/{id}]</td><td>Confirmed</td></tr><tr><td class=nw>FAPI-SEC-009</td><td class=nw><span class="sev low">Low</span></td><td class=nw>High</td><td>Account e-mail handling: case-sensitive uniqueness, unverified self-service e-mail change, duplicate address returns 500</td><td class=brk>POST /api/v1/auth/register</td><td>Confirmed</td></tr><tr><td class=nw>FAPI-SEC-011</td><td class=nw><span class="sev low">Low</span></td><td class=nw>High</td><td>Account lockout enables targeted lockout of any account and confirms which e-mails are registered</td><td class=brk>POST /api/v1/auth/login</td><td>Confirmed</td></tr><tr><td class=nw>FAPI-SEC-012</td><td class=nw><span class="sev low">Low</span></td><td class=nw>Medium</td><td>Uploads are read fully into memory before the size check, with no request-body cap</td><td class=brk>POST /api/v1/documents/upload</td><td>Needs Environment Verification</td></tr><tr><td class=nw>FAPI-SEC-013</td><td class=nw><span class="sev informational">Informational</span></td><td class=nw>High</td><td>Signed Cloudinary delivery URLs for private documents never expire</td><td class=brk>GET /api/v1/documents/{document_id}/link|download</td><td>Informational</td></tr><tr><td class=nw>FAPI-SEC-014</td><td class=nw><span class="sev informational">Informational</span></td><td class=nw>High</td><td>Counsellors can read and edit any student&#x27;s profile and documents regardless of assignment</td><td class=brk>/api/v1/users/{user_id}/student-profile|education|experience|research|shortlist</td><td>Informational</td></tr><tr><td class=nw>FAPI-SEC-015</td><td class=nw><span class="sev informational">Informational</span></td><td class=nw>High</td><td>Managers and admins can approve their own leave requests</td><td class=brk>POST /api/v1/leave-requests/{request_id}/approve</td><td>Informational</td></tr><tr><td class=nw>FAPI-SEC-016</td><td class=nw><span class="sev informational">Informational</span></td><td class=nw>High</td><td>Access tokens survive logout and password change; refresh rotation is not atomic</td><td class=brk>POST /api/v1/auth/logout</td><td>Informational</td></tr><tr><td class=nw>FAPI-SEC-017</td><td class=nw><span class="sev informational">Informational</span></td><td class=nw>Medium</td><td>The developer .env holds hosted Neon database and Cloudinary credentials under ENVIRONMENT=development</td><td class=brk>n/a (developer workstation)</td><td>Needs Environment Verification</td></tr><tr><td class=nw>FAPI-SEC-018</td><td class=nw><span class="sev informational">Informational</span></td><td class=nw>Medium</td><td>Anonymous eligibility submissions attach to existing leads matched by e-mail or phone</td><td class=brk>POST /api/v1/public/eligibility</td><td>Informational</td></tr></tbody></table></div>
+<p>FAPI-SEC-001 to 012 are vulnerabilities. FAPI-SEC-013 to 018 are hardening recommendations or environment-dependent observations, kept separate as the specification requires.</p>
+<h2>8. Detailed findings</h2>
+<h3 id='fapi-sec-001'>FAPI-SEC-001 — Simulated portal checkout is enabled by default in production, so any student can unlock the paid portal without paying</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev medium">Medium</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Confirmed</dd><dt>CWE</dt><dd>CWE-1188: Insecure Default Initialization of Resource (with CWE-840 Business Logic Errors)</dd><dt>OWASP API</dt><dd>API6:2023 Unrestricted Access to Sensitive Business Flows; API8:2023 Security Misconfiguration</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>POST /api/v1/student/me/access/checkout</li><li>GET /api/v1/documents/{document_id}/link</li><li>GET /api/v1/documents/{document_id}/download</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/core/config.py:40</li><li>app/core/config.py:141-158</li><li>app/routes/student.py:2047-2089</li><li>app/routes/document.py:76-103</li><li>render.yaml:48-79</li></ul>
+<p><strong>Evidence / code path.</strong> Settings.SIMULATED_PAYMENTS defaults to True (config.py:40). The production validator (_validate_secrets, config.py:141) checks the JWT secret and Cloudinary keys but never SIMULATED_PAYMENTS, and render.yaml does not set it, so a production deploy from the Blueprint runs with True. checkout_my_portal_access (student.py:2052) only refuses when the flag is False; otherwise it writes a COMPLETED PORTAL_ACCESS Payment (student.py:2072). PortalAccessService.has_access returns True for any COMPLETED PORTAL_ACCESS payment, which is exactly what _assert_entitled (document.py:99) checks before releasing offer and CAS letters.</p>
+<p><strong>Preconditions.</strong> Any self-registered student account (registration is public). Production deployed without SIMULATED_PAYMENTS=false in the environment.</p>
+<p><strong>Attack scenario.</strong> A student registers, calls POST /student/me/access/checkout with {&quot;payment_method&quot;:&quot;esewa&quot;}, receives has_access=true, and downloads their offer/CAS letters without paying the access fee.</p>
+<p><strong>Impact.</strong> Complete bypass of the portal access fee, which is the product&#x27;s paywall, and loss of that revenue. The simulated payment rows are marked SIMULATED in reference and remarks, so finance can spot them afterwards, but access is already granted.</p>
+<p><strong>Safe reproduction / regression test.</strong> security-audit/tests/security/test_audit_findings.py::test_fapi_sec_001_production_refuses_simulated_payments and ::test_fapi_sec_001_checkout_unlocks_gated_documents_without_payment (both FAIL on the audited commit: production Settings boot with SIMULATED_PAYMENTS=True; checkout returns 200).</p>
+<p><strong>Root cause.</strong> A demo-only switch fails open: its safe value has to be set explicitly, and nothing forces that in production.</p>
+<p><strong>Remediation.</strong> Make production refuse to boot while SIMULATED_PAYMENTS is true (or default it to False and enable it only in development/test), and set SIMULATED_PAYMENTS=false in render.yaml. Consider also refusing checkout when ENVIRONMENT=production regardless of the flag until a real gateway is integrated.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>--- a/app/core/config.py
++++ b/app/core/config.py
+@@ def _validate_secrets(self) -&gt; Settings:
+         if self.ENVIRONMENT == &quot;production&quot;:
++            if self.SIMULATED_PAYMENTS:
++                raise ValueError(&quot;SIMULATED_PAYMENTS must be false in production (no gateway is integrated).&quot;)
+             if not self.JWT_SECRET_KEY:
+--- a/render.yaml
++++ b/render.yaml
+       - key: ENVIRONMENT
+         value: production
++      - key: SIMULATED_PAYMENTS
++        value: &quot;false&quot;</code></pre>
+<p><strong>Verification after fix.</strong> Not tested (fixes not applied, per audit rules)</p>
+<h3 id='fapi-sec-002'>FAPI-SEC-002 — Checklist items accept any document_id: students can self-verify requirements and link other students&#x27; documents</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev medium">Medium</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Confirmed</dd><dt>CWE</dt><dd>CWE-639: Authorization Bypass Through User-Controlled Key; CWE-863: Incorrect Authorization</dd><dt>OWASP API</dt><dd>API1:2023 Broken Object Level Authorization; API6:2023 Unrestricted Access to Sensitive Business Flows</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>PATCH /api/v1/applications/{application_id}/checklist/{item_id}</li><li>GET /api/v1/student/me/applications/{application_id}/documents (disclosure sink)</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/routes/workflow.py:485</li><li>app/routes/workflow.py:493-511</li><li>app/services/workflow_service.py:630-664</li><li>app/routes/student.py:866-905</li></ul>
+<p><strong>Evidence / code path.</strong> A student may PATCH document_id (_STUDENT_EDITABLE_CHECKLIST_FIELDS, workflow.py:485). ChecklistService.update_item loads the document by id (workflow_service.py:650) but checks neither its owner nor its type. If the document is already APPROVED, the item is set to VERIFIED (workflow_service.py:655), and link_to_application then files the document on the application (workflow_service.py:664). The student&#x27;s application-documents list selects linked documents by application_id only (student.py:893), not by Document.student_id, so the linked foreign document&#x27;s metadata is returned to the caller.</p>
+<p><strong>Preconditions.</strong> Authenticated student with an application that has a checklist item. Self-verification needs nothing more than any of their own APPROVED documents. Cross-student linking also needs another student&#x27;s document UUID (random UUIDv4, so hard to obtain).</p>
+<p><strong>Attack scenario.</strong> (a) A student whose &#x27;photo&#x27; was approved links it to the &#x27;passport&#x27; checklist item; the item is VERIFIED immediately and no reviewer ever sees a passport. (b) With a leaked document id, a student links another applicant&#x27;s approved passport to their own application; it shows as verified evidence and its title, filename, remarks and status appear in the attacker&#x27;s application view.</p>
+<p><strong>Impact.</strong> The document-review workflow can be bypassed: staff see VERIFIED requirements that were never reviewed for that purpose. It also allows cross-student linking and disclosure of another student&#x27;s document metadata (the file bytes stay protected by the owner check on /documents/{id}/download).</p>
+<p><strong>Safe reproduction / regression test.</strong> test_fapi_sec_002_student_cannot_link_another_students_document (FAIL: status=200, item status=verified) and test_fapi_sec_002_approved_document_of_other_type_does_not_self_verify (FAIL: item VERIFIED).</p>
+<p><strong>Root cause.</strong> The child resource (document) named in the request body is trusted without checking that it belongs to the same student as the parent application, and without checking that its type matches what the item requested.</p>
+<p><strong>Remediation.</strong> In update_application_checklist_item, resolve the document and require document.student_id == application.student_id (404 otherwise). Require document.document_type to match item.document_type when the item names one. Only auto-VERIFY when the approval came from staff for this same requirement; otherwise land SUBMITTED. Also restrict the student application-documents list to Document.student_id == application.student_id as defence in depth.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>--- a/app/routes/workflow.py
++++ b/app/routes/workflow.py
+@@ async def update_application_checklist_item(
+-    await _assert_application_access(application_id, user, application_service)
++    application = await _assert_application_access(application_id, user, application_service)
+@@
+     data = payload.model_dump(exclude_unset=True)
++    if data.get(&quot;document_id&quot;) is not None:
++        document = await DocumentService(application_service.session).get_document(data[&quot;document_id&quot;])
++        if document is None or document.student_id != application.student_id:
++            raise NotFoundException(&quot;Document not found&quot;)
++        if item.document_type is not None and document.document_type is not item.document_type:
++            raise BadRequestException(&quot;That document is not the type this item asks for&quot;)</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-003'>FAPI-SEC-003 — Workflow step ids are not tied to the application in the URL (cross-application read and write)</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev low">Low</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Confirmed</dd><dt>CWE</dt><dd>CWE-639: Authorization Bypass Through User-Controlled Key</dd><dt>OWASP API</dt><dd>API1:2023 Broken Object Level Authorization</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>GET /api/v1/applications/{application_id}/workflow/steps/{step_id}/activities</li><li>PATCH /api/v1/applications/{application_id}/workflow/steps/{step_id}</li><li>POST /api/v1/applications/{application_id}/workflow/steps/{step_id}/activities</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/routes/workflow.py:384-397</li><li>app/routes/workflow.py:404-412</li><li>app/routes/workflow.py:420-432</li><li>app/services/workflow_service.py:372-376</li><li>app/services/workflow_service.py:491-497</li></ul>
+<p><strong>Evidence / code path.</strong> Each handler authorises the caller against application_id (_assert_application_access) and then acts on step_id with get_step(step_id)/list_activities(step_id), which filter on the step id only. Nothing checks that the step&#x27;s ApplicationWorkflow.application_id equals the application_id in the path.</p>
+<p><strong>Preconditions.</strong> Student: owns any application and knows another application&#x27;s step UUID. Staff (admin/counsellor): can already reach any application through these routes (see FAPI-SEC-005), so the extra exposure is mostly for students.</p>
+<p><strong>Attack scenario.</strong> A student calls GET /applications/{own_app}/workflow/steps/{victim_step}/activities and reads staff comments and status history on another student&#x27;s workflow.</p>
+<p><strong>Impact.</strong> Cross-student disclosure of workflow activity (staff comments). Counsellors can also change steps of applications outside their own-work scope. Likelihood is limited because step ids are random UUIDs that are only shown to people who can already see that workflow.</p>
+<p><strong>Safe reproduction / regression test.</strong> test_fapi_sec_003_student_cannot_read_other_applications_step_activities (FAIL: returned [None, &#x27;SYNTHETIC-PRIVATE-NOTE&#x27;]).</p>
+<p><strong>Root cause.</strong> The parent/child relationship is checked for the parent only; the child lookup is not scoped to the parent.</p>
+<p><strong>Remediation.</strong> Add ApplicationWorkflowService.get_step_for_application(step_id, application_id), which joins ApplicationWorkflow and filters on application_id, and use it in all three step routes. Return 404 on mismatch.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>+    async def get_step_for_application(self, step_id: UUID, application_id: UUID) -&gt; ApplicationWorkflowStep | None:
++        return await self.session.scalar(
++            select(ApplicationWorkflowStep)
++            .join(ApplicationWorkflow, ApplicationWorkflow.id == ApplicationWorkflowStep.application_workflow_id)
++            .where(ApplicationWorkflowStep.id == step_id, ApplicationWorkflow.application_id == application_id)
++        )
+# routes/workflow.py: replace get_step(step_id) with get_step_for_application(step_id, application_id) and 404 on None,
+# including before list_activities(step_id).</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-004'>FAPI-SEC-004 — Client-supplied application_id and intake_id are not ownership-checked when documents, threads and applications are created</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev low">Low</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Confirmed</dd><dt>CWE</dt><dd>CWE-639: Authorization Bypass Through User-Controlled Key</dd><dt>OWASP API</dt><dd>API1:2023 Broken Object Level Authorization</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>POST /api/v1/documents/upload (form field application_id)</li><li>POST /api/v1/student/me/threads (application_id)</li><li>POST /api/v1/student/me/applications (intake_id)</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/routes/document.py:176</li><li>app/routes/document.py:221</li><li>app/services/document_service.py:65-71</li><li>app/routes/student.py:738</li><li>app/routes/student.py:478</li></ul>
+<p><strong>Evidence / code path.</strong> upload_document forces student_id to the caller for students but passes the form&#x27;s application_id straight to DocumentService.create_document, which inserts an ApplicationDocument link (document_service.py:70) with no ownership check. create_my_thread passes payload.application_id into create_thread unchecked. create_my_application stores payload.intake_id without checking that it belongs to payload.program_id. A nonexistent id raises an IntegrityError, which returns 500.</p>
+<p><strong>Preconditions.</strong> Authenticated student who knows another student&#x27;s application UUID.</p>
+<p><strong>Attack scenario.</strong> A student uploads a file with application_id set to a victim&#x27;s application. The file then appears in the victim&#x27;s &#x27;documents filed against this application&#x27; view and on the staff side of that application. A thread can be filed against the victim&#x27;s application in the same way.</p>
+<p><strong>Impact.</strong> Integrity: unsolicited content (possibly malicious files) planted on another applicant&#x27;s file, where staff and the victim will open it. There is no read access to the victim&#x27;s data. Likelihood is low because application ids are random UUIDs.</p>
+<p><strong>Safe reproduction / regression test.</strong> test_fapi_sec_004_upload_cannot_attach_to_foreign_application (FAIL: status=200) and test_fapi_sec_004_student_thread_cannot_attach_to_foreign_application (FAIL: status=201).</p>
+<p><strong>Root cause.</strong> Body/form foreign keys to parent resources are trusted; only the path parameters go through ownership checks.</p>
+<p><strong>Remediation.</strong> When application_id is supplied, load the application and require application.student_id == student_id (for staff uploads too), returning 404 otherwise. For student threads use repo.get_or_404(Application, payload.application_id). Validate that intake_id belongs to program_id.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>--- a/app/routes/document.py
++++ b/app/routes/document.py
+@@ async def upload_document(
+     if user.role is UserRole.STUDENT:
+         student_id = user.id
++    if application_id is not None:
++        application = await ApplicationService(service.session).get_application(application_id)
++        if application is None or application.student_id != student_id:
++            raise NotFoundException(&quot;Application not found&quot;)
+--- a/app/routes/student.py (create_my_thread)
++    if payload.application_id is not None:
++        await StudentScopedRepository(service.session, student).get_or_404(Application, payload.application_id)</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-005'>FAPI-SEC-005 — Counsellor own-work scoping is not enforced on the /communication router or the application workflow/checklist routes</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev medium">Medium</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Confirmed</dd><dt>CWE</dt><dd>CWE-285: Improper Authorization</dd><dt>OWASP API</dt><dd>API1:2023 Broken Object Level Authorization</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>GET /api/v1/communication/threads</li><li>GET /api/v1/communication/students/{student_id}/threads</li><li>GET /api/v1/communication/leads/{lead_id}/threads</li><li>GET /api/v1/communication/applications/{application_id}/threads</li><li>GET /api/v1/communication/threads/{thread_id}</li><li>POST /api/v1/communication/threads/{thread_id}/messages</li><li>GET /api/v1/communication/attachments/{attachment_id}/link|download</li><li>GET|POST|PATCH /api/v1/applications/{application_id}/workflow[/...]</li><li>GET|POST|PATCH /api/v1/applications/{application_id}/checklist[/...]</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/routes/communication.py:129-147</li><li>app/routes/communication.py:174-192</li><li>app/routes/communication.py:233-250</li><li>app/services/communication_service.py:160-202</li><li>app/routes/workflow.py:63-83</li></ul>
+<p><strong>Evidence / code path.</strong> The codebase defines a privacy rule: a counsellor sees their own records plus unclaimed ones (api/scoping.py:45, services/message_scope.py:41). It is enforced on /applications/{id} (application.py:53), /leads and the legacy /messages router. The /communication router, which replaces /messages, never applies it: staff_inbox takes no user and returns every thread, list_student_threads defaults include_internal=True, and get_thread only checks the role (communication.py:247). _assert_application_access returns any application for any APPLICATION_STAFF_ROLES member (workflow.py:79) without may_see_record, although GET /applications/{id} returns 404 for the same caller.</p>
+<p><strong>Preconditions.</strong> Authenticated counsellor (or admissions/manager) account.</p>
+<p><strong>Attack scenario.</strong> Counsellor A opens /communication/threads or /communication/students/{id}/threads for a student counselled by counsellor B and reads the whole correspondence, including INTERNAL staff notes. The same counsellor reads and edits the workflow and checklist of B&#x27;s applications, even though /applications/{id} hides them.</p>
+<p><strong>Impact.</strong> Confidentiality breach of student correspondence, which the code itself calls &#x27;the clearest privacy failure in the console&#x27;. Internal notes are exposed across the counsellor team, and the scoping on /applications is undone by the sub-resources.</p>
+<p><strong>Safe reproduction / regression test.</strong> test_fapi_sec_005_other_counsellors_student_correspondence (FAIL: 2 threads incl. internal; inbox shows 2), test_fapi_sec_005_checklist_of_other_counsellors_application (FAIL: 200), and positive control test_fapi_sec_005_control_application_is_hidden_from_other_counsellor (PASS: 404).</p>
+<p><strong>Root cause.</strong> Scoping is applied per router rather than centrally, and the new router and the sub-resource helper were written without it.</p>
+<p><strong>Remediation.</strong> Add a thread-level visibility condition (own student, own lead, own application, already replied, or unclaimed) to staff_inbox, threads_for_student/lead/application and the by-id thread and attachment checks for non-admin roles. Return 404 when it fails. In _assert_application_access, call may_see_record(user, application.counsellor_id) for staff and return 404 when it fails. Add scoping tests mirroring tests/test_scoping.py for these routes.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>--- a/app/routes/workflow.py
++++ b/app/routes/workflow.py
+@@ async def _assert_application_access(
+-    if user.role in APPLICATION_STAFF_ROLES:
+-        return application
++    if user.role in APPLICATION_STAFF_ROLES:
++        if not may_see_record(user, application.counsellor_id):
++            raise NotFoundException(&quot;Application not found&quot;)
++        return application
+# communication: pass `user` into staff_inbox/threads_for_* and AND a visibility clause
+# derived from message_scope.visible_students_condition (keyed on MessageThread.student_id / lead.assigned_to).</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-006'>FAPI-SEC-006 — Leave-request attachments (e.g. medical notes) are uploaded as public Cloudinary assets</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev low">Low</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Confirmed</dd><dt>CWE</dt><dd>CWE-552: Files or Directories Accessible to External Parties</dd><dt>OWASP API</dt><dd>API3:2023 Broken Object Property Level Authorization (data exposure); API8:2023 Security Misconfiguration</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>POST /api/v1/leave-requests</li><li>GET /api/v1/leave-requests[/{request_id}] (returns attachment_url)</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/routes/leave.py:132</li><li>app/core/uploads.py:99</li><li>app/core/uploads.py:142</li><li>app/core/uploads.py:59-63</li></ul>
+<p><strong>Evidence / code path.</strong> store_upload defaults to private=False, which uploads as type=&#x27;upload&#x27; (public, CDN-served, no signature). create_leave_request calls it without private=True (leave.py:132) and stores the returned public secure_url. The uploads module states that CONTENT_FOLDER is &#x27;the one folder uploaded with private=False&#x27;; leave attachments contradict that design.</p>
+<p><strong>Preconditions.</strong> Anyone who obtains the URL: browser history, logs, referrers, a forwarded link, or any manager/admin viewing the request.</p>
+<p><strong>Attack scenario.</strong> A leave request&#x27;s attachment URL is copied into a chat or ticket. Anyone holding it can fetch the employee&#x27;s medical certificate indefinitely, with no authentication and no expiry.</p>
+<p><strong>Impact.</strong> Exposure of employee health data. Likelihood is low because the object name is a random UUID, but there is no access control at all once the URL is known.</p>
+<p><strong>Safe reproduction / regression test.</strong> test_fapi_sec_006_leave_attachment_is_private (FAIL: attachment_url returned, which store_upload only does for public uploads).</p>
+<p><strong>Root cause.</strong> A default-public storage helper was used for a sensitive document class.</p>
+<p><strong>Remediation.</strong> Upload leave attachments with private=True into LEAVE_ATTACHMENT_FOLDER, store stored_file_name instead of a URL, and serve them through an authenticated route that checks self-or-MANAGE_ROLES before minting a signed URL. Migrate existing assets to the authenticated delivery type. Consider making store_upload&#x27;s private parameter keyword-required with no default.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>--- a/app/routes/leave.py
++++ b/app/routes/leave.py
+-        stored = await store_upload(file, DOCUMENT_EXTENSIONS, folder=LEAVE_ATTACHMENT_FOLDER)
+-        attachment_url = stored.url
++        stored = await store_upload(file, DOCUMENT_EXTENSIONS, folder=LEAVE_ATTACHMENT_FOLDER, private=True)
++        attachment_url = f&quot;/api/v1/leave-requests/{{id}}/attachment&quot;  # authenticated, owner-or-manager</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-007'>FAPI-SEC-007 — Pagination parameters are unbounded and unvalidated on about 45 list endpoints</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev low">Low</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Confirmed</dd><dt>CWE</dt><dd>CWE-770: Allocation of Resources Without Limits or Throttling; CWE-20: Improper Input Validation</dd><dt>OWASP API</dt><dd>API4:2023 Unrestricted Resource Consumption</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>Every authenticated list route declaring <code>page: int = 1, limit: int = N</code> without Query(ge/le): users, documents, documents/folders, applications, leads, appointments, payments, tasks, notifications, content-*, catalogue, academic, attendance, leave, payroll, activity-logs, workflow, student/me/* lists (see endpoint-security-matrix.csv)</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/api/student.py:136</li><li>app/services/document_service.py:61</li><li>app/services/document_service.py:266</li><li>app/routes/public.py:88 (the correct pattern, used only on /public)</li></ul>
+<p><strong>Evidence / code path.</strong> Only /public/* and /communication/threads constrain limit with Query(ge=1, le=100). Everywhere else limit and page are plain ints passed straight into .limit()/.offset((page-1)*limit). page=0 produces a negative OFFSET: asyncpg raises InvalidRowCountInResultOffsetClauseError, which becomes a 500. limit=1000000 is accepted.</p>
+<p><strong>Preconditions.</strong> Any authenticated user (students included for the /student/me/* and shared lists).</p>
+<p><strong>Attack scenario.</strong> A script repeatedly calls list endpoints with limit=1000000 (for example /documents/folders, /content-pages or the /student/me/* lists), forcing large serialisations and database scans; page=0 or negative limits generate 500s and error-log noise.</p>
+<p><strong>Impact.</strong> Availability and cost: memory and CPU spikes on a small Render instance, plus log flooding.</p>
+<p><strong>Safe reproduction / regression test.</strong> test_fapi_sec_007_limit_is_clamped (FAIL: 200) and test_fapi_sec_007_page_zero_is_a_client_error (FAIL: 500, negative OFFSET).</p>
+<p><strong>Root cause.</strong> The clamping convention was applied to the public router only, not project-wide.</p>
+<p><strong>Remediation.</strong> Move PageParam/LimitParam (ge=1, le=100) from routes/public.py into a shared module and use them on every list route. Also clamp inside StudentScopedRepository.list and the services as defence in depth.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code># app/api/pagination.py
++PageParam = Annotated[int, Query(ge=1)]
++LimitParam = Annotated[int, Query(ge=1, le=100)]
+# every list route:
+-    page: int = 1,
+-    limit: int = 20,
++    page: PageParam = 1,
++    limit: LimitParam = 20,</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-008'>FAPI-SEC-008 — Unpublished CMS and catalogue drafts are readable by any authenticated account, including self-registered students</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev low">Low</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Confirmed</dd><dt>CWE</dt><dd>CWE-285: Improper Authorization</dd><dt>OWASP API</dt><dd>API5:2023 Broken Function Level Authorization</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>GET /api/v1/content-pages[/{id}]</li><li>GET /api/v1/content-blocks[/{id}]</li><li>GET /api/v1/media-assets[/{id}]</li><li>GET /api/v1/blog-posts[/{id}]</li><li>GET /api/v1/country-guides[/{id}]</li><li>GET /api/v1/university-routes[/{id}]</li><li>GET /api/v1/course-profiles[/{id}]</li><li>GET /api/v1/scholarships[/{id}]</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/routes/content.py:75-99 (and :217, :227, :280, :290, :378, :388, :441, :451)</li><li>app/routes/catalogue.py:68, :80, :134, :146, :200, :212</li></ul>
+<p><strong>Evidence / code path.</strong> The staff CMS and catalogue read routes depend only on get_current_user and accept is_published=None/False. Because /auth/register is public, &#x27;authenticated&#x27; effectively means &#x27;anyone&#x27;. Writes are correctly limited to admin/marketing.</p>
+<p><strong>Preconditions.</strong> Any account (free self-registration).</p>
+<p><strong>Attack scenario.</strong> A competitor registers a student account and lists /content-pages?is_published=false and /scholarships to read embargoed pages, draft pricing and unpublished scholarships before launch.</p>
+<p><strong>Impact.</strong> Early disclosure of unpublished marketing and catalogue content. No personal data is involved.</p>
+<p><strong>Safe reproduction / regression test.</strong> test_fapi_sec_008_student_cannot_read_unpublished_content (FAIL: student read an unpublished draft, 200).</p>
+<p><strong>Root cause.</strong> The staff console&#x27;s read routes use the weakest authentication dependency.</p>
+<p><strong>Remediation.</strong> Guard these reads with require_staff (or the same admin/marketing role set as the writes). Students already have published-only equivalents under /public and /student/catalog.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>-    _: object = Depends(get_current_user),
++    _: object = Depends(require_staff),</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-009'>FAPI-SEC-009 — Account e-mail handling: case-sensitive uniqueness, unverified self-service e-mail change, duplicate address returns 500</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev low">Low</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Confirmed</dd><dt>CWE</dt><dd>CWE-178: Improper Handling of Case Sensitivity; CWE-620: Unverified Password Change (analogous, e-mail); CWE-755</dd><dt>OWASP API</dt><dd>API2:2023 Broken Authentication</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>POST /api/v1/auth/register</li><li>POST /api/v1/auth/login</li><li>PATCH /api/v1/users/me</li><li>PATCH /api/v1/users/{user_id}</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/models/user.py:65</li><li>app/services/auth_service.py:63</li><li>app/services/auth_service.py:109</li><li>app/routes/users.py:84-90</li><li>app/services/user_service.py:159-170</li><li>app/models/user.py:106</li></ul>
+<p><strong>Evidence / code path.</strong> users.email is a case-sensitive UNIQUE column and lookups compare it exactly. Pydantic EmailStr only lowercases the domain, so &#x27;Sec.Case@x&#x27; and &#x27;sec.case@x&#x27; become two accounts. PATCH /users/me accepts a new email with no current-password confirmation and no verification (email_verified_at is never written), and a taken address hits the DB constraint, giving an unhandled IntegrityError and a 500.</p>
+<p><strong>Preconditions.</strong> Any account. The takeover-persistence variant needs a stolen access token.</p>
+<p><strong>Attack scenario.</strong> Someone with a briefly hijacked access token changes the account&#x27;s e-mail, which becomes a permanent pivot once a reset/recovery flow is added. Separately, a person registers the case-variant of a known applicant&#x27;s address so staff see two &#x27;same&#x27; people; squatting on addresses is possible because registration never verifies them.</p>
+<p><strong>Impact.</strong> Identity confusion and duplicate accounts. It weakens future account-recovery flows, and the 500s disclose the existence of addresses.</p>
+<p><strong>Safe reproduction / regression test.</strong> test_fapi_sec_009_email_is_case_insensitive_unique (FAIL: second registration 200) and test_fapi_sec_009_self_email_change_to_taken_address_is_a_409 (FAIL: 500 UniqueViolationError).</p>
+<p><strong>Root cause.</strong> E-mail is treated as an opaque string, and identity changes are not treated as security-sensitive.</p>
+<p><strong>Remediation.</strong> Normalise e-mail to lower-case at every entry point and add a unique index on lower(email) via migration. Require current_password (and ideally re-verification) to change e-mail. Catch IntegrityError and return 409. Add e-mail verification at registration before the account can hold applications.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code># schemas: validator normalising EmailStr -&gt; str.lower()
+# migration: CREATE UNIQUE INDEX uq_users_email_lower ON users (lower(email));
+# users.py update_my_profile: if &#x27;email&#x27; in data: require payload.current_password and verify_password(...)</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-010'>FAPI-SEC-010 — Rate limits and audit IPs are keyed on the reverse proxy&#x27;s address, not the client&#x27;s</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev medium">Medium</span></dd><dt>Confidence</dt><dd>Medium</dd><dt>Status</dt><dd>Needs Environment Verification</dd><dt>CWE</dt><dd>CWE-348: Use of Less Trusted Source; CWE-770</dd><dt>OWASP API</dt><dd>API4:2023 Unrestricted Resource Consumption; API8:2023 Security Misconfiguration</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>POST /api/v1/auth/login (10/min)</li><li>POST /api/v1/auth/register (5/min)</li><li>POST /api/v1/auth/refresh (30/min)</li><li>POST /api/v1/auth/change-password (5/min)</li><li>POST /api/v1/public/eligibility (6/min)</li><li>POST /api/v1/public/apply-intents (30/min)</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/core/rate_limit.py:15</li><li>app/routes/auth.py:31-32</li><li>app/routes/users.py:33-34</li><li>Dockerfile:43</li></ul>
+<p><strong>Evidence / code path.</strong> slowapi uses get_remote_address, i.e. request.client.host. The container starts <code>uvicorn app.main:app --host 0.0.0.0 --port $PORT</code> with no --forwarded-allow-ips, and uvicorn 0.52 trusts X-Forwarded-For only from FORWARDED_ALLOW_IPS (default 127.0.0.1, uvicorn/config.py:357), which render.yaml does not set. Behind Render&#x27;s proxy, request.client.host is therefore the proxy&#x27;s address for every client.</p>
+<p><strong>Preconditions.</strong> Deployment behind Render&#x27;s (or any) reverse proxy whose address is not 127.0.0.1. Must be confirmed by logging request.client.host in production.</p>
+<p><strong>Attack scenario.</strong> An anonymous caller sends 10 login attempts a minute and exhausts the shared bucket, so every legitimate user gets 429 at login. Six eligibility submissions a minute shut down the public lead funnel in the same way. Activity logs record the proxy IP for every login, which defeats forensics.</p>
+<p><strong>Impact.</strong> A cheap denial of service against authentication and lead capture, and loss of source-IP attribution in the security audit trail. Per-attacker throttling also becomes meaningless: the limits only work globally.</p>
+<p><strong>Safe reproduction / regression test.</strong> Environment-dependent. Verification: in production, log request.client.host and X-Forwarded-For for a request and confirm they differ; or send 11 logins from one IP and confirm a second IP is also rate-limited.</p>
+<p><strong>Root cause.</strong> Proxy-aware client IP resolution is not configured.</p>
+<p><strong>Remediation.</strong> Run uvicorn with --proxy-headers --forwarded-allow-ips=&lt;Render&#x27;s proxy CIDR&gt; (or &#x27;*&#x27; only if the container is unreachable except through the proxy), and keep get_remote_address. Add per-account limits on login in addition to per-IP limits.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>--- a/Dockerfile
++++ b/Dockerfile
+-CMD [&quot;sh&quot;, &quot;-c&quot;, &quot;uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}&quot;]
++CMD [&quot;sh&quot;, &quot;-c&quot;, &quot;uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-127.0.0.1}&quot;]</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-011'>FAPI-SEC-011 — Account lockout enables targeted lockout of any account and confirms which e-mails are registered</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev low">Low</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Confirmed</dd><dt>CWE</dt><dd>CWE-645: Overly Restrictive Account Lockout Mechanism; CWE-204: Observable Response Discrepancy</dd><dt>OWASP API</dt><dd>API2:2023 Broken Authentication</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>POST /api/v1/auth/login</li><li>POST /api/v1/auth/register</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/services/auth_service.py:71-72</li><li>app/services/auth_service.py:91-101</li><li>app/services/auth_service.py:109-111</li></ul>
+<p><strong>Evidence / code path.</strong> Five wrong passwords lock any account for 15 minutes, keyed on the account alone. A locked account answers 403 &#x27;Account temporarily locked&#x27;, while an unknown address always answers 400 &#x27;Invalid email or password&#x27;, so the lock message confirms that the address exists. The code equalises bcrypt timing for this purpose, but the lock message undoes it. Registration also returns 409 for existing addresses.</p>
+<p><strong>Preconditions.</strong> Knowledge of a target e-mail (for example staff addresses on the website).</p>
+<p><strong>Attack scenario.</strong> An attacker sends 5 bad passwords for every counsellor&#x27;s address every 15 minutes, keeping the whole console locked out. The 403-vs-400 difference enumerates staff accounts.</p>
+<p><strong>Impact.</strong> Denial of service against specific users and e-mail enumeration.</p>
+<p><strong>Safe reproduction / regression test.</strong> test_fapi_sec_011_locked_account_is_indistinguishable_from_unknown (FAIL: locked=403 &#x27;Account temporarily locked...&#x27; vs unknown=400 &#x27;Invalid email or password&#x27;).</p>
+<p><strong>Root cause.</strong> Lockout keyed on the account alone, with a distinguishable response.</p>
+<p><strong>Remediation.</strong> Return the same status and message for locked, wrong-password and unknown-account cases; notify the account owner out of band. Prefer progressive delays or a CAPTCHA keyed on account plus IP over a hard lock. Accept 409 on register as a product trade-off or move to verify-by-email signup.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>-            raise ForbiddenException(&quot;Account temporarily locked due to failed login attempts&quot;)
++            verify_password(password, _dummy_hash())
++            return None  # indistinguishable from a bad password; alert the owner out of band</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-012'>FAPI-SEC-012 — Uploads are read fully into memory before the size check, with no request-body cap</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev low">Low</span></dd><dt>Confidence</dt><dd>Medium</dd><dt>Status</dt><dd>Needs Environment Verification</dd><dt>CWE</dt><dd>CWE-400: Uncontrolled Resource Consumption</dd><dt>OWASP API</dt><dd>API4:2023 Unrestricted Resource Consumption</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>POST /api/v1/documents/upload</li><li>POST /api/v1/student/me/documents/{document_id}/replace</li><li>POST /api/v1/communication/threads/{thread_id}/messages (up to 10 files + voice)</li><li>POST /api/v1/users/me/avatar</li><li>POST /api/v1/users/{user_id}/avatar</li><li>POST /api/v1/leave-requests</li><li>POST /api/v1/imports/catalogue (non-production)</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/core/uploads.py:116-120</li><li>app/routes/communication.py:59</li><li>app/routes/imports.py:62</li></ul>
+<p><strong>Evidence / code path.</strong> store_upload does <code>content = await file.read()</code> and only then compares len(content) with MAX_UPLOAD_SIZE_MB (25). No middleware or server limit caps the request body, and a single message may carry 10 attachments plus a voice note, all held in memory at once.</p>
+<p><strong>Preconditions.</strong> Any authenticated user (students included).</p>
+<p><strong>Attack scenario.</strong> A few concurrent multipart requests carrying 10 x 200 MB parts each push the &#x27;starter&#x27; Render instance into memory exhaustion before any size check runs.</p>
+<p><strong>Impact.</strong> Availability. The actual ceiling depends on Render&#x27;s proxy body limit, which was not verified.</p>
+<p><strong>Safe reproduction / regression test.</strong> Not executed (would be a DoS test). Code-level evidence only; verify Render&#x27;s max request size.</p>
+<p><strong>Root cause.</strong> Size is validated after buffering rather than while streaming.</p>
+<p><strong>Remediation.</strong> Reject on Content-Length over the limit early (middleware); read UploadFile in chunks and abort once the limit is exceeded; set a proxy or server body cap; lower MAX_ATTACHMENTS or cap the total size per message.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>+    chunks, total = [], 0
++    while chunk := await file.read(1024 * 1024):
++        total += len(chunk)
++        if total &gt; limit:
++            raise BadRequestException(...)
++        chunks.append(chunk)
++    content = b&quot;&quot;.join(chunks)</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3>Hardening recommendations and environment observations</h3>
+<h3 id='fapi-sec-013'>FAPI-SEC-013 — Signed Cloudinary delivery URLs for private documents never expire</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev informational">Informational</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Informational</dd><dt>CWE</dt><dd>CWE-613: Insufficient Session Expiration (analogous)</dd><dt>OWASP API</dt><dd>API8:2023 Security Misconfiguration</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>GET /api/v1/documents/{document_id}/link|download</li><li>GET /api/v1/communication/attachments/{attachment_id}/link|download</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/core/uploads.py:154-205 (documented at :176-190)</li></ul>
+<p><strong>Evidence / code path.</strong> The code documents this itself: cloudinary_url ignores expires_at for the authenticated delivery type without token auth, so a minted URL is a permanent bearer credential.</p>
+<p><strong>Preconditions.</strong> A signed URL leaks (history, logs, referrer, forwarding).</p>
+<p><strong>Attack scenario.</strong> A passport scan&#x27;s signed URL pasted into a support ticket stays valid forever.</p>
+<p><strong>Impact.</strong> Long-lived access to private documents after a URL leaks.</p>
+<p><strong>Safe reproduction / regression test.</strong> Documented in code; not re-tested.</p>
+<p><strong>Root cause.</strong> Cloudinary token-based authentication is not enabled.</p>
+<p><strong>Remediation.</strong> Enable Cloudinary token-based auth (auth_token with a short duration) for the authenticated type, or proxy file bytes through the API with Cache-Control: private, no-store.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>n/a (account configuration + build_download_url auth_token)</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-014'>FAPI-SEC-014 — Counsellors can read and edit any student&#x27;s profile and documents regardless of assignment</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev informational">Informational</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Informational</dd><dt>CWE</dt><dd>CWE-285: Improper Authorization (policy gap)</dd><dt>OWASP API</dt><dd>API1:2023 Broken Object Level Authorization</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>/api/v1/users/{user_id}/student-profile|education|experience|research|shortlist</li><li>/api/v1/documents* (staff branch)</li><li>PATCH /api/v1/users/{user_id} (counsellor on students)</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/routes/student_profile.py:26-39</li><li>app/routes/document.py:71-73</li><li>app/routes/users.py:212-218</li></ul>
+<p><strong>Evidence / code path.</strong> The documented own-work rule (api/scoping.py) covers leads, applications and threads only. Profiles (passport and citizenship numbers, family and addresses) and documents are open to every counsellor.</p>
+<p><strong>Preconditions.</strong> Counsellor account.</p>
+<p><strong>Attack scenario.</strong> A counsellor browses passport numbers of students assigned to colleagues.</p>
+<p><strong>Impact.</strong> Over-broad internal access to PII. This is a policy decision, not a code defect, but it is inconsistent with FAPI-SEC-005&#x27;s rule.</p>
+<p><strong>Safe reproduction / regression test.</strong> Code review.</p>
+<p><strong>Root cause.</strong> Scoping policy is defined per surface.</p>
+<p><strong>Remediation.</strong> Decide the policy explicitly; if own-work applies to people, apply may_see_record-style checks (student&#x27;s assigned counsellor) in student_profile and document staff branches.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>n/a (policy decision)</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-015'>FAPI-SEC-015 — Managers and admins can approve their own leave requests</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev informational">Informational</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Informational</dd><dt>CWE</dt><dd>CWE-841: Improper Enforcement of Behavioral Workflow</dd><dt>OWASP API</dt><dd>API6:2023 Unrestricted Access to Sensitive Business Flows</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>POST /api/v1/leave-requests/{request_id}/approve</li><li>POST /api/v1/leave-requests/{request_id}/reject</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/routes/leave.py:205-216</li></ul>
+<p><strong>Evidence / code path.</strong> approve_leave_request checks role and PENDING status but not request.user_id != user.id. The status check is not atomic, so there is also a double-approval race.</p>
+<p><strong>Preconditions.</strong> Manager/admin account.</p>
+<p><strong>Attack scenario.</strong> A manager submits and approves their own paid leave; attendance is marked as leave.</p>
+<p><strong>Impact.</strong> Segregation-of-duties gap in HR and payroll.</p>
+<p><strong>Safe reproduction / regression test.</strong> Code review.</p>
+<p><strong>Root cause.</strong> Missing self-approval rule.</p>
+<p><strong>Remediation.</strong> Refuse approval or rejection when request.user_id == user.id (unless super_admin); use UPDATE ... WHERE status=&#x27;pending&#x27; to make the transition atomic.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>+    if request.user_id == user.id and user.role is not UserRole.SUPER_ADMIN:
++        raise ForbiddenException(&quot;You cannot review your own leave request&quot;)</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-016'>FAPI-SEC-016 — Access tokens survive logout and password change; refresh rotation is not atomic</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev informational">Informational</span></dd><dt>Confidence</dt><dd>High</dd><dt>Status</dt><dd>Informational</dd><dt>CWE</dt><dd>CWE-613: Insufficient Session Expiration; CWE-367: TOCTOU</dd><dt>OWASP API</dt><dd>API2:2023 Broken Authentication</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>POST /api/v1/auth/logout</li><li>POST /api/v1/auth/change-password</li><li>POST /api/v1/auth/refresh</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/core/security.py:40</li><li>app/services/auth_service.py:207-224</li></ul>
+<p><strong>Evidence / code path.</strong> Access JWTs carry no session id and are valid for 15 minutes after the sessions are revoked. refresh_tokens selects the session row without FOR UPDATE and then revokes it, so two concurrent refreshes with the same token can both succeed.</p>
+<p><strong>Preconditions.</strong> A stolen access token (15-minute window), or a racing refresh.</p>
+<p><strong>Attack scenario.</strong> After the victim changes their password, an attacker&#x27;s stolen access token keeps working for up to 15 minutes.</p>
+<p><strong>Impact.</strong> Short residual access; refresh-replay detection is weakened.</p>
+<p><strong>Safe reproduction / regression test.</strong> Code review.</p>
+<p><strong>Root cause.</strong> Stateless access tokens, and non-atomic rotation.</p>
+<p><strong>Remediation.</strong> Accept the 15-minute window or add a session id (sid) claim checked against user_sessions. Rotate with UPDATE ... WHERE revoked_at IS NULL RETURNING (or SELECT ... FOR UPDATE), and treat reuse of a revoked token as compromise (revoke the whole family).</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>n/a</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-017'>FAPI-SEC-017 — The developer .env holds hosted Neon database and Cloudinary credentials under ENVIRONMENT=development</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev informational">Informational</span></dd><dt>Confidence</dt><dd>Medium</dd><dt>Status</dt><dd>Needs Environment Verification</dd><dt>CWE</dt><dd>CWE-798/CWE-260 (credential handling hygiene)</dd><dt>OWASP API</dt><dd>API8:2023 Security Misconfiguration</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>n/a (developer workstation)</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>.env (untracked; confirmed ignored by .gitignore:2 and .dockerignore:3; not present in git history)</li></ul>
+<p><strong>Evidence / code path.</strong> .env sets DATABASE_URL to a Neon host (*.us-east-2.aws.neon.tech/neondb) plus CLOUDINARY_* secrets, with ENVIRONMENT=development. Values were not printed. If this is the production database, a local run exposes production data through a development-mode server (/docs enabled, permissive LAN CORS regex, per-process JWT secret).</p>
+<p><strong>Preconditions.</strong> Developer machine compromise, or running dev tooling against production data.</p>
+<p><strong>Attack scenario.</strong> A local <code>uvicorn --reload</code> bound to a LAN interface serves production data to any device on the network whose origin matches the dev CORS regex.</p>
+<p><strong>Impact.</strong> Production data exposure through development configuration.</p>
+<p><strong>Safe reproduction / regression test.</strong> Inspection with values redacted.</p>
+<p><strong>Root cause.</strong> The same hosted database and media account appear to serve development and production.</p>
+<p><strong>Remediation.</strong> Confirm whether this is the production database. Use a separate Neon branch or project and a separate Cloudinary environment for development; rotate the credentials if they are production ones.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>n/a</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<h3 id='fapi-sec-018'>FAPI-SEC-018 — Anonymous eligibility submissions attach to existing leads matched by e-mail or phone</h3>
+<dl class="kv"><dt>Severity</dt><dd><span class="sev informational">Informational</span></dd><dt>Confidence</dt><dd>Medium</dd><dt>Status</dt><dd>Informational</dd><dt>CWE</dt><dd>CWE-841: Improper Enforcement of Behavioral Workflow</dd><dt>OWASP API</dt><dd>API6:2023 Unrestricted Access to Sensitive Business Flows</dd></dl>
+<p><strong>Affected endpoints</strong></p>
+<ul><li>POST /api/v1/public/eligibility</li></ul>
+<p><strong>Affected code</strong></p>
+<ul><li>app/services/eligibility_service.py:120-158</li></ul>
+<p><strong>Evidence / code path.</strong> submit() resolves an existing lead by e-mail or phone and attaches the new assessment to it (and fills lead.email when empty). The caller is anonymous and supplies both fields.</p>
+<p><strong>Preconditions.</strong> Knowledge of a lead&#x27;s e-mail or phone.</p>
+<p><strong>Attack scenario.</strong> Someone submits fabricated answers under a real prospect&#x27;s phone number; the counsellor sees them on that person&#x27;s lead. A phone of lead A combined with the e-mail of lead B can hit the unique e-mail index and return 500.</p>
+<p><strong>Impact.</strong> CRM data integrity. No data is disclosed (the response is deliberately narrow).</p>
+<p><strong>Safe reproduction / regression test.</strong> Code review.</p>
+<p><strong>Root cause.</strong> The identity of an anonymous submitter is inferred from self-asserted contact details.</p>
+<p><strong>Remediation.</strong> Always create a new assessment linked as &#x27;unverified submission&#x27;, and let staff merge it; or require e-mail confirmation before attaching to an existing lead.</p>
+<p><strong>Minimal patch (illustrative, not applied)</strong></p>
+<pre><code>n/a</code></pre>
+<p><strong>Verification after fix.</strong> Not tested</p>
+<div class="pb"></div>
+<h2>9. OWASP API Security Top 10 (2023) coverage</h2>
+<div class="tw"><table><thead><tr><th>Category</th><th>Status</th><th>Findings</th><th>Notes</th></tr></thead><tbody><tr><td>API1 BOLA</td><td>Finding(s)</td><td class=brk>FAPI-SEC-002, FAPI-SEC-003, FAPI-SEC-004, FAPI-SEC-005, FAPI-SEC-014</td><td>Every id-taking route traced; portal repository and most inline checks sound; gaps are child ids and scoping on newer routers.</td></tr><tr><td>API2 Broken Authentication</td><td>Finding(s)</td><td class=brk>FAPI-SEC-009, FAPI-SEC-011, FAPI-SEC-016</td><td>JWT alg pinning, token type separation, refresh rotation and bcrypt verified; e-mail/lockout issues.</td></tr><tr><td>API3 Object Property Level</td><td>Finding(s)</td><td class=brk>FAPI-SEC-006</td><td>Mass assignment checked on every create/update schema (extra=forbid on register and self-update; role/status/verified_* not client-writable). Leave attachment exposure.</td></tr><tr><td>API4 Resource Consumption</td><td>Finding(s)</td><td class=brk>FAPI-SEC-007, FAPI-SEC-010, FAPI-SEC-012</td><td>Public limits clamped; staff/student lists and uploads not.</td></tr><tr><td>API5 Function Level Authorization</td><td>Finding(s)</td><td class=brk>FAPI-SEC-008</td><td>Build-time guard on auth markers; draft CMS reads too broad.</td></tr><tr><td>API6 Sensitive Business Flows</td><td>Finding(s)</td><td class=brk>FAPI-SEC-001, FAPI-SEC-002, FAPI-SEC-015, FAPI-SEC-018</td><td>Payment/paywall, checklist verification, leave approval, public lead capture.</td></tr><tr><td>API7 SSRF</td><td>Reviewed, no confirmed finding</td><td class=brk>—</td><td>Only outbound HTTP is the landing revalidation webhook to a config-fixed URL (5s timeout). No user-controlled URLs are fetched.</td></tr><tr><td>API8 Security Misconfiguration</td><td>Finding(s)</td><td class=brk>FAPI-SEC-001, FAPI-SEC-006, FAPI-SEC-010, FAPI-SEC-013, FAPI-SEC-017</td><td>Docs disabled in production, generic 500s, explicit CORS origins with credentials (no wildcard); fail-open payment flag and proxy config.</td></tr><tr><td>API9 Improper Inventory Management</td><td>Reviewed, no confirmed finding</td><td class=brk>—</td><td>Legacy /messages router intentionally still mounted (documented); no debug or test routes; one API version.</td></tr><tr><td>API10 Unsafe Consumption of APIs</td><td>Reviewed, no confirmed finding</td><td class=brk>—</td><td>Cloudinary SDK responses used only for URL and size; webhook response ignored apart from status; TLS verification on by default.</td></tr></tbody></table></div>
+<h2>10. Dependency and security-tool results</h2>
+<div class="tw"><table><thead><tr><th>Tool</th><th class=nw>Version</th><th>Result</th><th>Output</th></tr></thead><tbody><tr><td>pytest (existing suite)</td><td class=nw>9.1.1</td><td>440 passed, 0 failed (exit 0)</td><td class=brk>tool-results/pytest.txt</td></tr><tr><td>ruff check .</td><td class=nw>0.9.2</td><td>6 style findings, none security-relevant (exit 1)</td><td class=brk>tool-results/ruff.txt</td></tr><tr><td>mypy app</td><td class=nw>1.14.1</td><td>3 typing errors; the text() one was triaged as a false positive</td><td class=brk>tool-results/mypy.txt</td></tr><tr><td>security regression suite</td><td class=nw>—</td><td>16 failed (reproductions), 14 passed (controls)</td><td class=brk>tool-results/security-tests-pre-fix.txt</td></tr><tr><td>bandit</td><td class=nw>not available</td><td>Not run</td><td class=brk>Proposed: uvx bandit -r app scripts -f json -o security-audit/tool-results/bandit.json</td></tr><tr><td>pip-audit</td><td class=nw>not available</td><td>Not run: dependency advisories NOT assessed</td><td class=brk>Proposed: uvx pip-audit --path .venv/lib/python3.12/site-packages -f json -o security-audit/tool-results/pip-audit.json</td></tr><tr><td>semgrep</td><td class=nw>not available</td><td>Not run</td><td class=brk>Proposed: uvx semgrep --config p/python --config p/fastapi --json -o security-audit/tool-results/semgrep.json app</td></tr><tr><td>secret scanner</td><td class=nw>not configured</td><td>Manual check: .env untracked and ignored; not in git history; values redacted</td><td class=brk>—</td></tr></tbody></table></div>
+<p>Installed versions of security-relevant packages are recorded in tool-results/installed-versions.txt. They are pinned exactly in pyproject.toml, but there is no lockfile covering transitive dependencies. No advisory claims are made without pip-audit output.</p>
+<h2>11. Positive security controls observed</h2>
+<ul><li>A structural authorization guard: a test fails the build for any route without an auth marker and for any change to the public endpoint set.</li><li>Public registration forbids role/status with extra=&#x27;forbid&#x27;. The rank-based can_manage_target stops admins from creating or promoting super_admins (verified).</li><li>JWT: algorithm allow-list, token type separation, per-request user status check, production secret validation. Refresh tokens are server-side, hashed, single-use (verified) and revoked on password change.</li><li>Password hashing avoids bcrypt&#x27;s 72-byte truncation and NUL-byte pitfalls; login timing is equalised.</li><li>Uploads: extension allow-list, generated storage names (client filenames never reach storage), size limit, and private documents served only through ownership-checked, signed Cloudinary URLs; the paywall is enforced where the bytes are served.</li><li>Stored-XSS defence: message HTML is sanitised on input with an allow-list and href scheme filtering (8 bypass payloads tested, all neutralised).</li><li>StudentScopedRepository makes student-portal queries owner-filtered by construction; other students&#x27; ids return 404, not 403.</li><li>The public API returns published data only, clamps limits, rate-limits both write endpoints, and never caches authenticated requests.</li><li>Operational: generic 500 bodies with request ids, JSON logs in production, docs disabled in production, non-root container, .env excluded from git and from the Docker context, hermetic test DB with a destructive-operation name guard.</li></ul>
+<h2>12. Remediation roadmap</h2>
+<div class="tw"><table><thead><tr><th>Priority</th><th>Findings</th><th>Why</th></tr></thead><tbody><tr><td>P0: before or at next production deploy</td><td class=brk>FAPI-SEC-001, FAPI-SEC-010 (verify, then config)</td><td>Revenue bypass on a public flow; configuration-only fixes.</td></tr><tr><td>P1: next sprint</td><td class=brk>FAPI-SEC-002, FAPI-SEC-005, FAPI-SEC-003, FAPI-SEC-004</td><td>Object-level authorization gaps; small, local code changes with tests already written.</td></tr><tr><td>P2: planned</td><td class=brk>FAPI-SEC-007, FAPI-SEC-008, FAPI-SEC-009, FAPI-SEC-011, FAPI-SEC-012, FAPI-SEC-006</td><td>Resource limits, identity hygiene, sensitive-file storage.</td></tr><tr><td>P3: hardening / policy</td><td class=brk>FAPI-SEC-013 to FAPI-SEC-018</td><td>Defence in depth, policy decisions, environment hygiene.</td></tr></tbody></table></div>
+<p>Details, dependencies and the regression test for each item are in SECURITY_REMEDIATION_PLAN.md.</p>
+<h2>13. Verification and regression-test results</h2>
+<p>Command: <code>ENVIRONMENT=test .venv/bin/pytest security-audit/tests/security -q -p no:cacheprovider --rootdir=. -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=session -o asyncio_default_test_loop_scope=session</code></p>
+<p>Result on the audited commit: 16 failed (each is a reproduction of the finding named in the test), 14 passed (positive controls). Fixes were not applied, because the specification allows changing application code only on explicit request. Verification after fix is therefore &#x27;Not tested&#x27; for every finding.</p>
+<h2>14. Residual risks and items requiring runtime verification</h2>
+<ul><li>Dependency advisories were not assessed (pip-audit unavailable). Run it before relying on this report for supply-chain assurance.</li><li>FAPI-SEC-010: confirm request.client.host behind Render and Render&#x27;s forwarded-header behaviour.</li><li>FAPI-SEC-012: confirm Render&#x27;s maximum request body size.</li><li>FAPI-SEC-017: confirm whether the developer .env points at the production Neon database.</li><li>Production environment variables in the Render dashboard (SIMULATED_PAYMENTS, CORS_ORIGINS, LANDING_*) were not visible to this audit.</li><li>Cloudinary account settings (strict transformations, token auth, allowed delivery types) were not reviewed.</li><li>The landing site&#x27;s /api/revalidate and /api/preview handlers (which receive LANDING_REVALIDATE_SECRET) are out of scope.</li><li>No negative authorization tests exist for most staff routes beyond the ones added here; the absence of further findings does not mean the system is secure.</li></ul>
+<div class="pb"></div>
+<h2>Appendix A: Reviewed files</h2>
+<ul><li>app/main.py, app/api/* (auth, student, scoping, deps, exceptions, router)</li><li>app/core/* (config, security, rate_limit, middleware, logging, uploads, sanitize, landing, public_cache, cache, rbac, events, subscribers)</li><li>app/routes/*: all 29 router modules (every handler)</li><li>app/services/*: every service reached by an object-level decision (auth, user, student_profile, document, workflow, communication, message_scope, portal_access, application, eligibility, leave, notification, apply_intent, academic)</li><li>app/schemas/*: every create/update schema, for mass assignment</li><li>app/models/user.py, student_portal.py, payment.py (constraints and properties)</li><li>Dockerfile, docker-compose.yml, render.yaml, start_backend.sh, .gitignore, .dockerignore, .env.example, .env (keys only), pyproject.toml</li><li>scripts/xlsx_reader.py, scripts/extract_xlsx.py (import parser), tests/conftest.py, tests/test_endpoint_authorization.py, tests/test_scoping.py</li></ul>
+<h2>Appendix B: Commands run</h2>
+<pre><code>git rev-parse HEAD; git ls-files; git log --all -p -S &#x27;CLOUDINARY_API_SECRET=&#x27;
+ENVIRONMENT=test .venv/bin/python &lt;route inventory via tests.test_endpoint_authorization._iter_api_routes&gt;
+.venv/bin/pytest -q -p no:cacheprovider
+.venv/bin/ruff check . --no-cache --output-format concise
+.venv/bin/mypy app --no-incremental
+ENVIRONMENT=test .venv/bin/pytest security-audit/tests/security -q -p no:cacheprovider ...
+python3 security-audit/build_report.py
+chromium --headless --print-to-pdf=security-audit/SECURITY_AUDIT_REPORT.pdf security-audit/SECURITY_AUDIT_REPORT.html</code></pre>
+<h2>Appendix C: Tool and runtime versions</h2>
+<div class="tw"><table><thead><tr><th>Component</th><th class=nw>Version</th></tr></thead><tbody><tr><td>Python</td><td class=nw>3.12.3</td></tr><tr><td>fastapi / starlette / uvicorn</td><td class=nw>0.141.1 / 1.3.1 / 0.52.0</td></tr><tr><td>pydantic / SQLAlchemy / asyncpg</td><td class=nw>2.13.4 / 2.0.51 / 0.31.0</td></tr><tr><td>PyJWT / bcrypt / python-multipart</td><td class=nw>2.13.0 / 5.0.0 / 0.0.32</td></tr><tr><td>pytest / ruff / mypy</td><td class=nw>9.1.1 / 0.9.2 / 1.14.1</td></tr></tbody></table></div>
+<h2>Appendix D: False positives and accepted observations</h2>
+<div class="tw"><table><thead><tr><th>Source</th><th>Item</th><th>Disposition</th></tr></thead><tbody><tr><td>mypy</td><td class=brk>app/services/application_service.py:102 TextClause in ColumnElement list</td><td>Not a vulnerability: text() with a bound parameter (:reference_serial) and no interpolation.</td></tr><tr><td>manual</td><td class=brk>app/services/academic_service.py:60 getattr(self.model, self.order_by_field)</td><td>Not exploitable: order_by_field is a server-side class attribute, not request input.</td></tr><tr><td>manual</td><td class=brk>LIKE searches do not escape % and _</td><td>Not injection (bound parameters); at most broader matches.</td></tr><tr><td>manual</td><td class=brk>scripts/xlsx_reader.py parses workbook XML with xml.etree and zipfile</td><td>Accepted: admin-only endpoint, hard-disabled when ENVIRONMENT=production (imports.py:56). Zip-bomb/entity-expansion hardening recommended if ever enabled.</td></tr><tr><td>manual</td><td class=brk>X-Request-ID echoed from client (middleware.py:23)</td><td>Accepted: header values cannot carry CR/LF; production logs are JSON-encoded. Recommend length/charset validation.</td></tr><tr><td>manual</td><td class=brk>docker-compose worker references app.core.celery_app, which does not exist</td><td>Inventory note: profile-gated and inert; no background job surface exists (events are in-process).</td></tr><tr><td>ruff</td><td class=brk>6 style findings (I001, SIM105, UP017, SIM103, F401)</td><td>No security relevance.</td></tr></tbody></table></div>
+</body></html>

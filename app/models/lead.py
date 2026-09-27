@@ -126,6 +126,8 @@ class Lead(Base, UUIDPKMixin, TimestampMixin, SoftDeleteMixin):
         Index("idx_leads_converted_user_id", "converted_user_id"),
         Index("idx_leads_next_follow_up_at", "next_follow_up_at"),
         Index("idx_leads_email_unique_not_null", "email", unique=True, postgresql_where=text("email IS NOT NULL")),
+        # Created by migration a1b2c3d4e5f6.
+        Index("idx_leads_not_deleted", "id", postgresql_where=text("deleted_at IS NULL")),
     )
 
     def __repr__(self) -> str:

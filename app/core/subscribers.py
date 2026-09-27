@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import ActivityLog, ApplicationChecklistItem, Lead, LeadActivity, Notification, User
@@ -480,6 +480,16 @@ LEAD_DESK_ROLES = (
     UserRole.SUPER_ADMIN.value,
 )
 
+#: Who hears about a student's appointment request when the student already
+#: has a counsellor: that counsellor (added by the caller) and the people who
+#: book slots. Other counsellors' students are not their concern.
+APPOINTMENT_DESK_ROLES = (
+    UserRole.FRONTDESK.value,
+    UserRole.MANAGER.value,
+    UserRole.ADMIN.value,
+    UserRole.SUPER_ADMIN.value,
+)
+
 
 async def _lead_desk_staff_ids(session: AsyncSession) -> list[UUID]:
     result = await session.execute(
@@ -551,8 +561,14 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
     Conversion here is a statement of fact, not of sales progress — they already
     have an account — so it records `registration_completed` as the source.
     """
-    result = await session.execute(select(Lead).where(Lead.email == event.email))
+    result = await session.execute(select(Lead).where(func.lower(Lead.email) == event.email.strip().lower()))
     lead = result.scalar_one_or_none()
+
+    user = (await session.execute(select(User).where(User.id == event.student_id))).scalar_one_or_none()
+    # The activity is stamped with the moment the account was created, not the
+    # moment this handler ran, so the lead timeline shows the true sign-up time
+    # to the second.
+    signed_up_at = (user.created_at if user is not None else None) or event.occurred_at
 
     if lead is not None:
         if lead.converted_user_id is not None:
@@ -571,17 +587,16 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
                 description="They created their own student account, so this lead is now a client.",
                 old_status=old_status,
                 new_status=LeadStatus.CONVERTED,
+                created_at=signed_up_at,
             )
         )
         await session.commit()
         logger.info("Linked lead %s to self-registered student %s", lead.id, event.student_id)
 
-        user = (await session.execute(select(User).where(User.id == event.student_id))).scalar_one_or_none()
         if user is not None:
             await notify_desk_of_registration(session, user, linked=True)
         return
 
-    user = (await session.execute(select(User).where(User.id == event.student_id))).scalar_one_or_none()
     if user is None:  # pragma: no cover - the row was just committed by the caller
         return
 
@@ -611,6 +626,7 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
             title="Signed up on the portal",
             description="Created automatically so the student is reachable from the Leads pipeline.",
             new_status=LeadStatus.CONVERTED,
+            created_at=signed_up_at,
         )
     )
     await session.commit()

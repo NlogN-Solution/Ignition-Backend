@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.auth import require_role
 from ..api.deps import get_db_session
 from ..api.exceptions import ConflictException, ForbiddenException, NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..models import User
 from ..schemas.attendance import (
     AttendanceDashboardSummary,
@@ -117,8 +119,8 @@ async def get_today(
 
 @router.get("", response_model=AttendanceRecordList, summary="List attendance records")
 async def list_attendance(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     user_id: UUID | None = None,
     department_id: UUID | None = None,
     status: str | None = None,
@@ -158,8 +160,9 @@ async def get_dashboard(
 )
 async def get_employee_summary(
     employee_id: UUID,
-    year: int | None = None,
-    month: int | None = None,
+    # Bounded: `date(0, 13, 1)` raises inside the service and was a 500.
+    year: Annotated[int | None, Query(ge=2000, le=2100)] = None,
+    month: Annotated[int | None, Query(ge=1, le=12)] = None,
     service: AttendanceService = Depends(get_attendance_service),
     user: User = Depends(require_role(*STAFF_ROLES)),
 ) -> AttendanceEmployeeSummary:

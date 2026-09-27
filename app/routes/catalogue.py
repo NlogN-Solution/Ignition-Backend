@@ -19,8 +19,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
-from ..api.auth import get_current_user, require_role
+from ..api.auth import require_role, require_staff
 from ..api.exceptions import NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..core.public_cache import PurgingRoute
 from ..models.enums import UserRole
 from ..schemas.catalogue import (
@@ -59,13 +60,13 @@ _MANAGE_WEBSITE = require_role(UserRole.ADMIN, UserRole.MARKETING)
 
 @router.get("/university-routes", response_model=UniversityRouteList, summary="List entry routes")
 async def list_university_routes(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     university_id: UUID | None = None,
     route_key: str | None = None,
     is_published: bool | None = None,
     service: UniversityRouteService = Depends(get_university_route_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> UniversityRouteList:
     items, total = await service.list(
         page, limit, university_id=university_id, route_key=route_key, is_published=is_published
@@ -77,7 +78,7 @@ async def list_university_routes(
 async def get_university_route(
     route_id: UUID,
     service: UniversityRouteService = Depends(get_university_route_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> UniversityRouteRead:
     route = await service.get(route_id)
     if route is None:
@@ -124,14 +125,14 @@ async def delete_university_route(
 
 @router.get("/course-profiles", response_model=CourseProfileList, summary="List course profiles")
 async def list_course_profiles(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     subject: str | None = None,
     course_level: str | None = None,
     is_published: bool | None = None,
     service: CourseProfileService = Depends(get_course_profile_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> CourseProfileList:
     items, total = await service.list(
         page, limit, search=search, subject=subject, course_level=course_level, is_published=is_published
@@ -143,7 +144,7 @@ async def list_course_profiles(
 async def get_course_profile(
     profile_id: UUID,
     service: CourseProfileService = Depends(get_course_profile_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> CourseProfileRead:
     profile = await service.get(profile_id)
     if profile is None:
@@ -190,14 +191,14 @@ async def delete_course_profile(
 
 @router.get("/scholarships", response_model=ScholarshipList, summary="List scholarships")
 async def list_scholarships(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     university_id: UUID | None = None,
     kind: str | None = None,
     is_published: bool | None = None,
     service: ScholarshipService = Depends(get_scholarship_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> ScholarshipList:
     items, total = await service.list(
         page, limit, search=search, university_id=university_id, kind=kind, is_published=is_published
@@ -209,7 +210,7 @@ async def list_scholarships(
 async def get_scholarship(
     scholarship_id: UUID,
     service: ScholarshipService = Depends(get_scholarship_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> ScholarshipRead:
     scholarship = await service.get(scholarship_id)
     if scholarship is None:

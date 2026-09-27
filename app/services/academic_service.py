@@ -4,7 +4,7 @@ from typing import Any, ClassVar, Generic, TypeVar
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import ColumnElement, func, inspect, or_, select
+from sqlalchemy import ColumnElement, and_, func, inspect, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
@@ -164,8 +164,11 @@ class UniversityService(CatalogService[University]):
         country_id: UUID | None = None,
         is_active: bool | None = None,
         is_partner: bool | None = None,
+        published_only: bool = False,
     ) -> tuple[list[University], int]:
         conditions: list[ColumnElement[bool]] = []
+        if published_only:
+            conditions.append(University.is_published.is_(True))
         if search and search.strip():
             conditions.append(self._search(search, University.name, University.short_name, University.city))
         if country_id:
@@ -181,6 +184,21 @@ class ProgramService(CatalogService[Program]):
     model = Program
     order_by_field = "name"
 
+    async def is_public(self, program: Program) -> bool:
+        return (
+            await self.session.scalar(
+                select(Program.id).where(Program.id == program.id, self.published_condition())
+            )
+        ) is not None
+
+    @staticmethod
+    def published_condition() -> ColumnElement[bool]:
+        """A program is public only if it *and* its university are published."""
+        return and_(
+            Program.is_published.is_(True),
+            Program.university_id.in_(select(University.id).where(University.is_published.is_(True))),
+        )
+
     async def list(
         self,
         page: int,
@@ -189,8 +207,11 @@ class ProgramService(CatalogService[Program]):
         university_id: UUID | None = None,
         degree_level: str | None = None,
         is_active: bool | None = None,
+        published_only: bool = False,
     ) -> tuple[list[Program], int]:
         conditions: list[ColumnElement[bool]] = []
+        if published_only:
+            conditions.append(self.published_condition())
         if search and search.strip():
             conditions.append(self._search(search, Program.name, Program.field_of_study))
         if university_id:
@@ -212,8 +233,11 @@ class IntakeService(CatalogService[Intake]):
         limit: int,
         program_id: UUID | None = None,
         is_active: bool | None = None,
+        published_only: bool = False,
     ) -> tuple[list[Intake], int]:
         conditions: list[ColumnElement[bool]] = []
+        if published_only:
+            conditions.append(Intake.program_id.in_(select(Program.id).where(ProgramService.published_condition())))
         if program_id:
             conditions.append(Intake.program_id == program_id)
         if is_active is not None:

@@ -6,7 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import ColumnElement, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.deps import get_db_session
@@ -32,7 +32,17 @@ class UserService:
         return await self.session.scalar(query)
 
     async def get_by_email(self, email: str) -> User | None:
-        return await self.session.scalar(select(User).where(User.email == email, User.deleted_at.is_(None)))
+        return await self.session.scalar(
+            select(User).where(func.lower(User.email) == email.strip().lower(), User.deleted_at.is_(None))
+        )
+
+    async def email_taken(self, email: str, *, exclude_user_id: UUID | None = None) -> bool:
+        """Whether any account — soft-deleted ones included, since they still
+        hold the unique index — already uses this address, in any case."""
+        query = select(User.id).where(func.lower(User.email) == email.strip().lower())
+        if exclude_user_id is not None:
+            query = query.where(User.id != exclude_user_id)
+        return await self.session.scalar(query.limit(1)) is not None
 
     async def list_users(
         self,
@@ -42,9 +52,13 @@ class UserService:
         role: str | None = None,
         status: str | None = None,
         deleted: bool = False,
+        visible: ColumnElement[bool] | None = None,
     ) -> tuple[Sequence[User], int]:
         query = select(User)
         count_query = select(func.count()).select_from(User)
+        if visible is not None:
+            query = query.where(visible)
+            count_query = count_query.where(visible)
 
         if not deleted:
             query = query.where(User.deleted_at.is_(None))
@@ -158,6 +172,8 @@ class UserService:
 
     async def update_user(self, user: User, data: dict[str, Any]) -> User:
         payload = data.copy()
+        # A confirmation input, never a column.
+        payload.pop("current_password", None)
         if password := payload.pop("password", None):
             user.password_hash = hash_password(password)
 

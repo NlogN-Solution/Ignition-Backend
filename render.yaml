@@ -48,6 +48,21 @@ services:
     envVars:
       - key: ENVIRONMENT
         value: production
+      # No payment gateway is integrated. The app refuses to boot in production
+      # with this true (FAPI-SEC-001); it is set here as well so the intent is
+      # explicit in the Blueprint rather than implied by a default.
+      - key: SIMULATED_PAYMENTS
+        value: "false"
+      # One reverse proxy (Render's) appends to X-Forwarded-For in front of the
+      # container, so the client is the last entry (FAPI-SEC-010). Verify once
+      # after deploy: GET /api/v1/health/client-ip as the owner must show your
+      # own public IP as `resolved`. If it shows a Render/Cloudflare address,
+      # raise this to 2; never set it higher than the real number of proxies.
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      # Whole-request cap, enforced while the body streams in (FAPI-SEC-012).
+      - key: MAX_REQUEST_BODY_MB
+        value: "60"
       - key: DATABASE_URL
         sync: false # paste Neon's connection string here when prompted
       - key: JWT_SECRET_KEY
@@ -69,6 +84,13 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
+      # Optional (FAPI-SEC-013): the key from Cloudinary's token-based
+      # authentication settings. When set, every private-file link expires
+      # after CLOUDINARY_URL_TTL_SECONDS instead of working forever.
+      - key: CLOUDINARY_AUTH_TOKEN_KEY
+        sync: false
+      - key: CLOUDINARY_URL_TTL_SECONDS
+        value: "300"
       - key: MAX_UPLOAD_SIZE_MB
         value: "25"
       - key: TIMEZONE

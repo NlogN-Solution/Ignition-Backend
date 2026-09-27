@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from ..api.auth import require_role
 from ..api.exceptions import ForbiddenException, NotFoundException, UnprocessableEntityException
+from ..api.pagination import LimitParam, PageParam
 from ..models import Appointment, User
 from ..models.enums import AppointmentStatus, NotificationType, UserRole
 from ..schemas.appointment import (
@@ -30,8 +31,8 @@ def _assert_visible_to(user: User, appointment: Appointment) -> None:
 
 @router.get("", response_model=AppointmentList, summary="List appointments")
 async def list_appointments(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     student_id: UUID | None = None,
     counsellor_id: UUID | None = None,
     lead_id: UUID | None = None,

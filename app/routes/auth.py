@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Request
 
-from ..api.auth import get_current_user
+from ..api.auth import get_current_session_id, get_current_user
 from ..api.exceptions import BadRequestException, UnauthorizedException
+from ..core.client_ip import client_ip
 from ..core.rate_limit import (
     LOGIN_RATE_LIMIT,
     PASSWORD_RATE_LIMIT,
@@ -29,7 +32,8 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
+    # Proxy-aware: `request.client.host` is Render's proxy for every caller.
+    return client_ip(request)
 
 
 @router.post(
@@ -120,10 +124,13 @@ async def change_password(
     payload: ChangePasswordRequest,
     request: Request,
     user: User = Depends(get_current_user),
+    session_id: UUID | None = Depends(get_current_session_id),
     auth_service: AuthService = Depends(get_auth_service),
     activity_log_service: ActivityLogService = Depends(get_activity_log_service),
 ) -> UserRead:
-    changed = await auth_service.change_password(user, payload.current_password, payload.new_password)
+    changed = await auth_service.change_password(
+        user, payload.current_password, payload.new_password, keep_session_id=session_id
+    )
     if not changed:
         raise BadRequestException("Current password is incorrect")
 
@@ -165,19 +172,23 @@ async def refresh(
     "/logout",
     summary="Logout",
     description=(
-        "Revoke the supplied refresh token. Omit it to revoke every session for the "
-        "current user. Unlike ED360's, this is a real server-side revocation."
+        "End the current session (and the supplied refresh token's, if it is yours). Omit the "
+        "token to revoke every session for the current user. Unlike ED360's, this is a real "
+        "server-side revocation, and the access token stops working immediately."
     ),
 )
 async def logout(
     request: Request,
     payload: LogoutRequest | None = None,
     user: User = Depends(get_current_user),
+    session_id: UUID | None = Depends(get_current_session_id),
     auth_service: AuthService = Depends(get_auth_service),
     activity_log_service: ActivityLogService = Depends(get_activity_log_service),
 ) -> dict[str, bool]:
     if payload is not None and payload.refresh_token:
-        await auth_service.revoke_session(payload.refresh_token)
+        await auth_service.revoke_session(payload.refresh_token, user_id=user.id)
+        if session_id is not None:
+            await auth_service.revoke_session_by_id(session_id, user_id=user.id)
     else:
         await auth_service.revoke_all_sessions(user.id)
         await auth_service.session.commit()

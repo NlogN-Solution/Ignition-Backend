@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..api.auth import require_role
 from ..api.deps import get_db_session
 from ..api.exceptions import BadRequestException, NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..api.scoping import may_see_record, own_work_scope
 from ..models import Lead, User
 from ..schemas.lead import (
@@ -40,8 +41,8 @@ async def get_lead_service(session: AsyncSession = Depends(get_db_session)) -> L
 
 @router.get("", response_model=LeadList, summary="List leads")
 async def list_leads(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     status: str | None = None,
     statuses: str | None = None,
@@ -70,8 +71,8 @@ async def list_leads(
 # Registered before `/{lead_id}` routes so this literal path always wins.
 @router.get("/follow-ups/due", response_model=DueFollowUpList, summary="List due/overdue follow-ups across leads")
 async def list_due_follow_ups(
-    page: int = 1,
-    limit: int = 50,
+    page: PageParam = 1,
+    limit: LimitParam = 50,
     counsellor_id: UUID | None = None,
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
@@ -191,14 +192,17 @@ async def convert_lead(
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> LeadConvertResult:
     lead = await _lead_for(lead_id, lead_service, user)
-    updated_lead, created_new_user, portal_account_created, generated_password = await lead_service.convert_lead(
-        lead,
-        converted_user_id=payload.converted_user_id,
-        performed_by=user.id,
-        remarks=payload.remarks,
-        conversion_source=payload.conversion_source,
-        create_portal_account=payload.create_portal_account,
-    )
+    try:
+        updated_lead, created_new_user, portal_account_created, generated_password = await lead_service.convert_lead(
+            lead,
+            converted_user_id=payload.converted_user_id,
+            performed_by=user.id,
+            remarks=payload.remarks,
+            conversion_source=payload.conversion_source,
+            create_portal_account=payload.create_portal_account,
+        )
+    except ValueError as exc:
+        raise BadRequestException(str(exc)) from exc
     return LeadConvertResult(
         lead=updated_lead,
         created_new_user=created_new_user,

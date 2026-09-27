@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends
 
 from ..api.auth import require_role
 from ..api.exceptions import NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..models import EligibilityAssessment
 from ..models.enums import UserRole
 from ..schemas.eligibility import (
@@ -91,8 +92,8 @@ async def _to_row(
 
 @router.get("", response_model=EligibilityAssessmentList, summary="List eligibility assessments")
 async def list_assessments(
-    page: int = 1,
-    limit: int = 25,
+    page: PageParam = 1,
+    limit: LimitParam = 25,
     search: str | None = None,
     overall_status: str | None = None,
     lead_status: str | None = None,

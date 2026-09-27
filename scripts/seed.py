@@ -29,7 +29,6 @@ from app.core.security import hash_password  # noqa: E402
 from app.db.session import session_factory  # noqa: E402
 from app.models import (  # noqa: E402
     AttendancePolicy,
-    ChecklistTemplateItem,
     CostOfLivingCategory,
     Country,
     CountryCostOfLiving,
@@ -125,86 +124,6 @@ POINTS_RULES = [
     ("task.complete", "Checklist task completed", 20, "tasks", False),
     ("application.submit", "Application submitted", 50, "applications", False),
     ("interview.complete", "Mock interview completed", 15, "interviews", False),
-]
-
-#: The default journey checklist, from the portal's `tasksChecklist.json`. Each
-#: rung depends on the one before it, and the due offsets are days from the day
-#: the student joined — the template is shared, so an absolute date would be
-#: wrong for every cohort but the first.
-CHECKLIST_TEMPLATE = [
-    # key, title, description, stage, depends_on, due_after_days
-    (
-        "passport",
-        "Secure your passport",
-        "Apply for or renew a passport valid for at least six months beyond your intake.",
-        "Passport",
-        None,
-        30,
-    ),
-    (
-        "ielts",
-        "Sit the IELTS exam",
-        "Book and complete IELTS with a band score of 7.0 or higher.",
-        "IELTS",
-        "passport",
-        75,
-    ),
-    (
-        "sop",
-        "Write your Statement of Purpose",
-        "Draft, review with your counsellor and finalise your SOP.",
-        "SOP",
-        "ielts",
-        105,
-    ),
-    (
-        "lor",
-        "Collect Letters of Recommendation",
-        "Request two academic references and upload the signed letters.",
-        "LOR",
-        "sop",
-        120,
-    ),
-    (
-        "apply",
-        "Submit your applications",
-        "Complete and submit applications to every shortlisted university.",
-        "Apply",
-        "lor",
-        150,
-    ),
-    (
-        "interview",
-        "Pass the admission interview",
-        "Practise with the AI interview module, then attend the university interview.",
-        "Interview",
-        "apply",
-        180,
-    ),
-    (
-        "offer",
-        "Accept your offer",
-        "Review offer letters, compare conditions and confirm your place.",
-        "Offer",
-        "interview",
-        210,
-    ),
-    (
-        "visa",
-        "Apply for your student visa",
-        "Assemble financial documents and lodge the student visa application.",
-        "Visa",
-        "offer",
-        240,
-    ),
-    (
-        "departure",
-        "Prepare for departure",
-        "Book flights, arrange accommodation and complete pre-departure briefing.",
-        "Departure",
-        "visa",
-        270,
-    ),
 ]
 
 #: Mock interview catalog, from the portal's `interviewTypes.json` /
@@ -579,23 +498,6 @@ async def seed(session: AsyncSession) -> dict[str, int]:
             once_per_student=once,
         )
     counts["points_rules"] = len(POINTS_RULES)
-
-    # --- Journey checklist template -------------------------------------------
-    # Students receive their copy on first read of /student/me/checklist, so
-    # adding a rung here reaches everyone without a backfill.
-    for order, (key, title, description, stage, depends_on, due_days) in enumerate(CHECKLIST_TEMPLATE, start=1):
-        await _get_or_create(
-            session,
-            ChecklistTemplateItem,
-            {"key": key},
-            title=title,
-            description=description,
-            stage=stage,
-            order=order,
-            depends_on_key=depends_on,
-            due_after_days=due_days,
-        )
-    counts["checklist_template"] = len(CHECKLIST_TEMPLATE)
 
     # --- Portal access fee ----------------------------------------------------
     #

@@ -1,8 +1,12 @@
 """The student's journey checklist.
 
-Phase 6. Items are materialised from the template on first read rather than at
-signup: a student who registered before a rung existed still gets it, and adding
-a rung to the template does not need a backfill script.
+Phase 6. The checklist holds only what someone actually asked of this student:
+tasks their counsellor set (`is_priority`) and any the student wrote themselves.
+It used to be pre-filled from `ChecklistTemplateItem` — the same nine-step
+passport-to-departure ladder for everyone, locked in order — but what a student
+owes depends on their route and workflow, so a fixed ladder and its "2/9 done"
+count promised a journey nobody had planned. Migration c7a2e9f14b58 removed the
+copies already made; the template table stays, unused, for history.
 
 Completion is client-driven — it is the student's own to-do list — but what a
 completed item is *worth* is not: the service emits `ChecklistItemCompleted` and
@@ -13,22 +17,19 @@ through the event bus.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 
 from fastapi import Depends
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..api.deps import get_db_session
 from ..api.exceptions import BadRequestException
 from ..core.events import ChecklistItemCompleted, event_bus
-from ..models import ChecklistTemplateItem, StudentChecklistItem, User
+from ..models import StudentChecklistItem, User
 
-#: Custom items sort after every seeded one. A student's own additions belong at
-#: the end of the ladder rather than interleaved into a journey they did not
-#: define the order of.
+#: A student's own items sort after everything their counsellor set.
 CUSTOM_ITEM_ORDER = 1000
 
 
@@ -36,67 +37,7 @@ class ChecklistService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def materialise(self, student: User) -> None:
-        """Give this student a copy of every active template item they lack.
-
-        Idempotent, and safe against a concurrent first request: the unique
-        constraint on (student_id, key) turns a double-materialise into an
-        IntegrityError we swallow, rather than a duplicated checklist.
-        """
-        templates = (
-            await self.session.scalars(
-                select(ChecklistTemplateItem)
-                .where(ChecklistTemplateItem.is_active.is_(True))
-                .order_by(ChecklistTemplateItem.order)
-            )
-        ).all()
-        if not templates:
-            return
-
-        existing_keys = set(
-            (
-                await self.session.scalars(
-                    select(StudentChecklistItem.key).where(
-                        StudentChecklistItem.student_id == student.id,
-                        StudentChecklistItem.key.is_not(None),
-                    )
-                )
-            ).all()
-        )
-        missing = [template for template in templates if template.key not in existing_keys]
-        if not missing:
-            return
-
-        # Deadlines are relative to when the student joined, so a template
-        # offset of "60 days" means sixty days into *their* journey.
-        joined = student.created_at or datetime.now(UTC)
-        for template in missing:
-            self.session.add(
-                StudentChecklistItem(
-                    student_id=student.id,
-                    template_item_id=template.id,
-                    key=template.key,
-                    title=template.title,
-                    description=template.description,
-                    stage=template.stage,
-                    order=template.order,
-                    depends_on_key=template.depends_on_key,
-                    due_date=(
-                        (joined + timedelta(days=template.due_after_days)).date()
-                        if template.due_after_days is not None
-                        else None
-                    ),
-                )
-            )
-        try:
-            await self.session.commit()
-        except IntegrityError:
-            # Another request materialised the same student first; their rows
-            # are as good as ours.
-            await self.session.rollback()
-
     async def list_items(self, student: User) -> list[StudentChecklistItem]:
-        await self.materialise(student)
         result = await self.session.scalars(
             select(StudentChecklistItem)
             .where(StudentChecklistItem.student_id == student.id)
@@ -196,9 +137,9 @@ class ChecklistService:
         due_date: date | None,
         assigned_by: uuid.UUID,
     ) -> StudentChecklistItem:
-        """A task a counsellor sets. Order 0 puts it ahead of the seeded ladder
-        wherever the checklist is listed in order; `is_custom` stays false so
-        the student can complete it but not reword or delete it."""
+        """A task a counsellor sets. Order 0 puts it ahead of the student's own
+        items wherever the checklist is listed in order; `is_custom` stays false
+        so the student can complete it but not reword or delete it."""
         item = StudentChecklistItem(
             student_id=student.id,
             title=title,
@@ -215,11 +156,10 @@ class ChecklistService:
         return item
 
     async def delete(self, item: StudentChecklistItem) -> None:
-        """Only the student's own items. A seeded rung is part of the journey
-        every student is measured against, so deleting it is not theirs to do —
-        and would be an easy way to reach an empty, "complete" checklist."""
+        """Only the student's own items. A task their counsellor set is not
+        theirs to remove — they can complete it or leave it unticked."""
         if not item.is_custom:
-            raise BadRequestException("This is part of your journey and cannot be removed. You can leave it unticked.")
+            raise BadRequestException("Your advisor set this task, so it cannot be removed. You can leave it unticked.")
         await self.session.delete(item)
         await self.session.commit()
 

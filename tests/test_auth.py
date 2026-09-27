@@ -30,7 +30,7 @@ CHANGE_PASSWORD = "/api/v1/auth/change-password"
 def _registration(**overrides) -> dict:
     payload = {
         "email": "applicant@example.com",
-        "password": "a-good-password",
+        "password": "A-good-passw0rd",
         "first_name": "Ada",
         "last_name": "Lovelace",
     }
@@ -110,7 +110,12 @@ async def test_login_locks_the_account_after_repeated_failures(
     user_factory,
 ) -> None:
     """ED360 bug 3: `failed_login_attempts` and `locked_until` are modelled and
-    never written, so the lockout is decorative."""
+    never written, so the lockout is decorative.
+
+    Tier 1 (FAPI-SEC-011): five failures from one address stop *that address*
+    trying this account — even with the right password — and the refusal is the
+    same 400 as a wrong password, so it does not confirm the account exists.
+    """
     settings = get_settings()
     user = await user_factory()
 
@@ -120,11 +125,67 @@ async def test_login_locks_the_account_after_repeated_failures(
 
     await session.refresh(user)
     assert user.failed_login_attempts == settings.MAX_FAILED_LOGIN_ATTEMPTS
-    assert user.locked_until is not None
 
-    # The correct password is now refused too — that is the point of a lockout.
+    # The correct password is now refused too from this address — that is the
+    # point of a lockout — and indistinguishably from a wrong one.
     locked = await client.post(LOGIN, json={"email": user.email, "password": DEFAULT_PASSWORD})
-    assert locked.status_code == 403
+    assert locked.status_code == 400
+    assert locked.json()["detail"] == "Invalid email or password"
+
+
+async def test_one_address_cannot_lock_the_owner_out(session: AsyncSession, user_factory) -> None:
+    """FAPI-SEC-011: the old account-wide lock let anyone who knew an address
+    keep its owner out. Failures from an attacker's IP now throttle only that IP."""
+    from httpx import ASGITransport
+
+    from app.api.deps import get_db_session
+    from app.main import app as fastapi_app
+
+    settings = get_settings()
+    user = await user_factory()
+
+    async def _override():
+        yield session
+
+    fastapi_app.dependency_overrides[get_db_session] = _override
+    try:
+        attacker = AsyncClient(transport=ASGITransport(app=fastapi_app, client=("203.0.113.9", 1)), base_url="http://t")
+        owner = AsyncClient(transport=ASGITransport(app=fastapi_app, client=("198.51.100.4", 1)), base_url="http://t")
+        async with attacker, owner:
+            for _ in range(settings.MAX_FAILED_LOGIN_ATTEMPTS + 3):
+                await attacker.post(LOGIN, json={"email": user.email, "password": "wrong-password"})
+            assert (await owner.post(LOGIN, json={"email": user.email, "password": DEFAULT_PASSWORD})).status_code == 200
+    finally:
+        fastapi_app.dependency_overrides.clear()
+
+
+async def test_failures_from_many_addresses_lock_the_account(
+    client: AsyncClient, session: AsyncSession, user_factory
+) -> None:
+    """Tier 2: the account-wide backstop against a distributed guesser still
+    engages, answers like a wrong password, and tells the owner in-app."""
+    from sqlalchemy import select
+
+    from app.core.login_throttle import login_throttle
+    from app.models import Notification
+
+    settings = get_settings()
+    user = await user_factory()
+    for attempt in range(settings.ACCOUNT_LOCKOUT_THRESHOLD):
+        # Each failure "from" a fresh address, so tier 1 never engages.
+        await login_throttle.clear(user.email, "127.0.0.1")
+        assert (
+            await client.post(LOGIN, json={"email": user.email, "password": f"wrong-password-{attempt}"})
+        ).status_code == 400
+    await login_throttle.clear(user.email, "127.0.0.1")
+
+    await session.refresh(user)
+    assert user.locked_until is not None
+    locked = await client.post(LOGIN, json={"email": user.email, "password": DEFAULT_PASSWORD})
+    assert locked.status_code == 400
+    assert locked.json()["detail"] == "Invalid email or password"
+    notices = (await session.scalars(select(Notification).where(Notification.user_id == user.id))).all()
+    assert any("locked" in n.title.lower() for n in notices)
 
 
 async def test_a_successful_login_clears_the_failure_counter(
@@ -197,9 +258,17 @@ async def test_changing_a_password_revokes_every_session(client: AsyncClient, us
     )
     assert changed.status_code == 200, changed.text
 
-    for tokens in (first_login, second_login):
-        replay = await client.post(REFRESH, json={"refresh_token": tokens["refresh_token"]})
-        assert replay.status_code == 401
+    # Every *other* session is gone at once — refresh token and access token
+    # alike (the access token carries its session id, FAPI-SEC-016)...
+    replay = await client.post(REFRESH, json={"refresh_token": second_login["refresh_token"]})
+    assert replay.status_code == 401
+    other = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {second_login['access_token']}"})
+    assert other.status_code == 401
+
+    # ...while the session that made the change carries on, as the route has
+    # always documented ("revokes every other session").
+    me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {first_login['access_token']}"})
+    assert me.status_code == 200
 
 
 async def test_refresh_rejects_a_forged_or_unknown_token(client: AsyncClient) -> None:

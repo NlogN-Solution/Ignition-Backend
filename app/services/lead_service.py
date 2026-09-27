@@ -167,6 +167,14 @@ class LeadService:
         return lead
 
     async def assign_lead(self, lead: Lead, counsellor_id: UUID, performed_by: UUID | None = None) -> Lead:
+        # The activity is read by people, so it names the assignee rather than
+        # quoting their id.
+        assignee = await self.session.get(User, counsellor_id)
+        assignee_name = (
+            " ".join(part for part in (assignee.first_name, assignee.last_name) if part) or assignee.email
+            if assignee is not None
+            else "a staff member"
+        )
         lead.assigned_to = counsellor_id
         await self.session.commit()
         await self.session.refresh(lead)
@@ -175,7 +183,7 @@ class LeadService:
             LeadActivityType.ASSIGNED,
             performed_by=performed_by,
             title="Lead assigned",
-            description=f"Lead assigned to user {counsellor_id}.",
+            description=f"Lead assigned to {assignee_name}.",
         )
         await self._notify(
             counsellor_id,
@@ -272,20 +280,33 @@ class LeadService:
         student_user: User | None = None
 
         if converted_user_id is not None:
-            result = await self.session.execute(select(User).where(User.id == converted_user_id))
+            result = await self.session.execute(
+                select(User).where(User.id == converted_user_id, User.deleted_at.is_(None))
+            )
             student_user = result.scalar_one_or_none()
+            if student_user is None or student_user.role is not UserRole.STUDENT:
+                raise ValueError("converted_user_id must be an existing student account")
         else:
             existing_user = None
             if lead.email:
-                result = await self.session.execute(select(User).where(User.email == lead.email))
+                result = await self.session.execute(
+                    select(User).where(func.lower(User.email) == lead.email.strip().lower())
+                )
                 existing_user = result.scalar_one_or_none()
+                # A lead's address can be typed in by anyone (the public
+                # eligibility form writes it). Matching it to a *staff* account
+                # would file that staff member as this student.
+                if existing_user is not None and existing_user.role is not UserRole.STUDENT:
+                    raise ValueError(
+                        "This lead's email belongs to a staff account. Correct the lead's email before converting."
+                    )
 
             if existing_user is not None:
                 student_user = existing_user
                 converted_user_id = existing_user.id
             else:
                 new_user = User(
-                    email=lead.email or f"lead-{uuid4().hex}@no-email.ignition",
+                    email=(lead.email or f"lead-{uuid4().hex}@no-email.ignition").strip().lower(),
                     first_name=lead.first_name,
                     last_name=lead.last_name or "",
                     phone=lead.phone,

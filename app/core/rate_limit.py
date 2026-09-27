@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
+from .client_ip import rate_limit_key
 from .config import get_settings
 
 settings = get_settings()
@@ -11,8 +11,12 @@ settings = get_settings()
 # let a 4-worker deployment serve 4x the intended rate. Tests run with
 # ENVIRONMENT=test and fall back to in-memory, which keeps the suite from
 # needing Redis.
+#
+# Keyed on the resolved client address, not `request.client.host`: behind
+# Render's proxy the latter is the proxy for every caller, which made each
+# limit one global bucket (FAPI-SEC-010). See core/client_ip.py.
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=rate_limit_key,
     storage_uri=None if settings.ENVIRONMENT == "test" else settings.redis_url,
     default_limits=[],
     enabled=settings.ENVIRONMENT != "test",

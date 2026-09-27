@@ -1,0 +1,35 @@
+ERROR    app.main: Unhandled exception
+ERROR    app.main: Unhandled exception
+E   AssertionError: locked=403 {'detail': 'Account temporarily locked due to failed login attempts'} vs unknown=400 {'detail': 'Invalid email or password'}
+/home/kabin/Documents/nlogn-projects/Ignition/backend/security-audit/tests/security/test_audit_findings.py:385: AssertionError: locked=403 {'detail': 'Account temporarily locked due to failed login attempts'} vs unknown=400 {'detail': 'Invalid email or password'}
+PASSED test_fapi_sec_005_control_application_is_hidden_from_other_counsellor
+PASSED test_control_message_sanitiser_blocks_script[<a href="javascript:alert(1)">x</a>]
+PASSED test_control_message_sanitiser_blocks_script[<a href=" JaVaScRiPt:alert(1)">x</a>]
+PASSED test_control_message_sanitiser_blocks_script[<a href="\x01javascript:alert(1)">x</a>]
+PASSED test_control_message_sanitiser_blocks_script[<a href="java&#x09;script:alert(1)">x</a>]
+PASSED test_control_message_sanitiser_blocks_script[<img src=x onerror=alert(1)>]
+PASSED test_control_message_sanitiser_blocks_script[<svg><script>alert(1)</script></svg>]
+PASSED test_control_message_sanitiser_blocks_script[<a href="data:text/html,<script>alert(1)</script>">x</a>]
+PASSED test_control_message_sanitiser_blocks_script[<p onclick="alert(1)">x</p>]
+PASSED test_control_public_register_cannot_set_role
+PASSED test_control_refresh_token_is_not_a_bearer_token
+PASSED test_control_refresh_token_is_single_use
+PASSED test_control_alg_none_token_rejected
+PASSED test_control_student_cannot_read_other_students_document
+FAILED test_fapi_sec_001_production_refuses_simulated_payments
+FAILED test_fapi_sec_001_checkout_unlocks_gated_documents_without_payment
+FAILED test_fapi_sec_002_student_cannot_link_another_students_document
+FAILED test_fapi_sec_002_approved_document_of_other_type_does_not_self_verify
+FAILED test_fapi_sec_003_student_cannot_read_other_applications_step_activities
+FAILED test_fapi_sec_004_upload_cannot_attach_to_foreign_application
+FAILED test_fapi_sec_004_student_thread_cannot_attach_to_foreign_application
+FAILED test_fapi_sec_005_checklist_of_other_counsellors_application
+FAILED test_fapi_sec_005_other_counsellors_student_correspondence
+FAILED test_fapi_sec_006_leave_attachment_is_private
+FAILED test_fapi_sec_007_limit_is_clamped
+FAILED test_fapi_sec_007_page_zero_is_a_client_error
+FAILED test_fapi_sec_008_student_cannot_read_unpublished_content
+FAILED test_fapi_sec_009_self_email_change_to_taken_address_is_a_409
+FAILED test_fapi_sec_009_email_is_case_insensitive_unique
+FAILED test_fapi_sec_011_locked_account_is_indistinguishable_from_unknown
+16 failed, 14 passed, 9 warnings in 25.99s

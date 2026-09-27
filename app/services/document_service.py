@@ -32,8 +32,11 @@ class DocumentService:
         status: str | None = None,
         document_type: str | None = None,
         search: str | None = None,
+        visible: ColumnElement[bool] | None = None,
     ) -> tuple[list[Document], int]:
-        conditions: list[ColumnElement[bool]] = []
+        """`visible` is an extra condition from `api.scoping` narrowing a
+        counsellor to their own students' documents."""
+        conditions: list[ColumnElement[bool]] = [] if visible is None else [visible]
         if student_id:
             conditions.append(Document.student_id == student_id)
         if uploaded_by:
@@ -235,6 +238,7 @@ class DocumentService:
         limit: int,
         search: str | None = None,
         sort: str = "recent",
+        visible: ColumnElement[bool] | None = None,
     ) -> tuple[list[Any], int]:
         """One row per student holding at least one document.
 
@@ -242,6 +246,8 @@ class DocumentService:
         with a student's first document and disappears with their last.
         """
         base, document_count, pending_count, last_updated = self._folder_query()
+        if visible is not None:
+            base = base.where(visible)
 
         if search and search.strip():
             search_value = f"%{search.strip().lower()}%"

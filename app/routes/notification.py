@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from typing import Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import CursorResult, func, update
 
 from ..api.auth import get_current_user, require_role
 from ..api.exceptions import ForbiddenException, NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..models import Notification, User
 from ..models.enums import UserRole
 from ..schemas.notification import (
@@ -26,8 +29,8 @@ def _assert_owner_or_admin(user: User, notification: Notification) -> None:
 
 @router.get("", response_model=NotificationList, summary="List my notifications")
 async def list_notifications(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     notification_type: str | None = None,
     channel: str | None = None,
     is_read: bool | None = None,
@@ -49,6 +52,24 @@ async def list_notifications(
         page=page,
         limit=limit,
     )
+
+
+@router.post("/read-all", summary="Mark all my notifications read")
+async def mark_all_notifications_read(
+    service: NotificationService = Depends(get_notification_service),
+    user: User = Depends(get_current_user),
+) -> dict[str, int]:
+    """What opening the bell does in the console: the badge clears at once."""
+    result = cast(
+        "CursorResult[Any]",
+        await service.session.execute(
+            update(Notification)
+            .where(Notification.user_id == user.id, Notification.is_read.is_(False))
+            .values(is_read=True, read_at=func.now())
+        ),
+    )
+    await service.session.commit()
+    return {"updated": result.rowcount}
 
 
 @router.get("/{notification_id}", response_model=NotificationRead, summary="Get notification")

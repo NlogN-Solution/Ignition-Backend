@@ -22,7 +22,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import TIMESTAMP, Boolean, Date, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import TIMESTAMP, Boolean, Date, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base import Base
@@ -107,6 +107,8 @@ class StudentChecklistItem(Base, UUIDPKMixin, TimestampMixin):
         # items are unaffected by this.
         UniqueConstraint("student_id", "key", name="uq_student_checklist_items_student_id_key"),
         Index("idx_student_checklist_items_student_id", "student_id"),
+        # Created by migration e8b3c5d7f912: the dashboard's "Priority tasks".
+        Index("idx_student_checklist_items_priority", "student_id", postgresql_where=text("is_priority")),
     )
 
     @property

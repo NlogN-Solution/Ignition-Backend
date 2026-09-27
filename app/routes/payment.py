@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 
 from ..api.auth import require_role
 from ..api.exceptions import ForbiddenException, NotFoundException
+from ..api.pagination import LimitParam, PageParam
 from ..models import User
 from ..models.enums import UserRole
 from ..schemas.payment import PaymentCreate, PaymentList, PaymentRead, PaymentUpdate
@@ -19,8 +20,8 @@ _MANAGE_ROLES = require_role(UserRole.ADMIN, UserRole.FINANCE)
 
 @router.get("", response_model=PaymentList, summary="List payments")
 async def list_payments(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     student_id: UUID | None = None,
     application_id: UUID | None = None,
     status: str | None = None,

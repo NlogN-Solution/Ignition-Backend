@@ -67,8 +67,11 @@ class StudentProfileRead(BaseModel):
     preferences: dict[str, Any] | None
     test_scores: dict[str, Any] | None
     education: dict[str, Any] | None
-    #: Derived, not stored — `StudentProfile.profile_completion`.
-    profile_completion: int
+    #: Derived, not stored — services/profile_completion.py. 100 only when
+    #: `profile_missing` is empty.
+    profile_completion: int = 0
+    #: What is still needed to reach 100%, worded for the student.
+    profile_missing: list[str] = []
     created_at: datetime
     updated_at: datetime
 

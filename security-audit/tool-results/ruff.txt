@@ -1,0 +1,10 @@
+ruff 0.9.2
+app/routes/public.py:22:1: I001 [*] Import block is un-sorted or un-formatted
+app/routes/student.py:489:5: SIM105 Use `contextlib.suppress(ValueError)` instead of `try`-`except`-`pass`
+app/services/portal_access_service.py:178:39: UP017 [*] Use `datetime.UTC` alias
+app/services/public_service.py:429:13: SIM103 Return the negated condition directly
+app/services/student_profile_service.py:9:28: F401 [*] `sqlalchemy.orm.joinedload` imported but unused
+scripts/import_recognition.py:41:1: I001 [*] Import block is un-sorted or un-formatted
+Found 6 errors.
+[*] 4 fixable with the `--fix` option (1 hidden fix can be enabled with the `--unsafe-fixes` option).
+exit=1

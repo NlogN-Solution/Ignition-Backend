@@ -108,7 +108,7 @@ async def test_self_registration_creates_a_lead(client: AsyncClient, admin_heade
         AUTH_REGISTER,
         json={
             "email": "walked.in@example.com",
-            "password": "portal-password",
+            "password": "Portal-passw0rd",
             "first_name": "Nabin",
             "last_name": "Thapa",
             "phone": "9811111111",
@@ -140,7 +140,7 @@ async def test_registering_with_a_known_email_links_the_existing_lead(
         AUTH_REGISTER,
         json={
             "email": "both@example.com",
-            "password": "portal-password",
+            "password": "Portal-passw0rd",
             "first_name": "Sita",
             "last_name": "Rai",
         },
@@ -202,7 +202,7 @@ async def test_registration_refuses_a_phone_too_short_to_be_one(client: AsyncCli
         AUTH_REGISTER,
         json={
             "email": "short.phone@example.com",
-            "password": "portal-password",
+            "password": "Portal-passw0rd",
             "first_name": "Too",
             "last_name": "Short",
             "phone": "abc",
@@ -225,7 +225,7 @@ async def test_registration_without_a_phone_still_makes_a_listable_lead(
         AUTH_REGISTER,
         json={
             "email": "no.phone@example.com",
-            "password": "portal-password",
+            "password": "Portal-passw0rd",
             "first_name": "Anu",
             "last_name": "Gurung",
         },

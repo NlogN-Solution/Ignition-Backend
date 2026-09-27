@@ -426,7 +426,7 @@ class PublicCatalogueService:
         def applies(scholarship: Scholarship) -> bool:
             if scholarship.levels and level is not None and level not in scholarship.levels:
                 return False
-            if scholarship.subjects and subject is not None and subject not in scholarship.subjects:
+            if scholarship.subjects and subject is not None and subject not in scholarship.subjects:  # noqa: SIM103
                 return False
             return True
 

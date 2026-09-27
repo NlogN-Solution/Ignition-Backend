@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import TIMESTAMP, Date, ForeignKey, Index, Numeric, String, Text, func
+from sqlalchemy import TIMESTAMP, Date, ForeignKey, Index, Numeric, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base import Base
@@ -127,6 +127,9 @@ class Application(Base, UUIDPKMixin, TimestampMixin, SoftDeleteMixin):
         Index("idx_applications_counsellor_id", "counsellor_id"),
         Index("idx_applications_status", "status"),
         Index("idx_applications_intake_id", "intake_id"),
+        # Created by migration a1b2c3d4e5f6; declared here so create_all
+        # (the test schema) and `alembic check` agree with production.
+        Index("idx_applications_not_deleted", "id", postgresql_where=text("deleted_at IS NULL")),
     )
 
     def __repr__(self) -> str:

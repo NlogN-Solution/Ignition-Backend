@@ -1,0 +1,6 @@
+mypy 1.14.1 (compiled: yes)
+app/services/communication_service.py:348: error: Incompatible return value type (got "ThreadMessage | None", expected "ThreadMessage")  [return-value]
+app/services/application_service.py:102: error: Argument 1 to "append" of "list" has incompatible type "TextClause"; expected "ColumnElement[bool]"  [arg-type]
+app/services/workflow_service.py:664: error: Argument 1 to "link_to_application" of "DocumentService" has incompatible type "UUID | None"; expected "UUID"  [arg-type]
+Found 3 errors in 3 files (checked 169 source files)
+exit=1

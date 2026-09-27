@@ -19,6 +19,10 @@ _INSECURE_SECRETS = {"change-me-super-secret", "changeme", "secret"}
 class Settings(BaseSettings):
     """Typed, validated settings.
 
+    Every credential-bearing field is `repr=False`. The settings object turns up
+    in tracebacks, pytest assertion output and debug logs, and its default repr
+    printed DATABASE_URL — password included — to all of them.
+
     Deliberately different from ED360's hand-rolled `os.getenv` class: an
     invalid or missing value fails at import time with a readable error rather
     than surfacing as a confusing runtime failure later.
@@ -34,22 +38,28 @@ class Settings(BaseSettings):
 
     #: No payment gateway is integrated yet. While this is true, the portal's
     #: access-fee checkout completes without money moving, and every surface
-    #: that touches it says so in as many words. Setting it to False without
-    #: wiring a real gateway simply makes the checkout refuse — it must never
-    #: be possible to take a payment silently.
-    SIMULATED_PAYMENTS: bool = True
+    #: that touches it says so in as many words. False makes the checkout
+    #: refuse — it must never be possible to take a payment silently.
+    #:
+    #: **Defaults to False and cannot be True in production** (FAPI-SEC-001).
+    #: It used to default to True, and nothing turned it off on Render, so any
+    #: self-registered student could press "pay", move no money, and unlock
+    #: the offer and CAS letters the fee exists to charge for. A demo switch
+    #: has to fail closed: set `SIMULATED_PAYMENTS=true` explicitly in a
+    #: development `.env` to demo the checkout.
+    SIMULATED_PAYMENTS: bool = False
 
     # ── Database ──────────────────────────────────────────────────────────────
     # Local dev composes a URL from the individual fields below. A hosted
     # Postgres (Neon, Render Postgres, ...) instead hands out one connection
     # string — set DATABASE_URL and it overrides DB_HOST/PORT/NAME/USER/PASSWORD
     # entirely rather than needing them parsed apart.
-    DATABASE_URL: str | None = None
+    DATABASE_URL: str | None = Field(default=None, repr=False)
     DB_HOST: str = "localhost"
     DB_PORT: int = 5433
     DB_NAME: str = "ignition"
     DB_USER: str = "postgres"
-    DB_PASSWORD: str = "postgres"
+    DB_PASSWORD: str = Field(default="postgres", repr=False)
     DB_POOL_SIZE: int = 5
     DB_ECHO: bool = False
 
@@ -57,20 +67,45 @@ class Settings(BaseSettings):
     # No default. In development one is generated per process (see the validator
     # below) so `docker compose up` works out of the box; in production a missing
     # or weak secret is a hard failure.
-    JWT_SECRET_KEY: str = ""
+    JWT_SECRET_KEY: str = Field(default="", repr=False)
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # Brute-force lockout. ED360's `users` table models both columns and never
     # writes either; `AuthService.authenticate` enforces them here.
-    MAX_FAILED_LOGIN_ATTEMPTS: int = 5
-    ACCOUNT_LOCKOUT_MINUTES: int = 15
+    #
+    # Two tiers (FAPI-SEC-011). `MAX_FAILED_LOGIN_ATTEMPTS` is counted per
+    # *account and source IP*: five wrong passwords from one address stop that
+    # address trying that account for `ACCOUNT_LOCKOUT_MINUTES`, without
+    # locking the owner out from their own machine. `ACCOUNT_LOCKOUT_THRESHOLD`
+    # is the account-wide backstop against a distributed guesser — it needs
+    # failures from several addresses, so one attacker can no longer lock any
+    # counsellor out by knowing their e-mail. Both answer exactly like a wrong
+    # password, so neither reveals that the address is registered.
+    MAX_FAILED_LOGIN_ATTEMPTS: int = Field(default=5, ge=1)
+    ACCOUNT_LOCKOUT_THRESHOLD: int = Field(default=20, ge=1)
+    ACCOUNT_LOCKOUT_MINUTES: int = Field(default=15, ge=1)
+
+    #: A refresh token presented again within this many seconds of being
+    #: rotated is treated as two tabs racing, not as theft: the loser gets a
+    #: 401 and nothing else happens. Outside the window, reuse of a rotated
+    #: token revokes every session the user has (FAPI-SEC-016).
+    REFRESH_REUSE_GRACE_SECONDS: int = Field(default=10, ge=0)
+
+    # ── Client address (FAPI-SEC-010) ─────────────────────────────────────────
+    # See core/client_ip.py. How many reverse proxies sit in front of the app
+    # and append to X-Forwarded-For. 0 = use the socket peer (local/dev).
+    # Render: 1. Setting it higher than reality makes the client IP spoofable.
+    TRUSTED_PROXY_HOPS: int = Field(default=0, ge=0, le=5)
+    #: A header the edge *overwrites* with the connecting address (e.g.
+    #: `CF-Connecting-IP`). Only when the app is unreachable except through it.
+    CLIENT_IP_HEADER: str | None = None
 
     # ── Redis ─────────────────────────────────────────────────────────────────
     # Same override pattern as DATABASE_URL — a managed Redis (Render Key Value,
     # etc.) hands out one connection string rather than host/port pieces.
-    REDIS_URL: str | None = None
+    REDIS_URL: str | None = Field(default=None, repr=False)
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6380
     REDIS_DB: int = 0
@@ -81,8 +116,8 @@ class Settings(BaseSettings):
     # ENVIRONMENT=test never calls Cloudinary (see uploads.py), so these stay
     # blank in the test suite.
     CLOUDINARY_CLOUD_NAME: str = ""
-    CLOUDINARY_API_KEY: str = ""
-    CLOUDINARY_API_SECRET: str = ""
+    CLOUDINARY_API_KEY: str = Field(default="", repr=False)
+    CLOUDINARY_API_SECRET: str = Field(default="", repr=False)
 
     # ── HTTP ──────────────────────────────────────────────────────────────────
     # 5174 = admin dashboard (Vite), 3001 = student portal (CRA),
@@ -121,7 +156,7 @@ class Settings(BaseSettings):
     # can. Left empty — the default — publishing simply does not call out, so
     # a developer with no landing running is not spammed with failures.
     LANDING_BASE_URL: str = "http://localhost:3000"
-    LANDING_REVALIDATE_SECRET: str = ""
+    LANDING_REVALIDATE_SECRET: str = Field(default="", repr=False)
     #: How long an editor's preview link stays good for. Short: the link
     #: unlocks unpublished content to anyone holding it.
     PREVIEW_TOKEN_EXPIRE_MINUTES: int = 30
@@ -135,11 +170,32 @@ class Settings(BaseSettings):
     # local-disk fallback so the test suite doesn't need real Cloudinary
     # credentials or network access. Unused in development/production.
     UPLOAD_DIR: str = str(BASE_DIR / "uploads")
-    MAX_UPLOAD_SIZE_MB: int = 25
+    MAX_UPLOAD_SIZE_MB: int = Field(default=25, ge=1)
+    #: Ceiling on a whole request body, enforced while it streams in
+    #: (core/middleware.BodySizeLimitMiddleware) — before any multipart
+    #: parsing or buffering. Covers a message carrying several attachments,
+    #: which the per-file limit alone never bounded (FAPI-SEC-012).
+    MAX_REQUEST_BODY_MB: int = Field(default=60, ge=1)
+
+    # ── Cloudinary token authentication (FAPI-SEC-013) ────────────────────────
+    # Signed `authenticated` URLs never expire on their own. When the account
+    # has token-based authentication enabled, put its key here and every
+    # private-file URL this API mints is valid for only
+    # `CLOUDINARY_URL_TTL_SECONDS`. Left empty, URLs stay signed-but-permanent
+    # and the link endpoints mark their responses `no-store`.
+    CLOUDINARY_AUTH_TOKEN_KEY: str = Field(default="", repr=False)
+    CLOUDINARY_URL_TTL_SECONDS: int = Field(default=300, ge=30, le=86400)
 
     @model_validator(mode="after")
     def _validate_secrets(self) -> Settings:
         if self.ENVIRONMENT == "production":
+            if self.SIMULATED_PAYMENTS:
+                # FAPI-SEC-001: no gateway is integrated, so "simulated" in
+                # production means "free". Refuse to boot rather than trust
+                # that someone remembered to set it.
+                raise ValueError(
+                    "SIMULATED_PAYMENTS must be false in production — no payment gateway is integrated."
+                )
             if not self.JWT_SECRET_KEY:
                 raise ValueError("JWT_SECRET_KEY must be set in production.")
             if self.JWT_SECRET_KEY in _INSECURE_SECRETS:
@@ -182,7 +238,7 @@ class Settings(BaseSettings):
             return url.render_as_string(hide_password=False)
         return f"postgresql+{driver}://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field(repr=False)  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:
         """Sync URL — used by Alembic. psycopg understands `sslmode` natively."""
@@ -199,13 +255,13 @@ class Settings(BaseSettings):
             )
         return None
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field(repr=False)  # type: ignore[prop-decorator]
     @property
     def async_database_url(self) -> str:
         """Async URL — used by the application."""
         return self._build_database_url("asyncpg", strip_async_incompatible_params=True)
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field(repr=False)  # type: ignore[prop-decorator]
     @property
     def redis_url(self) -> str:
         # Same hermeticity concern as DATABASE_URL above: a real REDIS_URL in

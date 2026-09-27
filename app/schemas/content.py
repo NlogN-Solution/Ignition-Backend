@@ -6,9 +6,27 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from ..core.html import reading_minutes, sanitize_rich_html
 from ..models.enums import BlockType, ContentKind
+
+
+class _RichBody(BaseModel):
+    """`body_html` is cleaned to an allow-list before it is stored, and sets
+    `reading_minutes` when the caller did not."""
+
+    @field_validator("body_html", check_fields=False)
+    @classmethod
+    def _clean_body(cls, value: str | None) -> str | None:
+        return sanitize_rich_html(value)
+
+    @model_validator(mode="after")
+    def _derive_reading_time(self) -> _RichBody:
+        fields = self.model_fields_set
+        if "body_html" in fields and "reading_minutes" not in fields:
+            self.reading_minutes = reading_minutes(self.body_html)  # type: ignore[attr-defined]
+        return self
 
 
 class ContentBlockBase(BaseModel):
@@ -59,7 +77,7 @@ class ContentBlockReorder(BaseModel):
     block_ids: list[UUID] = Field(min_length=1)
 
 
-class ContentPageBase(BaseModel):
+class ContentPageBase(_RichBody):
     key: str = Field(min_length=1, max_length=120)
     kind: ContentKind
     slug: str | None = Field(default=None, max_length=200)
@@ -71,6 +89,8 @@ class ContentPageBase(BaseModel):
     source: dict[str, Any] | None = None
     related: list[dict[str, Any]] | None = None
     reading_minutes: int | None = None
+    body_html: str | None = None
+    cover_image_url: str | None = None
     published_at: datetime | None = None
     is_published: bool = False
     author_id: UUID | None = None
@@ -81,7 +101,7 @@ class ContentPageCreate(ContentPageBase):
     pass
 
 
-class ContentPageUpdate(BaseModel):
+class ContentPageUpdate(_RichBody):
     key: str | None = Field(default=None, min_length=1, max_length=120)
     kind: ContentKind | None = None
     slug: str | None = Field(default=None, max_length=200)
@@ -93,6 +113,8 @@ class ContentPageUpdate(BaseModel):
     source: dict[str, Any] | None = None
     related: list[dict[str, Any]] | None = None
     reading_minutes: int | None = None
+    body_html: str | None = None
+    cover_image_url: str | None = None
     published_at: datetime | None = None
     is_published: bool | None = None
     author_id: UUID | None = None

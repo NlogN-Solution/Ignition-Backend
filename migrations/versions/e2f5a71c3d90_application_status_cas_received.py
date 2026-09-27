@@ -42,10 +42,14 @@ def downgrade() -> None:
         "'offer_received', 'offer_accepted', 'offer_declined', 'visa_processing', "
         "'visa_approved', 'visa_rejected', 'enrolled', 'withdrawn', 'rejected')"
     )
+    # The column default is typed as the old enum and Postgres will not recast
+    # it, so it comes off for the type change and goes back on afterwards.
+    op.execute("ALTER TABLE applications ALTER COLUMN status DROP DEFAULT")
     op.execute(
         "ALTER TABLE applications ALTER COLUMN status TYPE application_status "
         "USING status::text::application_status"
     )
+    op.execute("ALTER TABLE applications ALTER COLUMN status SET DEFAULT 'draft'")
     op.execute(
         "ALTER TABLE application_status_history ALTER COLUMN new_status TYPE application_status "
         "USING new_status::text::application_status"

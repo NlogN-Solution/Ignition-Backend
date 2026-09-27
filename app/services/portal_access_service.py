@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Depends
 from sqlalchemy import select
@@ -175,7 +175,7 @@ class PortalAccessService:
             payment_method=method,
             status=PaymentStatus.COMPLETED,
             transaction_reference=transaction_reference,
-            payment_date=datetime.now(timezone.utc),
+            payment_date=datetime.now(UTC),
             remarks=remarks,
         )
         self.session.add(payment)

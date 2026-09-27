@@ -5,11 +5,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..api.auth import get_current_user, require_role
+from ..api.auth import get_current_user, require_role, require_staff
 from ..api.deps import get_db_session
 from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
+from ..api.pagination import LimitParam, PageParam
+from ..api.scoping import may_see_record, own_work_scope
 from ..models import Application, User
-from ..models.enums import NotificationType, UserRole, WorkflowStepStatus
+from ..models.enums import STAFF_ROLES, NotificationType, UserRole, WorkflowStepStatus
 from ..schemas.workflow import (
     AddStepCommentRequest,
     ApplicationChecklistItemCreate,
@@ -36,6 +38,7 @@ from ..schemas.workflow import (
     WorkflowTemplateUpdate,
 )
 from ..services.application_service import ApplicationService, get_application_service
+from ..services.document_service import DocumentService
 from ..services.notification_service import NotificationService, get_notification_service
 from ..services.workflow_service import ApplicationWorkflowService, ChecklistService, WorkflowTemplateService
 
@@ -65,22 +68,42 @@ async def _assert_application_access(
     user: User,
     application_service: ApplicationService,
 ) -> Application:
-    """Staff on the application-handling roles may access any application; a
-    student may access only their own. Returns the application so callers
-    that already need it (e.g. to notify its student) don't re-fetch it.
+    """Authorise the caller for one application's workflow and checklist.
 
-    ED360 additionally compares organizations and lets a platform admin bypass
-    the check entirely; neither survives the strip (R2/R3). What is left is the
-    student-ownership branch, which was always the part doing real work.
+    The same rule as `GET /applications/{id}` (`routes/application.py`), so a
+    sub-resource can never show what the application itself hides:
+
+    * a student reaches only their own application (403 otherwise, as there);
+    * staff on the application-handling roles pass the own-work rule — a
+      counsellor sees their own applications and unassigned ones, and gets a
+      404 for a colleague's, exactly as the by-id read does (FAPI-SEC-005).
+      This helper used to wave every staff member through, so the checklist
+      and workflow of an application `/applications/{id}` returned 404 for
+      were fully readable and writable here.
+
+    Returns the application so callers that already need it (e.g. to notify
+    its student) don't re-fetch it.
     """
     application = await application_service.get_application(application_id)
     if application is None:
         raise NotFoundException("Application not found")
     if user.role in APPLICATION_STAFF_ROLES:
+        if not may_see_record(user, application.counsellor_id):
+            raise NotFoundException("Application not found")
         return application
     if user.role is UserRole.STUDENT and application.student_id == user.id:
         return application
     raise ForbiddenException("You do not have access to this application")
+
+
+async def _step_or_404(
+    service: ApplicationWorkflowService, step_id: UUID, application_id: UUID
+):
+    """The step, only when it belongs to the application in the URL (FAPI-SEC-003)."""
+    step = await service.get_step_for_application(step_id, application_id)
+    if step is None:
+        raise NotFoundException("Workflow step not found")
+    return step
 
 
 def _serialize_template(template, stage_count: int) -> WorkflowTemplateRead:
@@ -94,13 +117,13 @@ def _serialize_template(template, stage_count: int) -> WorkflowTemplateRead:
 
 @router.get("/workflow-templates", response_model=WorkflowTemplateList, summary="List workflow templates")
 async def list_workflow_templates(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     search: str | None = None,
     country_id: UUID | None = None,
     is_active: bool | None = None,
     service: WorkflowTemplateService = Depends(get_template_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> WorkflowTemplateList:
     rows, total = await service.list_templates(page, limit, search=search, country_id=country_id, is_active=is_active)
     items = [_serialize_template(t, count) for t, count in rows]
@@ -113,7 +136,7 @@ async def list_workflow_templates(
 async def get_workflow_template(
     template_id: UUID,
     service: WorkflowTemplateService = Depends(get_template_service),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_staff),
 ) -> WorkflowTemplateDetailRead:
     template = await service.get_template(template_id, with_stages=True)
     if template is None:
@@ -313,15 +336,15 @@ async def delete_stage_requirement(
 
 @router.get("/workflow-steps", response_model=WorkflowStepList, summary="List workflow steps across applications")
 async def list_workflow_steps(
-    page: int = 1,
-    limit: int = 20,
+    page: PageParam = 1,
+    limit: LimitParam = 20,
     stage_id: UUID | None = None,
     status: WorkflowStepStatus | None = None,
     template_id: UUID | None = None,
     assigned_to: UUID | None = None,
     application_id: UUID | None = None,
     service: ApplicationWorkflowService = Depends(get_application_workflow_service),
-    _: object = Depends(require_role("admin", "super_admin", "counsellor")),
+    user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> WorkflowStepList:
     items, total = await service.list_steps(
         page,
@@ -331,6 +354,7 @@ async def list_workflow_steps(
         template_id=template_id,
         assigned_to=assigned_to,
         application_id=application_id,
+        visible_to=own_work_scope(user),
     )
     return WorkflowStepList(items=[WorkflowStepListItem(**item) for item in items], total=total, page=page, limit=limit)
 
@@ -390,10 +414,13 @@ async def update_application_workflow_step(
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> ApplicationWorkflowStepRead:
     await _assert_application_access(application_id, user, application_service)
-    step = await service.get_step(step_id)
-    if step is None:
-        raise NotFoundException("Workflow step not found")
-    return await service.update_step(step, payload.model_dump(exclude_unset=True), performed_by=user.id)  # type: ignore[return-value]
+    step = await _step_or_404(service, step_id, application_id)
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("assigned_to") is not None:
+        assignee = await service.session.get(User, data["assigned_to"])
+        if assignee is None or assignee.deleted_at is not None or assignee.role not in STAFF_ROLES:
+            raise BadRequestException("A workflow step can only be assigned to an active staff member")
+    return await service.update_step(step, data, performed_by=user.id)  # type: ignore[return-value]
 
 
 @router.get(
@@ -409,6 +436,7 @@ async def list_workflow_step_activities(
     user: User = Depends(get_current_user),
 ) -> list[WorkflowStepActivityRead]:
     await _assert_application_access(application_id, user, application_service)
+    await _step_or_404(service, step_id, application_id)
     return await service.list_activities(step_id)  # type: ignore[return-value]
 
 
@@ -426,9 +454,7 @@ async def add_workflow_step_comment(
     user: User = Depends(require_role("admin", "super_admin", "counsellor")),
 ) -> WorkflowStepActivityRead:
     await _assert_application_access(application_id, user, application_service)
-    step = await service.get_step(step_id)
-    if step is None:
-        raise NotFoundException("Workflow step not found")
+    step = await _step_or_404(service, step_id, application_id)
     return await service.add_comment(step, payload.comment, performed_by=user.id)  # type: ignore[return-value]
 
 
@@ -498,14 +524,33 @@ async def update_application_checklist_item(
     application_service: ApplicationService = Depends(get_application_service),
     user: User = Depends(get_current_user),
 ) -> ApplicationChecklistItemRead:
-    await _assert_application_access(application_id, user, application_service)
+    application = await _assert_application_access(application_id, user, application_service)
     item = await service.get_item(item_id)
     if item is None or item.application_id != application_id:
         raise NotFoundException("Checklist item not found")
 
     data = payload.model_dump(exclude_unset=True)
-    if user.role not in APPLICATION_STAFF_ROLES:
+    is_staff = user.role in APPLICATION_STAFF_ROLES
+    if not is_staff:
         disallowed = set(data) - _STUDENT_EDITABLE_CHECKLIST_FIELDS
         if disallowed:
             raise ForbiddenException(f"Only staff can update: {', '.join(sorted(disallowed))}")
-    return await service.update_item(item, data, acting_user_id=user.id)  # type: ignore[return-value]
+
+    if data.get("document_id") is not None:
+        # The document named in the body is a child of *this* application's
+        # student, or it is nothing (FAPI-SEC-002). Only the application was
+        # checked before, so a student could link another applicant's approved
+        # passport to their own checklist — and see its metadata on their
+        # application — given its id. Staff are held to the same rule: filing
+        # student A's file on student B's application is a mistake either way.
+        document = await DocumentService(service.session).get_document(data["document_id"])
+        if document is None or document.student_id != application.student_id:
+            raise NotFoundException("Document not found")
+        if item.document_type is not None and document.document_type != item.document_type:
+            raise BadRequestException(
+                f"This item asks for a {item.document_type.value.replace('_', ' ')} document; "
+                f"that file is a {document.document_type.value.replace('_', ' ')}."
+            )
+    return await service.update_item(  # type: ignore[return-value]
+        item, data, acting_user_id=user.id, acting_is_staff=is_staff
+    )
