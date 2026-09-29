@@ -67,6 +67,21 @@ class ApplicationStatusUpdate(BaseModel):
     remarks: str | None = None
 
 
+class ApplicationAcceptRequest(BaseModel):
+    """Accepting a student's request. The feedback is optional — "yes" needs no
+    explanation — but anything written here is shown to the student."""
+
+    feedback: str | None = Field(default=None, max_length=4000)
+
+
+class ApplicationRejectRequest(BaseModel):
+    """Rejecting a student's request. The feedback is required: it is what the
+    student needs to do before this can be accepted, and a rejection without it
+    is a dead end they cannot act on."""
+
+    feedback: str = Field(min_length=1, max_length=4000)
+
+
 class ApplicationUpdate(BaseModel):
     """Editable fields.
 
@@ -119,6 +134,12 @@ class ApplicationStatusHistoryRead(BaseModel):
 
 class ApplicationRead(ApplicationBase):
     id: UUID
+    #: The counsellor's accept/reject decision on a student's request. Read-only
+    #: here: written only by `POST /applications/{id}/accept|reject`.
+    review_feedback: str | None = None
+    reviewed_by: UUID | None = None
+    reviewed_at: datetime | None = None
+    request_submitted_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

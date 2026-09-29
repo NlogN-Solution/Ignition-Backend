@@ -13,7 +13,7 @@ from ..api.deps import get_db_session
 from ..api.exceptions import BadRequestException, NotFoundException
 from ..core.events import ApplicationCreated, ApplicationStatusChanged, event_bus
 from ..models import Application, ApplicationStatusHistory, Intake, Program, University, User
-from ..models.enums import STAFF_ROLES, ApplicationStatus, UserRole
+from ..models.enums import STAFF_ROLES, UNACCEPTED_APPLICATION_STATUSES, ApplicationStatus, UserRole
 from .partial_update import reject_null_on_required
 
 #: Date fields stored as `String(10)` ISO strings — an ED360 wart documented on
@@ -130,6 +130,13 @@ class ApplicationService:
             conditions.append(Application.program_id == program_id)
         if status:
             conditions.append(Application.status == status)
+        else:
+            # A rejected request is out of the working list. It is still there
+            # — filter on `request_rejected` to see them, and accept one later
+            # once the student has closed the gap — but it is not a file
+            # anybody is working, and listing it beside real applications is
+            # how a spam sign-up ends up looking like caseload.
+            conditions.append(Application.status != ApplicationStatus.REQUEST_REJECTED)
         # The caller's own scope (see `api/scoping.py`), not a filter they chose:
         # their applications plus the ones nobody has picked up.
         if visible_to is not None:
@@ -270,6 +277,48 @@ class ApplicationService:
             self.session,
         )
         return application
+
+    async def review_request(
+        self,
+        application: Application,
+        *,
+        accept: bool,
+        feedback: str | None,
+        performed_by: UUID,
+    ) -> Application:
+        """A counsellor's answer to a student's request: accept or reject.
+
+        Accepting moves a `requested` (or previously rejected) request to
+        `draft`, where work starts. Rejecting moves a `requested` one to
+        `request_rejected`, out of the working list. Either way the feedback is
+        stored on the application, where the student reads it, and written as
+        the status-history remark, so the decision and its reason stay together
+        in the audit trail.
+
+        The review fields are set before `change_application_status` commits,
+        so the decision and the status land in one transaction.
+        """
+        allowed_from = (
+            UNACCEPTED_APPLICATION_STATUSES if accept else frozenset({ApplicationStatus.REQUESTED})
+        )
+        if application.status not in allowed_from:
+            raise BadRequestException(
+                "This application has already been accepted." if accept else "Only a pending request can be rejected."
+            )
+
+        cleaned = (feedback or "").strip() or None
+        if not accept and cleaned is None:
+            raise BadRequestException("Tell the student what they need to do before this can be accepted.")
+
+        application.review_feedback = cleaned
+        application.reviewed_by = performed_by
+        application.reviewed_at = datetime.now(UTC)
+        return await self.change_application_status(
+            application,
+            ApplicationStatus.DRAFT if accept else ApplicationStatus.REQUEST_REJECTED,
+            performed_by=performed_by,
+            remarks=cleaned or ("Request accepted" if accept else None),
+        )
 
     async def list_status_history(self, application_id: UUID) -> list[ApplicationStatusHistory]:
         result = await self.session.execute(

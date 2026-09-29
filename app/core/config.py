@@ -177,12 +177,12 @@ class Settings(BaseSettings):
     #: which the per-file limit alone never bounded (FAPI-SEC-012).
     MAX_REQUEST_BODY_MB: int = Field(default=60, ge=1)
 
-    # ── Cloudinary token authentication (FAPI-SEC-013) ────────────────────────
-    # Signed `authenticated` URLs never expire on their own. When the account
-    # has token-based authentication enabled, put its key here and every
-    # private-file URL this API mints is valid for only
-    # `CLOUDINARY_URL_TTL_SECONDS`. Left empty, URLs stay signed-but-permanent
-    # and the link endpoints mark their responses `no-store`.
+    # ── Private-file links (FAPI-SEC-013) ─────────────────────────────────────
+    # Every private-file URL this API mints goes through Cloudinary's signed
+    # download API with an `expires_at`, so it is valid for only
+    # `CLOUDINARY_URL_TTL_SECONDS` — see `core/uploads.build_download_url`.
+    # `CLOUDINARY_AUTH_TOKEN_KEY` is no longer needed for that; it is kept so an
+    # existing .env that sets it still loads.
     CLOUDINARY_AUTH_TOKEN_KEY: str = Field(default="", repr=False)
     CLOUDINARY_URL_TTL_SECONDS: int = Field(default=300, ge=30, le=86400)
 

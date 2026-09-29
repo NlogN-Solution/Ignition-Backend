@@ -145,6 +145,11 @@ class ApplicationSubmitted(Event):
     student_name: str
     program_name: str
     university_name: str | None
+    #: True when what arrived is a *request* nobody has accepted yet (the
+    #: student finished the apply flow), rather than an accepted application
+    #: the student has finished their part of. The desk words the two
+    #: differently because they are asked to do different things.
+    is_request: bool = False
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

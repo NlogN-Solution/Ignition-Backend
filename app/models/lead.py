@@ -71,6 +71,14 @@ class Lead(Base, UUIDPKMixin, TimestampMixin, SoftDeleteMixin):
 
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     converted_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    #: When the person behind this lead created their own portal account.
+    #:
+    #: Its own column because a registration is no longer a conversion: the
+    #: lead stays at whatever stage it was (a brand-new one starts at `new`),
+    #: so `converted_at` can no longer double as "signed up at" — and for a
+    #: lead that existed before they registered, `created_at` is the wrong
+    #: moment too.
+    registered_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
     qualified_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     qualified_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))

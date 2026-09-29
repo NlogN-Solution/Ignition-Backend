@@ -102,10 +102,9 @@ class DocumentLinkRead(BaseModel):
     route* and needs a bearer token — useless as an `<a href>` or a
     `window.open`. This is what those two actually need.
 
-    Signed, not expiring: see `core/uploads.build_download_url`. Treat it as a
-    credential — hand it to the browser and do not log or store it. There is
-    deliberately no `expires_in` field, because nothing here enforces one and a
-    number saying otherwise would be read as a guarantee.
+    Signed, and expires after `CLOUDINARY_URL_TTL_SECONDS`: see
+    `core/uploads.build_download_url`. Until then it is a credential — hand it
+    to the browser straight away and do not log or store it.
     """
 
     url: str

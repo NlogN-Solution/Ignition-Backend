@@ -35,7 +35,12 @@ from .progress_service import PointsService, ProgressService
 #: pursuing — a dashboard tile titled "active applications" showing a
 #: withdrawn one would be wrong, not just uninteresting.
 _INACTIVE_APPLICATION_STATUSES = frozenset(
-    {ApplicationStatus.WITHDRAWN, ApplicationStatus.REJECTED, ApplicationStatus.OFFER_DECLINED}
+    {
+        ApplicationStatus.WITHDRAWN,
+        ApplicationStatus.REJECTED,
+        ApplicationStatus.OFFER_DECLINED,
+        ApplicationStatus.REQUEST_REJECTED,
+    }
 )
 _UPCOMING_APPOINTMENT_STATUSES = frozenset({AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED})
 _RECENT_ACTIVITY_LIMIT = 5

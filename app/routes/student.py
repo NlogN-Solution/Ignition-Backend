@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -536,15 +536,25 @@ async def submit_my_application(
 ) -> StudentApplicationRead:
     """"I have finished my part" — not "this is with the university".
 
-    Moves the application to `READY_TO_SUBMIT` through
-    `change_application_status`, which is the one door that writes an
-    `application_status_history` row. See `_STUDENT_SUBMITTABLE_FROM` for why
-    that is as far as a student can move their own file.
+    What that means depends on where the application is:
 
-    Already-ready is not an error. A student who presses the button twice, or
-    reloads the confirmation, has not done anything wrong and should not be
-    shown a failure — `change_application_status` no-ops on an unchanged
-    status, so this is idempotent.
+    * **`requested`** — the apply flow's last step. The request already exists
+      (it is created at step one, so documents have something to attach to);
+      finishing the flow is what sends it to the desk. The status does not move
+      — nobody has accepted it yet — but the desk is told, once:
+      `request_submitted_at` records the first send, so a double-press or a
+      return visit to the flow is a success rather than a second notification.
+      This used to be a 400 ("Your counsellor has not accepted this application
+      yet"), which the portal showed as "Could not submit" to a student whose
+      request had in fact gone through.
+    * **`request_rejected`** — the student has done what the counsellor asked
+      and is sending the request back. It returns to `requested`, and the desk
+      is told again.
+    * **`draft` / `documents_pending` / `ready_to_submit`** — an accepted
+      application the student has finished their part of. Moves to
+      `READY_TO_SUBMIT` through `change_application_status`, which writes the
+      history row; see `_STUDENT_SUBMITTABLE_FROM` for why that is as far as a
+      student can move their own file. Already-ready is a no-op, not an error.
     """
     application = await repo.get_or_404(
         Application,
@@ -553,25 +563,37 @@ async def submit_my_application(
         options=_APPLICATION_DETAIL_OPTIONS,
     )
 
-    # `requested` is deliberately not in the submittable set, and the message
-    # says why: a student cannot hand over a file nobody has picked up yet.
-    if application.status is ApplicationStatus.REQUESTED:
-        raise BadRequestException(
-            "Your counsellor has not accepted this application yet. You will hear from them shortly."
-        )
+    notify_desk = False
+    is_request = False
 
-    if application.status not in _STUDENT_SUBMITTABLE_FROM:
+    if application.status is ApplicationStatus.REQUESTED:
+        is_request = True
+        if application.request_submitted_at is None:
+            application.request_submitted_at = datetime.now(UTC)
+            await repo.session.commit()
+            notify_desk = True
+    elif application.status is ApplicationStatus.REQUEST_REJECTED:
+        is_request = True
+        application.request_submitted_at = datetime.now(UTC)
+        await applications.change_application_status(
+            application,
+            ApplicationStatus.REQUESTED,
+            performed_by=repo.student.id,
+            remarks="Request sent again by the student",
+        )
+        notify_desk = True
+    elif application.status in _STUDENT_SUBMITTABLE_FROM:
+        notify_desk = application.status is not ApplicationStatus.READY_TO_SUBMIT
+        await applications.change_application_status(
+            application,
+            ApplicationStatus.READY_TO_SUBMIT,
+            performed_by=repo.student.id,
+            remarks="Submitted by the student from the portal",
+        )
+    else:
         raise BadRequestException(
             "This application has already moved on — your counsellor is handling it from here."
         )
-
-    already_submitted = application.status is ApplicationStatus.READY_TO_SUBMIT
-    await applications.change_application_status(
-        application,
-        ApplicationStatus.READY_TO_SUBMIT,
-        performed_by=repo.student.id,
-        remarks="Submitted by the student from the portal",
-    )
 
     loaded = await repo.get_or_404(
         Application,
@@ -584,9 +606,9 @@ async def submit_my_application(
     # notifications and status changes notified the *student*, so an arriving
     # application notified nobody and was found by refreshing a list.
     #
-    # Guarded on the status having actually changed, so a double-press or a
+    # Guarded on something having actually changed, so a double-press or a
     # reloaded confirmation does not notify the office twice.
-    if not already_submitted:
+    if notify_desk:
         program = loaded.program
         await event_bus.publish(
             ApplicationSubmitted(
@@ -597,6 +619,7 @@ async def submit_my_application(
                 university_name=(
                     program.university.name if program and program.university else None
                 ),
+                is_request=is_request,
             ),
             repo.session,
         )

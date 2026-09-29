@@ -13,6 +13,11 @@ Idempotent. A student who already has a lead pointing at them is skipped, and a
 lead that matches by email is *linked* rather than duplicated — `leads.email`
 carries a unique index where the address is not null, and two records for one
 person is the thing this whole change exists to stop.
+
+Same rule as the subscriber: having an account does not make someone a client.
+A created lead starts at `new`; a linked one keeps the stage staff gave it
+(re-opened as `new` if it had been closed as lost). Staff convert them when
+there is a real client behind them.
 """
 
 from __future__ import annotations
@@ -30,7 +35,6 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 from app.db.session import session_factory  # noqa: E402
 from app.models import Lead, LeadActivity, User  # noqa: E402
 from app.models.enums import (  # noqa: E402
-    ConversionSource,
     LeadActivityType,
     LeadSource,
     LeadStatus,
@@ -67,18 +71,19 @@ async def backfill(session: AsyncSession, dry_run: bool) -> tuple[int, int, int]
             if not dry_run:
                 old_status = existing.status
                 existing.converted_user_id = student.id
-                existing.status = LeadStatus.CONVERTED
-                existing.converted_at = existing.converted_at or student.created_at
-                if existing.conversion_source is None:
-                    existing.conversion_source = ConversionSource.REGISTRATION_COMPLETED
+                existing.registered_at = existing.registered_at or student.created_at
+                if existing.status is LeadStatus.LOST:
+                    existing.status = LeadStatus.NEW
+                    existing.lost_reason = None
+                    existing.lost_at = None
                 session.add(
                     LeadActivity(
                         lead_id=existing.id,
-                        activity_type=LeadActivityType.CONVERTED,
+                        activity_type=LeadActivityType.NOTE,
                         title="Linked to their student account",
                         description="Matched by email during the Applicants-into-Leads backfill.",
                         old_status=old_status,
-                        new_status=LeadStatus.CONVERTED,
+                        new_status=existing.status,
                     )
                 )
             continue
@@ -93,10 +98,9 @@ async def backfill(session: AsyncSession, dry_run: bool) -> tuple[int, int, int]
                 # NOT NULL and must be non-blank; a portal signup need not have one.
                 phone=(student.phone or "").strip() or "not provided",
                 source=LeadSource.WEBSITE,
-                status=LeadStatus.CONVERTED,
+                status=LeadStatus.NEW,
                 converted_user_id=student.id,
-                converted_at=student.created_at,
-                conversion_source=ConversionSource.REGISTRATION_COMPLETED,
+                registered_at=student.created_at,
             )
             session.add(lead)
             await session.flush()
@@ -106,7 +110,7 @@ async def backfill(session: AsyncSession, dry_run: bool) -> tuple[int, int, int]
                     activity_type=LeadActivityType.LEAD_CREATED,
                     title="Created from an existing student account",
                     description="Backfilled so this student is reachable from the Leads pipeline.",
-                    new_status=LeadStatus.CONVERTED,
+                    new_status=LeadStatus.NEW,
                 )
             )
 

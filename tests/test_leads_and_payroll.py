@@ -102,8 +102,12 @@ async def test_conversion_can_issue_portal_access(client: AsyncClient, admin_hea
     assert body["generated_password"]
 
 
-async def test_self_registration_creates_a_lead(client: AsyncClient, admin_headers) -> None:
-    """Every student is reachable from the pipeline, including one nobody worked."""
+async def test_self_registration_creates_a_raw_lead(client: AsyncClient, admin_headers) -> None:
+    """Every student is reachable from the pipeline, including one nobody worked.
+
+    As a *new* lead, not a client: registration is free and unvetted, so a
+    sign-up is somebody to qualify, not business already won.
+    """
     registered = await client.post(
         AUTH_REGISTER,
         json={
@@ -119,9 +123,43 @@ async def test_self_registration_creates_a_lead(client: AsyncClient, admin_heade
     leads = await client.get(LEADS, params={"search": "walked.in@example.com"}, headers=admin_headers)
     items = leads.json()["items"]
     assert len(items) == 1, items
-    assert items[0]["status"] == "converted"
-    assert items[0]["converted_user_id"] is not None
-    assert items[0]["conversion_source"] == "registration_completed"
+    assert items[0]["status"] == "new"
+    assert items[0]["converted_user_id"] is not None, "the lead still links to the account"
+    assert items[0]["converted_at"] is None
+    assert items[0]["conversion_source"] is None
+    assert items[0]["registered_at"] is not None
+
+    # It is what the dashboard's registrations card lists…
+    registrations = await client.get(LEADS, params={"registered": "true"}, headers=admin_headers)
+    assert [lead["email"] for lead in registrations.json()["items"]] == ["walked.in@example.com"]
+    # …and it is not a client.
+    clients = await client.get(LEADS, params={"status": "converted"}, headers=admin_headers)
+    assert clients.json()["total"] == 0
+
+
+async def test_converting_a_registered_lead_reuses_their_account(client: AsyncClient, admin_headers) -> None:
+    """Staff convert a sign-up the same way as any lead, onto the account they made."""
+    registered = await client.post(
+        AUTH_REGISTER,
+        json={
+            "email": "later.client@example.com",
+            "password": "Portal-passw0rd",
+            "first_name": "Maya",
+            "last_name": "Shrestha",
+            "phone": "9811111112",
+        },
+    )
+    assert registered.status_code == 200, registered.text
+    lead = (
+        await client.get(LEADS, params={"search": "later.client@example.com"}, headers=admin_headers)
+    ).json()["items"][0]
+
+    converted = await client.post(f"{LEADS}/{lead['id']}/convert", json={}, headers=admin_headers)
+    assert converted.status_code == 200, converted.text
+    body = converted.json()
+    assert body["lead"]["status"] == "converted"
+    assert body["created_new_user"] is False
+    assert body["student_user_id"] == lead["converted_user_id"]
 
 
 async def test_registering_with_a_known_email_links_the_existing_lead(
@@ -151,8 +189,10 @@ async def test_registering_with_a_known_email_links_the_existing_lead(
     items = leads.json()["items"]
     assert len(items) == 1, items
     assert items[0]["id"] == lead_id
-    assert items[0]["status"] == "converted"
+    # Linked, but left at the stage staff had it at — signing up is not converting.
+    assert items[0]["status"] == "new"
     assert items[0]["converted_user_id"] is not None
+    assert items[0]["registered_at"] is not None
 
 
 async def test_one_unlistable_lead_does_not_break_the_list(

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import UnaryExpression, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import EligibilityAssessment, Lead, LeadActivity, LeadFollowUp, Notification, StudentProfile, User
@@ -18,6 +18,7 @@ from ..models.enums import (
     NotificationType,
     UserRole,
     UserStatus,
+    lead_status_label,
 )
 from .user_service import UserService
 
@@ -60,6 +61,7 @@ class LeadService:
         assigned_to: UUID | None = None,
         exclude_status: str | None = None,
         visible_to: UUID | None = None,
+        registered: bool | None = None,
     ) -> tuple[list[Lead], int]:
         query = select(Lead).where(Lead.deleted_at.is_(None))
         count_query = select(func.count()).select_from(Lead).where(Lead.deleted_at.is_(None))
@@ -108,8 +110,16 @@ class LeadService:
             query = query.where(Lead.assigned_to == assigned_to)
             count_query = count_query.where(Lead.assigned_to == assigned_to)
 
+        # People who signed up on the portal themselves, newest sign-up first —
+        # what the dashboard's registrations card lists.
+        newest_first: UnaryExpression[Any] = Lead.created_at.desc()
+        if registered:
+            query = query.where(Lead.registered_at.is_not(None))
+            count_query = count_query.where(Lead.registered_at.is_not(None))
+            newest_first = Lead.registered_at.desc()
+
         total = await self.session.scalar(count_query)
-        query = query.order_by(Lead.created_at.desc()).limit(limit).offset((page - 1) * limit)
+        query = query.order_by(newest_first, Lead.id).limit(limit).offset((page - 1) * limit)
         results = await self.session.execute(query)
         return list(results.scalars().all()), total or 0
 
@@ -140,7 +150,7 @@ class LeadService:
                 lead,
                 LeadActivityType.STATUS_CHANGED,
                 title="Lead status updated",
-                description=f"Status changed from {old_status} to {lead.status}.",
+                description=f"Status changed from {lead_status_label(old_status)} to {lead_status_label(lead.status)}.",
                 old_status=old_status,
                 new_status=lead.status,
             )
@@ -208,7 +218,8 @@ class LeadService:
             LeadActivityType.STATUS_CHANGED,
             performed_by=performed_by,
             title="Lead status changed",
-            description=remarks or f"Status changed from {old_status} to {status}.",
+            description=remarks
+            or f"Status changed from {lead_status_label(old_status)} to {lead_status_label(status)}.",
             old_status=old_status,
             new_status=status,
         )
@@ -370,7 +381,8 @@ class LeadService:
             LeadActivityType.CONVERTED,
             performed_by=performed_by,
             title="Lead converted",
-            description=remarks or f"Lead converted from {old_status} to {lead.status}.",
+            description=remarks
+            or f"Lead converted from {lead_status_label(old_status)} to {lead_status_label(lead.status)}.",
             old_status=old_status,
             new_status=lead.status,
         )

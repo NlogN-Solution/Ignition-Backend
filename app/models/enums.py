@@ -60,6 +60,28 @@ class LeadStatus(str, Enum):
     LOST = "lost"
 
 
+#: The console's own words for each lead status (admin `lifecycle.ts`), for
+#: activity descriptions a person reads. See `APPLICATION_STATUS_LABELS` for
+#: why the enum cannot simply be interpolated.
+LEAD_STATUS_LABELS: dict[LeadStatus, str] = {
+    LeadStatus.NEW: "New enquiry",
+    LeadStatus.CONTACTED: "Contacted",
+    LeadStatus.FOLLOW_UP: "Following up",
+    LeadStatus.QUALIFIED: "Qualified",
+    LeadStatus.CONVERTED: "Client",
+    LeadStatus.LOST: "Closed — lost",
+}
+
+
+def lead_status_label(status: LeadStatus | str | None) -> str:
+    if status is None:
+        return ""
+    try:
+        return LEAD_STATUS_LABELS[LeadStatus(status)]
+    except (ValueError, KeyError):
+        return str(status).replace("_", " ").title()
+
+
 class LeadSource(str, Enum):
     WEBSITE = "website"
     WALK_IN = "walk_in"
@@ -136,6 +158,16 @@ class ApplicationStatus(str, Enum):
     #: moves it to `draft`; staff opening one themselves start at `draft`,
     #: because creating it *is* the acceptance.
     REQUESTED = "requested"
+    #: A counsellor looked at the request and said "not yet".
+    #:
+    #: Registration is free, so a request can come from someone with no
+    #: academic history or certificates on file — or from nobody real at all.
+    #: Declining records that decision with feedback the student can act on
+    #: ("upload your transcript first"), takes the request out of the working
+    #: applications list, and leaves it acceptable later once the gap is
+    #: closed. Distinct from `rejected`, which is the *university's* answer to
+    #: an application that was actually filed.
+    REQUEST_REJECTED = "request_rejected"
     DRAFT = "draft"
     DOCUMENTS_PENDING = "documents_pending"
     READY_TO_SUBMIT = "ready_to_submit"
@@ -157,6 +189,48 @@ class ApplicationStatus(str, Enum):
     ENROLLED = "enrolled"
     WITHDRAWN = "withdrawn"
     REJECTED = "rejected"
+
+
+#: Applications a student has asked for and nobody has agreed to work yet.
+#: Staff cannot edit, reassign, move or delete these — the only thing to do
+#: with one is accept or decline it (`POST /applications/{id}/accept|reject`).
+UNACCEPTED_APPLICATION_STATUSES: frozenset[ApplicationStatus] = frozenset(
+    {ApplicationStatus.REQUESTED, ApplicationStatus.REQUEST_REJECTED}
+)
+
+#: How a status reads in a sentence a person sees — the student's activity
+#: feed, a notification. Interpolating the enum itself printed
+#: "ApplicationStatus.REQUESTED": a `str` mixin does not change `format()` on
+#: Python 3.12. Same words as the student portal's status pills.
+APPLICATION_STATUS_LABELS: dict[ApplicationStatus, str] = {
+    ApplicationStatus.REQUESTED: "Requested",
+    ApplicationStatus.REQUEST_REJECTED: "Request Rejected",
+    ApplicationStatus.DRAFT: "Preparing",
+    ApplicationStatus.DOCUMENTS_PENDING: "Documents Needed",
+    ApplicationStatus.READY_TO_SUBMIT: "In Review",
+    ApplicationStatus.SUBMITTED: "Submitted",
+    ApplicationStatus.UNDER_REVIEW: "In Review",
+    ApplicationStatus.OFFER_RECEIVED: "Offer Received",
+    ApplicationStatus.OFFER_ACCEPTED: "Offer Accepted",
+    ApplicationStatus.OFFER_DECLINED: "Offer Declined",
+    ApplicationStatus.CAS_RECEIVED: "CAS Received",
+    ApplicationStatus.VISA_PROCESSING: "Visa In Progress",
+    ApplicationStatus.VISA_APPROVED: "Visa Approved",
+    ApplicationStatus.VISA_REJECTED: "Visa Refused",
+    ApplicationStatus.ENROLLED: "Enrolled",
+    ApplicationStatus.WITHDRAWN: "Withdrawn",
+    ApplicationStatus.REJECTED: "Not Successful",
+}
+
+
+def application_status_label(status: ApplicationStatus | str | None) -> str:
+    """`status` as a person reads it. Accepts the enum or its raw value."""
+    if status is None:
+        return ""
+    try:
+        return APPLICATION_STATUS_LABELS[ApplicationStatus(status)]
+    except (ValueError, KeyError):
+        return str(status).replace("_", " ").title()
 
 
 class OfferType(str, Enum):

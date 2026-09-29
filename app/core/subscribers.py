@@ -20,14 +20,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models import ActivityLog, ApplicationChecklistItem, Lead, LeadActivity, Notification, User
 from ..models.enums import (
     ActivityType,
+    ApplicationStatus,
     ChecklistItemStatus,
-    ConversionSource,
     LeadActivityType,
     LeadSource,
     LeadStatus,
     NotificationType,
     UserRole,
     UserStatus,
+    application_status_label,
 )
 from ..services.progress_service import PointsService, ProgressService
 from ..services.staff_resolution import resolve_responsible_staff_ids
@@ -87,13 +88,48 @@ async def _log(
 # --- Notifications ------------------------------------------------------------
 
 
+#: The two statuses a counsellor's accept/reject decision can leave behind a
+#: request, and the only ones a request can be in beforehand.
+_REQUEST_STATUSES = frozenset({ApplicationStatus.REQUESTED.value, ApplicationStatus.REQUEST_REJECTED.value})
+
+
 async def notify_student_of_status_change(event: ApplicationStatusChanged, session: AsyncSession) -> None:
+    # The student re-sending their own request is not news to them.
+    if event.new_status == ApplicationStatus.REQUESTED.value and event.changed_by == event.student_id:
+        return
+
+    # A counsellor's decision on a request reads as a decision, with their
+    # feedback, rather than as "your application moved to Preparing".
+    if event.old_status in _REQUEST_STATUSES and event.new_status == ApplicationStatus.DRAFT.value:
+        feedback = event.remarks if event.remarks and event.remarks != "Request accepted" else None
+        await _notify(
+            session,
+            event.student_id,
+            NotificationType.APPLICATION,
+            "Application request accepted",
+            "Your counsellor has accepted your application request and started work on it."
+            + (f" Their note: {feedback}" if feedback else ""),
+        )
+        return
+    if event.new_status == ApplicationStatus.REQUEST_REJECTED.value:
+        await _notify(
+            session,
+            event.student_id,
+            NotificationType.APPLICATION,
+            "Application request needs more from you",
+            "Your counsellor could not accept your application request yet."
+            + (f" What they need: {event.remarks}" if event.remarks else "")
+            + " Once that is done, send the request again from the application.",
+        )
+        return
+
     await _notify(
         session,
         event.student_id,
         NotificationType.APPLICATION,
         "Application updated",
-        f"Your application moved to {event.new_status}." + (f" {event.remarks}" if event.remarks else ""),
+        f"Your application moved to {application_status_label(event.new_status)}."
+        + (f" {event.remarks}" if event.remarks else ""),
     )
 
 
@@ -219,13 +255,22 @@ async def notify_staff_of_new_application(event: ApplicationSubmitted, session: 
         )
 
     university = f" — {event.university_name}" if event.university_name else ""
+    if event.is_request:
+        title = "New application request"
+        message = (
+            f"{event.student_name} requested an application for {event.program_name}{university}. "
+            "Review it and accept or reject the request."
+        )
+    else:
+        title = "New application submitted"
+        message = f"{event.student_name} submitted an application for {event.program_name}{university}."
     for user_id in recipients:
         session.add(
             Notification(
                 user_id=user_id,
                 type=NotificationType.APPLICATION,
-                title="New application submitted",
-                message=f"{event.student_name} submitted an application for {event.program_name}{university}.",
+                title=title,
+                message=message,
                 related_type="application",
                 related_id=event.application_id,
                 action_url=f"/applications/{event.application_id}",
@@ -407,7 +452,8 @@ async def log_status_change(event: ApplicationStatusChanged, session: AsyncSessi
         ActivityType.UPDATE,
         "application",
         event.application_id,
-        f"Application status changed from {event.old_status} to {event.new_status}",
+        f"Application status changed from {application_status_label(event.old_status) or 'none'} "
+        f"to {application_status_label(event.new_status)}",
         user_id=event.changed_by,
     )
 
@@ -558,8 +604,18 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
     registered is one person, and this joins the two records rather than making a
     second one.
 
-    Conversion here is a statement of fact, not of sales progress — they already
-    have an account — so it records `registration_completed` as the source.
+    **A registration is a raw lead, not a client.** Registration is free and
+    unvetted — anyone can sign up, including spam and people who will never
+    apply — so creating an account says nothing about whether they are business
+    yet. The lead enters the pipeline at `new` and climbs it like any other:
+    staff qualify it and convert it when there is a real client behind it. It
+    used to be written straight in as `converted`, which put every sign-up in
+    Clients and inflated the conversion numbers with people nobody had spoken to.
+
+    `converted_user_id` is still set. It is the link from the lead to the account
+    (message threads, the student's documents and applications all resolve
+    through it) and says nothing about pipeline stage; `convert_lead` reuses it
+    when staff do convert.
     """
     result = await session.execute(select(Lead).where(func.lower(Lead.email) == event.email.strip().lower()))
     lead = result.scalar_one_or_none()
@@ -575,18 +631,28 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
             return
         old_status = lead.status
         lead.converted_user_id = event.student_id
-        lead.status = LeadStatus.CONVERTED
-        lead.converted_at = event.occurred_at
-        if lead.conversion_source is None:
-            lead.conversion_source = ConversionSource.REGISTRATION_COMPLETED
+        lead.registered_at = signed_up_at
+        # Stage is left where staff put it. The one exception is a lead that was
+        # closed as lost: they have just come back of their own accord, which
+        # re-opens them as a fresh enquiry rather than leaving a live person
+        # filed under "lost".
+        if lead.status is LeadStatus.LOST:
+            lead.status = LeadStatus.NEW
+            lead.lost_reason = None
+            lead.lost_at = None
         session.add(
             LeadActivity(
                 lead_id=lead.id,
-                activity_type=LeadActivityType.CONVERTED,
+                activity_type=(
+                    LeadActivityType.STATUS_CHANGED if lead.status != old_status else LeadActivityType.NOTE
+                ),
                 title="Registered on the portal",
-                description="They created their own student account, so this lead is now a client.",
+                description=(
+                    "They created their own student account. Qualify and convert them when they are ready "
+                    "to become a client."
+                ),
                 old_status=old_status,
-                new_status=LeadStatus.CONVERTED,
+                new_status=lead.status,
                 created_at=signed_up_at,
             )
         )
@@ -612,10 +678,9 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
         # "not provided" is better than inventing one.
         phone=_usable_phone(user.phone),
         source=LeadSource.WEBSITE,
-        status=LeadStatus.CONVERTED,
+        status=LeadStatus.NEW,
         converted_user_id=user.id,
-        converted_at=event.occurred_at,
-        conversion_source=ConversionSource.REGISTRATION_COMPLETED,
+        registered_at=signed_up_at,
     )
     session.add(new_lead)
     await session.flush()
@@ -624,8 +689,8 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
             lead_id=new_lead.id,
             activity_type=LeadActivityType.LEAD_CREATED,
             title="Signed up on the portal",
-            description="Created automatically so the student is reachable from the Leads pipeline.",
-            new_status=LeadStatus.CONVERTED,
+            description="Created automatically as a new lead so the student is reachable from the Leads pipeline.",
+            new_status=LeadStatus.NEW,
             created_at=signed_up_at,
         )
     )

@@ -50,6 +50,7 @@ async def list_leads(
     priority: str | None = None,
     assigned_to: UUID | None = None,
     exclude_status: str | None = None,
+    registered: bool | None = None,
     lead_service: LeadService = Depends(get_lead_service),
     user: User = Depends(require_role("admin", "super_admin", "counsellor", "marketing")),
 ) -> LeadList:
@@ -64,6 +65,7 @@ async def list_leads(
         assigned_to=assigned_to,
         exclude_status=exclude_status,
         visible_to=own_work_scope(user),
+        registered=registered,
     )
     return LeadList(items=leads, total=total, page=page, limit=limit)
 

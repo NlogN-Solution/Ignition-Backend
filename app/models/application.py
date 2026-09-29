@@ -91,6 +91,19 @@ class Application(Base, UUIDPKMixin, TimestampMixin, SoftDeleteMixin):
     #: which is the student's own note to their counsellor. One point per line.
     student_notice: Mapped[str | None] = mapped_column(Text)
 
+    #: The counsellor's answer to a student's request, written when they accept
+    #: or reject it and shown to the student on the application. On a rejection
+    #: it is the point of the whole exercise — "upload your transcript and we
+    #: will take this on" is something the student can act on; a bare
+    #: "rejected" is not.
+    review_feedback: Mapped[str | None] = mapped_column(Text)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    #: When the student finished the apply flow and sent the request. Set once
+    #: per request round, and what keeps a double-press or a return visit from
+    #: notifying the desk twice.
+    request_submitted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+
     student: Mapped[User] = relationship(
         "User",
         foreign_keys=[student_id],

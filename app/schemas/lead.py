@@ -107,6 +107,7 @@ class LeadRead(LeadBase):
 
     id: UUID
     converted_user_id: UUID | None = None
+    registered_at: datetime | None = None
     qualified_by: UUID | None = None
     qualified_at: datetime | None = None
     converted_by: UUID | None = None

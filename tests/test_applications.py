@@ -406,26 +406,208 @@ async def test_a_student_request_opens_as_requested_not_preparing(
     assert created.json()["status"] == "requested"
 
 
-async def test_a_student_cannot_submit_an_unaccepted_request(
+async def _request(client: AsyncClient, headers: dict[str, str], program_id: str) -> dict:
+    """A student opening their own application from a course page."""
+    response = await client.post("/api/v1/student/me/applications", json={"program_id": program_id}, headers=headers)
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+async def _notification_titles(session, user_id) -> list[str]:
+    from sqlalchemy import select
+
+    from app.models import Notification
+
+    return list((await session.scalars(select(Notification.title).where(Notification.user_id == user_id))).all())
+
+
+async def test_finishing_the_apply_flow_on_a_request_succeeds_and_tells_the_desk_once(
+    client: AsyncClient,
+    user_factory,
+    auth_headers,
+    published_program_id: str,
+    session,
+) -> None:
+    """The apply flow's Submit on a request nobody has accepted yet.
+
+    It used to be a 400 ("Your counsellor has not accepted this application
+    yet"), which the portal showed as "Could not submit" to a student whose
+    request had in fact been created. It is a success now: the status stays
+    `requested`, and the desk is told — once, however often it is pressed.
+    """
+    admin = await user_factory(UserRole.ADMIN, email="desk.admin@example.com")
+    student = await user_factory(UserRole.STUDENT, email="eager@example.com")
+    headers = await auth_headers(student)
+    created = await _request(client, headers, published_program_id)
+
+    first = await client.post(f"/api/v1/student/me/applications/{created['id']}/submit", headers=headers)
+    assert first.status_code == 200, first.text
+    assert first.json()["status"] == "requested"
+    assert first.json()["request_submitted_at"] is not None
+
+    second = await client.post(f"/api/v1/student/me/applications/{created['id']}/submit", headers=headers)
+    assert second.status_code == 200, second.text
+    assert second.json()["status"] == "requested"
+
+    assert (await _notification_titles(session, admin.id)).count("New application request") == 1
+
+
+async def test_rejecting_a_request_needs_feedback_and_takes_it_off_the_list(
+    client: AsyncClient,
+    user_factory,
+    auth_headers,
+    published_program_id: str,
+    session,
+) -> None:
+    student = await user_factory(UserRole.STUDENT, email="unqualified@example.com")
+    student_headers = await auth_headers(student)
+    created = await _request(client, student_headers, published_program_id)
+
+    counsellor = await user_factory(UserRole.COUNSELLOR)
+    staff_headers = await auth_headers(counsellor)
+
+    # A rejection with nothing for the student to act on is refused.
+    blank = await client.post(f"{APPLICATIONS}/{created['id']}/reject", json={"feedback": "  "}, headers=staff_headers)
+    assert blank.status_code in (400, 422), blank.text
+
+    feedback = "Upload your final transcript and passport, then send this again."
+    rejected = await client.post(
+        f"{APPLICATIONS}/{created['id']}/reject", json={"feedback": feedback}, headers=staff_headers
+    )
+    assert rejected.status_code == 200, rejected.text
+    body = rejected.json()
+    assert body["status"] == "request_rejected"
+    assert body["review_feedback"] == feedback
+    assert body["reviewed_by"] == str(counsellor.id)
+
+    # Out of the working list, but reachable through its own filter.
+    listed = (await client.get(APPLICATIONS, headers=staff_headers)).json()
+    assert created["id"] not in {item["id"] for item in listed["items"]}
+    filtered = (await client.get(APPLICATIONS, params={"status": "request_rejected"}, headers=staff_headers)).json()
+    assert created["id"] in {item["id"] for item in filtered["items"]}
+
+    # The student sees the decision and the reason.
+    mine = (await client.get(f"/api/v1/student/me/applications/{created['id']}", headers=student_headers)).json()
+    assert mine["status"] == "request_rejected"
+    assert mine["review_feedback"] == feedback
+    assert "Application request needs more from you" in await _notification_titles(session, student.id)
+
+
+async def test_a_rejected_request_can_be_sent_again_and_then_accepted(
+    client: AsyncClient,
+    user_factory,
+    auth_headers,
+    published_program_id: str,
+    session,
+) -> None:
+    student = await user_factory(UserRole.STUDENT, email="second.try@example.com")
+    student_headers = await auth_headers(student)
+    created = await _request(client, student_headers, published_program_id)
+    counsellor = await user_factory(UserRole.COUNSELLOR)
+    staff_headers = await auth_headers(counsellor)
+    await client.post(
+        f"{APPLICATIONS}/{created['id']}/reject", json={"feedback": "Add your IELTS result."}, headers=staff_headers
+    )
+
+    # The student closes the gap and sends it back: it is a request again.
+    resent = await client.post(f"/api/v1/student/me/applications/{created['id']}/submit", headers=student_headers)
+    assert resent.status_code == 200, resent.text
+    assert resent.json()["status"] == "requested"
+
+    accepted = await client.post(
+        f"{APPLICATIONS}/{created['id']}/accept", json={"feedback": "Thanks — we are on it."}, headers=staff_headers
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["status"] == "draft"
+    assert accepted.json()["review_feedback"] == "Thanks — we are on it."
+    assert "Application request accepted" in await _notification_titles(session, student.id)
+
+
+async def test_a_rejected_request_can_be_accepted_by_the_counsellor_directly(
     client: AsyncClient,
     user_factory,
     auth_headers,
     published_program_id: str,
 ) -> None:
-    """You cannot hand over a file nobody has picked up."""
-    student = await user_factory(UserRole.STUDENT, email="eager@example.com")
-    headers = await auth_headers(student)
-    created = (
-        await client.post(
-            "/api/v1/student/me/applications", json={"program_id": published_program_id}, headers=headers
-        )
-    ).json()
-
-    refused = await client.post(
-        f"/api/v1/student/me/applications/{created['id']}/submit", headers=headers
+    """Once the student has supplied what was asked for, the counsellor can take
+    it on themselves without waiting for it to be sent again."""
+    student = await user_factory(UserRole.STUDENT, email="direct.accept@example.com")
+    created = await _request(client, await auth_headers(student), published_program_id)
+    staff_headers = await auth_headers(await user_factory(UserRole.COUNSELLOR))
+    await client.post(
+        f"{APPLICATIONS}/{created['id']}/reject", json={"feedback": "Certificates please."}, headers=staff_headers
     )
-    assert refused.status_code == 400
-    assert "not accepted" in refused.json()["detail"]
+
+    accepted = await client.post(f"{APPLICATIONS}/{created['id']}/accept", headers=staff_headers)
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["status"] == "draft"
+
+
+async def test_an_unaccepted_request_cannot_be_edited_moved_or_deleted(
+    client: AsyncClient,
+    user_factory,
+    auth_headers,
+    published_program_id: str,
+) -> None:
+    """Until somebody accepts it there is nothing to work — only a decision."""
+    student = await user_factory(UserRole.STUDENT, email="pending@example.com")
+    created = await _request(client, await auth_headers(student), published_program_id)
+    counsellor = await user_factory(UserRole.COUNSELLOR)
+    staff_headers = await auth_headers(counsellor)
+    admin_headers = await auth_headers(await user_factory(UserRole.ADMIN, email="deleter@example.com"))
+
+    edit = await client.patch(
+        f"{APPLICATIONS}/{created['id']}", json={"counsellor_id": str(counsellor.id)}, headers=staff_headers
+    )
+    assert edit.status_code == 400, edit.text
+    moved = await client.post(f"{APPLICATIONS}/{created['id']}/status", json={"status": "draft"}, headers=staff_headers)
+    assert moved.status_code == 400, moved.text
+    deleted = await client.delete(f"{APPLICATIONS}/{created['id']}", headers=admin_headers)
+    assert deleted.status_code == 400, deleted.text
+
+    # Accepting unlocks it.
+    await client.post(f"{APPLICATIONS}/{created['id']}/accept", headers=staff_headers)
+    edit = await client.patch(
+        f"{APPLICATIONS}/{created['id']}", json={"counsellor_id": str(counsellor.id)}, headers=staff_headers
+    )
+    assert edit.status_code == 200, edit.text
+
+
+async def test_staff_cannot_set_a_request_status_by_hand(
+    client: AsyncClient,
+    user_factory,
+    auth_headers,
+    program_id: str,
+) -> None:
+    counsellor = await user_factory(UserRole.COUNSELLOR)
+    headers = await auth_headers(counsellor)
+    application = await _create(client, headers, await user_factory(UserRole.STUDENT), program_id)
+    for status in ("requested", "request_rejected"):
+        response = await client.post(
+            f"{APPLICATIONS}/{application['id']}/status", json={"status": status}, headers=headers
+        )
+        assert response.status_code == 400, (status, response.text)
+
+
+async def test_the_student_activity_feed_reads_as_words_not_enum_names(
+    client: AsyncClient,
+    user_factory,
+    auth_headers,
+    published_program_id: str,
+) -> None:
+    """It said "Application moved from ApplicationStatus.REQUESTED to
+    ApplicationStatus.DRAFT" — a `str` Enum still formats as its qualified name."""
+    student = await user_factory(UserRole.STUDENT, email="feed.reader@example.com")
+    student_headers = await auth_headers(student)
+    created = await _request(client, student_headers, published_program_id)
+    await client.post(
+        f"{APPLICATIONS}/{created['id']}/accept", headers=await auth_headers(await user_factory(UserRole.COUNSELLOR))
+    )
+
+    feed = (await client.get("/api/v1/student/me/activity", headers=student_headers)).json()
+    messages = [entry["message"] for entry in feed["items"]]
+    assert "Application moved from Requested to Preparing" in messages, messages
+    assert not any("ApplicationStatus." in message for message in messages)
 
 
 async def test_staff_created_applications_start_at_draft(

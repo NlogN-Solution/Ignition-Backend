@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.deps import get_db_session
 from ..models import Application, ApplicationStatusHistory, Document, User
+from ..models.enums import application_status_label
 from ..models.system import ActivityLog
 
 
@@ -65,9 +66,10 @@ class ActivityService:
                 id=row.id,
                 type="application",
                 message=(
-                    f"Application moved from {row.old_status} to {row.new_status}"
+                    f"Application moved from {application_status_label(row.old_status)} "
+                    f"to {application_status_label(row.new_status)}"
                     if row.old_status
-                    else f"Application created with status {row.new_status}"
+                    else f"Application created as {application_status_label(row.new_status)}"
                 ),
                 created_at=row.created_at,
             )

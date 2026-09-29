@@ -593,17 +593,56 @@ async def test_a_single_file_over_the_per_file_limit_is_refused(
 # ── FAPI-SEC-013: expiring file links ─────────────────────────────────────────
 
 
-def test_private_links_carry_an_expiring_token_when_configured(monkeypatch) -> None:
+def test_private_links_expire(monkeypatch) -> None:
+    import time
+    from urllib.parse import parse_qs, urlparse
+
     import cloudinary
 
     from app.core import uploads
 
     settings = get_settings()
     monkeypatch.setattr(settings, "ENVIRONMENT", "development")
-    monkeypatch.setattr(settings, "CLOUDINARY_AUTH_TOKEN_KEY", "00112233445566778899aabbccddeeff")
     cloudinary.config(cloud_name="demo", api_key="k", api_secret="s")
     url = uploads.build_download_url("abc.pdf", folder=uploads.DOCUMENT_FOLDER, download_name="a.pdf")
-    assert url is not None and "__cld_token__=exp=" in url
+    assert url is not None
+    query = parse_qs(urlparse(url).query)
+    assert "signature" in query
+    expires_at = int(query["expires_at"][0])
+    assert time.time() < expires_at <= time.time() + settings.CLOUDINARY_URL_TTL_SECONDS + 5
+
+
+def test_private_links_address_the_stored_public_id(monkeypatch) -> None:
+    """The public_id keeps its extension, so it must be sent whole.
+
+    A delivery URL read `<uuid>.jpg` as public_id `<uuid>` plus format `jpg`
+    and 404'd on every image, and Cloudinary refuses delivery of PDFs outright
+    on a default account — the download API avoids both.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    import cloudinary
+
+    from app.core import uploads
+
+    monkeypatch.setattr(get_settings(), "ENVIRONMENT", "development")
+    cloudinary.config(cloud_name="demo", api_key="k", api_secret="s")
+
+    pdf = urlparse(uploads.build_download_url("abc.pdf", folder=uploads.DOCUMENT_FOLDER, download_name="My offer.pdf"))
+    assert pdf.path.endswith("/raw/download")
+    pdf_query = parse_qs(pdf.query)
+    assert pdf_query["public_id"] == [f"{uploads.DOCUMENT_FOLDER}/abc.pdf"]
+    assert pdf_query["attachment"] == ["1"]
+    assert pdf_query["target_filename"] == ["My_offer.pdf"]
+
+    image = urlparse(
+        uploads.build_download_url("abc.jpg", folder=uploads.DOCUMENT_FOLDER, download_name="a.jpg", inline=True)
+    )
+    assert image.path.endswith("/image/download")
+    image_query = parse_qs(image.query)
+    assert image_query["public_id"] == [f"{uploads.DOCUMENT_FOLDER}/abc.jpg"]
+    assert image_query["format"] == ["jpg"]
+    assert "attachment" not in image_query
 
 
 # ── FAPI-SEC-016: sessions ────────────────────────────────────────────────────

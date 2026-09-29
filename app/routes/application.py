@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, UploadFile
 
 from ..api.auth import require_role
 from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
@@ -11,11 +11,19 @@ from ..api.pagination import LimitParam, PageParam
 from ..api.scoping import may_see_record, own_work_scope
 from ..core.uploads import DOCUMENT_EXTENSIONS, DOCUMENT_FOLDER, store_upload
 from ..models import Application, Document, User
-from ..models.enums import ApplicationStatus, DocumentStatus, DocumentType, UserRole
+from ..models.enums import (
+    UNACCEPTED_APPLICATION_STATUSES,
+    ApplicationStatus,
+    DocumentStatus,
+    DocumentType,
+    UserRole,
+)
 from ..schemas.application import (
+    ApplicationAcceptRequest,
     ApplicationCreate,
     ApplicationList,
     ApplicationRead,
+    ApplicationRejectRequest,
     ApplicationStatusHistoryRead,
     ApplicationStatusUpdate,
     ApplicationUpdate,
@@ -53,6 +61,18 @@ def _assert_visible_to(user: User, application: Application) -> None:
         return
     if not may_see_record(user, application.counsellor_id):
         raise NotFoundException("Application not found")
+
+
+def _assert_accepted(application: Application) -> None:
+    """Refuse to work a request nobody has accepted.
+
+    Registration is free and unvetted, so a student's request is a question,
+    not a file: until a counsellor accepts it there is nothing to edit, assign,
+    progress or delete — only a decision to make. The console hides those
+    actions; this is the same rule where it cannot be bypassed.
+    """
+    if application.status in UNACCEPTED_APPLICATION_STATUSES:
+        raise BadRequestException("Accept this application request before making changes to it.")
 
 
 @router.get("", response_model=ApplicationList, summary="List applications")
@@ -165,6 +185,7 @@ async def create_application(
 )
 async def accept_application_request(
     application_id: UUID,
+    payload: ApplicationAcceptRequest | None = Body(default=None),
     service: ApplicationService = Depends(get_application_service),
     user: User = Depends(_MANAGE_ROLES),
 ) -> ApplicationRead:
@@ -182,6 +203,12 @@ async def accept_application_request(
     offer it as one button rather than as "change the dropdown to Draft", which
     is not a sentence anybody would say out loud.
 
+    A previously *rejected* request can be accepted too: rejecting one asks
+    the student for something (a transcript, a certificate), and once they have
+    supplied it the counsellor accepts the same request rather than waiting for
+    a new one. Optional `feedback` is stored on the application and shown to the
+    student alongside the acceptance.
+
     Idempotent-ish: accepting something already past `requested` is a
     no-op rather than an error, so a double-click cannot rewind a file that has
     moved on.
@@ -191,14 +218,55 @@ async def accept_application_request(
         raise NotFoundException("Application not found")
     _assert_visible_to(user, application)
 
-    if application.status is not ApplicationStatus.REQUESTED:
+    if application.status not in UNACCEPTED_APPLICATION_STATUSES:
         return ApplicationRead.model_validate(application)
 
-    updated = await service.change_application_status(
+    updated = await service.review_request(
         application,
-        ApplicationStatus.DRAFT,
+        accept=True,
+        feedback=payload.feedback if payload else None,
         performed_by=user.id,
-        remarks="Request accepted",
+    )
+    return ApplicationRead.model_validate(updated)
+
+
+@router.post(
+    "/{application_id}/reject",
+    response_model=ApplicationRead,
+    summary="Reject an application a student requested",
+)
+async def reject_application_request(
+    application_id: UUID,
+    payload: ApplicationRejectRequest,
+    service: ApplicationService = Depends(get_application_service),
+    user: User = Depends(_MANAGE_ROLES),
+) -> ApplicationRead:
+    """Say "not yet" to a student's request, and why.
+
+    `requested` → `request_rejected`. The feedback is required and shown to the
+    student: it is the list of what they need to supply — academic history,
+    certificates, a test score — before the request can be accepted. The
+    request leaves the working applications list (it is still reachable by
+    filtering on `request_rejected`) and can be accepted later through
+    `POST /{id}/accept`.
+
+    Rejecting something already rejected is a no-op, so a double-click is
+    harmless; rejecting an accepted application is refused — that is a status
+    change (withdrawn, rejected by the university), not a request decision.
+    """
+    application = await service.get_application(application_id)
+    if application is None:
+        raise NotFoundException("Application not found")
+    _assert_visible_to(user, application)
+
+    if application.status is ApplicationStatus.REQUEST_REJECTED:
+        return ApplicationRead.model_validate(application)
+
+    updated = await service.review_request(
+        application,
+        accept=False,
+        feedback=payload.feedback,
+        performed_by=user.id,
     )
     return ApplicationRead.model_validate(updated)
 
@@ -221,6 +289,13 @@ async def change_application_status(
     if application is None:
         raise NotFoundException("Application not found")
     _assert_visible_to(user, application)
+    _assert_accepted(application)
+
+    if payload.status in UNACCEPTED_APPLICATION_STATUSES:
+        raise BadRequestException(
+            "Only a student can request an application, and only a request can be rejected — "
+            "use withdrawn or rejected for an application that has ended."
+        )
 
     if requirement_for(payload.status) is not None:
         raise BadRequestException(
@@ -276,6 +351,7 @@ async def record_application_milestone(
     application = await applications.get_application(application_id)
     if application is None:
         raise NotFoundException("Application not found")
+    _assert_accepted(application)
 
     requirement = requirement_for(status)
     if requirement is None:
@@ -372,6 +448,7 @@ async def update_application(
     if application is None:
         raise NotFoundException("Application not found")
     _assert_visible_to(user, application)
+    _assert_accepted(application)
     data = payload.model_dump(exclude_unset=True)
     await service.validate_references(data, current=application)
     updated = await service.update_application(application, data)
@@ -387,4 +464,5 @@ async def delete_application(
     application = await service.get_application(application_id)
     if application is None:
         raise NotFoundException("Application not found")
+    _assert_accepted(application)
     return ApplicationRead.model_validate(await service.delete_application(application))

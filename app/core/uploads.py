@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlencode
 from uuid import uuid4
 
 import cloudinary
@@ -181,59 +183,58 @@ def build_download_url(
     scratch dir with no URL of their own — callers fall back to the
     authenticated download route in that case.
 
-    `inline=False` asks Cloudinary to serve the file as an attachment, which is
-    what a Download button wants. `inline=True` drops that flag so a PDF or an
-    image opens in the browser's own viewer, which is what a Preview wants —
-    the same bytes, a different Content-Disposition.
+    `inline=False` serves the file as an attachment named after
+    `download_name`, which is what a Download button wants. `inline=True`
+    serves it inline so a PDF or an image opens in the browser's own viewer,
+    which is what a Preview wants — the same bytes, a different
+    Content-Disposition.
 
     Only the basename of `stored_file_name` is ever used: `POST /documents`
     lets staff set that column directly, so a `folder`-escaping public_id must
     not reach Cloudinary unsanitized.
 
-    **Without `CLOUDINARY_AUTH_TOKEN_KEY` these URLs are signed, not
-    time-limited** (set it to make them expire — see config). This used to pass
-    `expires_at=now+300` and describe itself as expiring in a few minutes. It
-    does not: `cloudinary_url` silently ignores `expires_at` for the
-    `authenticated` delivery type — the parameter is only honoured with
-    token-based authentication, which is a separate Cloudinary feature and is
-    not configured here. Verified against cloudinary 1.46: the generated URL
-    carries a signature segment and nothing else. What the signature does buy is
-    real and is the point — the asset is unreachable without a URL this server
-    minted, and this server mints one only after checking the caller may see the
-    document. But anyone who obtains the URL afterwards keeps access, so it must
-    be treated as a credential and not logged, stored or shared. Making it
-    genuinely short-lived means enabling token auth and signing with
-    `auth_token`; until then, saying "expires in 5 minutes" is a security claim
-    nothing enforces, and the parameter has been removed rather than left in
-    place looking like it does something.
+    ## Why the download API and not a delivery URL
+
+    This used to mint a signed *delivery* URL (`res.cloudinary.com/...`), and
+    neither View nor Download worked for most files:
+
+    * **Every PDF was a 401** ("deny or ACL failure"). Cloudinary accounts
+      block delivery of PDF and ZIP files by default, signed or not, and PDFs
+      are most of what the document vault holds.
+    * **Images were a 404.** `store_upload` keeps the extension in the
+      public_id (`ignition/documents/<uuid>.jpg`), and a delivery URL reads a
+      trailing `.jpg` as the *format*, so it asked for `<uuid>` — which does
+      not exist.
+
+    The download API (`api.cloudinary.com/.../download`) addresses the asset by
+    its exact public_id and is not subject to the delivery restriction, so it
+    serves both. It is signed with the API secret, and unlike a delivery URL it
+    genuinely expires: `expires_at` is enforced, after
+    `CLOUDINARY_URL_TTL_SECONDS`. The URL is still a bearer credential until
+    then — do not log, store or share it.
     """
     safe_name = Path(stored_file_name).name
     if settings.ENVIRONMENT == "test":
         return None
 
     extension = Path(safe_name).suffix.lower()
-    options: dict[str, object] = {} if inline else {"flags": f"attachment:{_attachment_name(download_name)}"}
-    if settings.CLOUDINARY_AUTH_TOKEN_KEY:
-        # FAPI-SEC-013: with token-based authentication enabled on the account,
-        # the URL carries an `__cld_token__` that expires — so a link that
-        # leaks through history, a referrer or a pasted ticket stops working
-        # after a few minutes instead of forever.
-        #
-        # The SDK only mints the token when `sign_url` is *also* set; with
-        # `auth_token` alone it silently returns a bare, unsigned URL.
-        options["auth_token"] = {
-            "key": settings.CLOUDINARY_AUTH_TOKEN_KEY,
-            "duration": settings.CLOUDINARY_URL_TTL_SECONDS,
-        }
-    url, _ = cloudinary.utils.cloudinary_url(
-        f"{folder}/{safe_name}",
-        resource_type=_resource_type_for(extension),
-        type="authenticated",
-        sign_url=True,
-        secure=True,
-        **options,
-    )
-    return url
+    resource_type = _resource_type_for(extension)
+    params: dict[str, object] = {
+        "timestamp": cloudinary.utils.now(),
+        "public_id": f"{folder}/{safe_name}",
+        # Images are addressed as public_id + format; a raw asset's public_id
+        # already carries its extension and takes no format.
+        "format": extension.lstrip(".") if resource_type == "image" else "",
+        "type": "authenticated",
+        "expires_at": int(time.time()) + settings.CLOUDINARY_URL_TTL_SECONDS,
+    }
+    if not inline:
+        params["attachment"] = True
+        # Not accepted by the SDK's `private_download_url`, but honoured by the
+        # API when signed: without it every download is saved as "file.pdf".
+        params["target_filename"] = f"{_attachment_name(download_name)}{extension}"
+    signed = cloudinary.utils.sign_request(params, {})
+    return f"{cloudinary.utils.cloudinary_api_url('download', resource_type=resource_type)}?{urlencode(signed)}"
 
 
 def build_download_response(
@@ -247,8 +248,8 @@ def build_download_response(
     """Serve a `private=True` upload, after the caller has already checked
     the requester may see it.
 
-    In production this redirects to a signed Cloudinary URL — signed, not
-    expiring; see `build_download_url`. In tests it resolves the file straight
+    In production this redirects to a signed, expiring Cloudinary download
+    URL; see `build_download_url`. In tests it resolves the file straight
     off the hermetic local scratch dir used by `store_upload`.
     """
     safe_name = Path(stored_file_name).name
