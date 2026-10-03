@@ -79,6 +79,8 @@ from .workflow import (
     WorkflowStage,
     WorkflowStageDocumentRequirement,
     WorkflowStepActivity,
+    WorkflowStepSlot,
+    WorkflowStepSubmission,
     WorkflowTemplate,
 )
 
@@ -172,5 +174,7 @@ __all__ = [
     "WorkflowStage",
     "WorkflowStageDocumentRequirement",
     "WorkflowStepActivity",
+    "WorkflowStepSlot",
+    "WorkflowStepSubmission",
     "WorkflowTemplate",
 ]

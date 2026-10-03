@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import TIMESTAMP, Date, ForeignKey, Index, Numeric, String, Text, func, text
+from sqlalchemy import TIMESTAMP, Boolean, Date, ForeignKey, Index, Numeric, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base import Base
@@ -103,6 +103,10 @@ class Application(Base, UUIDPKMixin, TimestampMixin, SoftDeleteMixin):
     #: per request round, and what keeps a double-press or a return visit from
     #: notifying the desk twice.
     request_submitted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    #: The student's answer to "a study gap of more than six months?". Adds the
+    #: gap-explanation item to a journey's application documents; see
+    #: `JourneyService.set_study_gap`.
+    has_study_gap: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     student: Mapped[User] = relationship(
         "User",

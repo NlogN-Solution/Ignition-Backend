@@ -270,6 +270,7 @@ class EligibilityService:
         assigned_to: UUID | None = None,
         study_level: str | None = None,
         unassigned: bool | None = None,
+        lead_id: UUID | None = None,
         sort: str = "newest",
     ) -> tuple[list[EligibilityAssessment], int]:
         query = self._base_query().join(Lead, EligibilityAssessment.lead_id == Lead.id)
@@ -278,6 +279,10 @@ class EligibilityService:
         )
 
         filters = []
+        if lead_id is not None:
+            # The lead page's "Open eligibility assessment": a lead can have
+            # submitted the wizard more than once, newest first like the queue.
+            filters.append(EligibilityAssessment.lead_id == lead_id)
         if search:
             needle = f"%{search.lower()}%"
             clauses = [

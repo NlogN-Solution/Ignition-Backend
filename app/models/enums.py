@@ -119,6 +119,12 @@ class DocumentType(str, Enum):
     FINANCIAL_DOCUMENT = "financial_document"
     MEDICAL_REPORT = "medical_report"
     PHOTO = "photo"
+    #: The UK journey's application documents (see `services/journey_templates.py`).
+    MEDIUM_OF_INSTRUCTION = "medium_of_instruction"
+    GAP_EXPLANATION = "gap_explanation"
+    #: A video or audio answer to practice interview questions. The one document
+    #: type that accepts media files, and at a larger size limit.
+    INTERVIEW_RECORDING = "interview_recording"
     OTHER = "other"
 
 
@@ -266,6 +272,10 @@ class AppointmentType(str, Enum):
     PHONE_CALL = "phone_call"
     VIDEO_CALL = "video_call"
     OFFICE_VISIT = "office_visit"
+    #: Booked from a journey slot (stages "mock with university" and
+    #: "suitability interview"); see `JourneyService.book_slot`.
+    UNIVERSITY_MOCK_INTERVIEW = "university_mock_interview"
+    SUITABILITY_INTERVIEW = "suitability_interview"
     OTHER = "other"
 
 
@@ -401,6 +411,57 @@ class WorkflowActivityType(str, Enum):
     ASSIGNED = "assigned"
     DOCUMENT_LINKED = "document_linked"
     COMMENT = "comment"
+    #: Journey interactions, so the step's activity feed tells the whole story.
+    SUBMISSION = "submission"
+    REVIEW = "review"
+    SLOTS_PUBLISHED = "slots_published"
+    SLOT_BOOKED = "slot_booked"
+    OUTCOME = "outcome"
+    TASK_TICKED = "task_ticked"
+
+
+class WorkflowStageKind(str, Enum):
+    """What a student and staff *do* at a stage, which decides its screen.
+
+    Stored as a plain string on `workflow_stages.kind`, not a Postgres enum: a
+    stage's kind is template data an admin edits, and the API validates it.
+
+    - `info`: nothing to do in the portal; staff move it by hand.
+    - `documents`: upload the stage's checklist items, then submit them.
+    - `issued`: wait for the university (offer, CAS). Completed by the status
+      change that records it, never by a button of its own.
+    - `review`: hand something in; staff verify it or send it back with feedback.
+    - `booking`: pick one of the slots staff published; staff record the outcome.
+    - `checklist`: tick off the tasks in the stage's config.
+    """
+
+    INFO = "info"
+    DOCUMENTS = "documents"
+    ISSUED = "issued"
+    REVIEW = "review"
+    BOOKING = "booking"
+    CHECKLIST = "checklist"
+
+
+class StepSubmissionStatus(str, Enum):
+    SUBMITTED = "submitted"
+    VERIFIED = "verified"
+    CHANGES_REQUESTED = "changes_requested"
+
+
+class StepSlotStatus(str, Enum):
+    OPEN = "open"
+    BOOKED = "booked"
+    #: Withdrawn by staff, or released because the student booked a sibling.
+    WITHDRAWN = "withdrawn"
+    #: The interview happened and has an outcome.
+    COMPLETED = "completed"
+
+
+class StepSlotOutcome(str, Enum):
+    PASSED = "passed"
+    RESCHEDULE = "reschedule"
+    FAILED = "failed"
 
 
 class ApplicationWorkflowStatus(str, Enum):

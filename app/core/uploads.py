@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import hmac
+import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from uuid import uuid4
 
 import cloudinary
 import cloudinary.uploader
 import cloudinary.utils
+import httpx
 from fastapi import UploadFile
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 
 from ..api.exceptions import BadRequestException, NotFoundException
 from .config import get_settings
@@ -38,9 +43,10 @@ DOCUMENT_EXTENSIONS = frozenset(
 #: audio formats `MediaRecorder` actually produces — `audio/webm` in Chromium
 #: and Firefox, `audio/mp4` in Safari. Both are needed or voice notes work in
 #: one browser family and silently fail in the other.
-MESSAGE_ATTACHMENT_EXTENSIONS = DOCUMENT_EXTENSIONS | frozenset(
-    {".webm", ".m4a", ".mp4", ".mp3", ".ogg", ".wav"}
-)
+MESSAGE_ATTACHMENT_EXTENSIONS = DOCUMENT_EXTENSIONS | frozenset({".webm", ".m4a", ".mp4", ".mp3", ".ogg", ".wav"})
+
+#: An interview recording: what phones and `MediaRecorder` produce.
+VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".webm", ".m4v", ".m4a", ".mp3"})
 
 _IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 
@@ -101,6 +107,7 @@ async def store_upload(
     *,
     folder: str,
     private: bool,
+    max_mb: int | None = None,
 ) -> StoredFile:
     """Validate an upload and push it to Cloudinary under a generated name.
 
@@ -126,13 +133,14 @@ async def store_upload(
     if extension not in allowed_extensions:
         raise BadRequestException(f"Unsupported file type. Allowed: {', '.join(sorted(allowed_extensions))}")
 
-    limit = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    limit_mb = max_mb or settings.MAX_UPLOAD_SIZE_MB
+    limit = limit_mb * 1024 * 1024
     chunks: list[bytes] = []
     total = 0
     while chunk := await file.read(_READ_CHUNK_BYTES):
         total += len(chunk)
         if total > limit:
-            raise BadRequestException(f"File exceeds the {settings.MAX_UPLOAD_SIZE_MB} MB limit")
+            raise BadRequestException(f"File exceeds the {limit_mb} MB limit")
         chunks.append(chunk)
     content = b"".join(chunks)
     if not content:
@@ -140,15 +148,15 @@ async def store_upload(
 
     stored_file_name = f"{uuid4()}{extension}"
 
-    if settings.ENVIRONMENT == "test":
-        # Cloudinary needs real credentials and a network round-trip; the test
-        # suite stays hermetic by writing to a local scratch dir instead — the
-        # same trade-off core/rate_limit.py makes for the rate limiter under
-        # ENVIRONMENT=test.
-        (settings.upload_dir / stored_file_name).write_bytes(content)
+    if settings.uses_local_storage:
+        # Development and tests keep files on this machine (STORAGE_BACKEND):
+        # tests stay hermetic, and a developer's uploads never land in the
+        # production Cloudinary account. Private and public files are kept in
+        # separate directories because only the public one is served as-is.
+        (local_dir(private=private) / stored_file_name).write_bytes(content)
         return StoredFile(
             stored_file_name=stored_file_name,
-            url=None if private else f"/uploads/{stored_file_name}",
+            url=None if private else f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/uploads/{stored_file_name}",
             size=len(content),
         )
 
@@ -214,8 +222,15 @@ def build_download_url(
     then — do not log, store or share it.
     """
     safe_name = Path(stored_file_name).name
-    if settings.ENVIRONMENT == "test":
-        return None
+    if settings.uses_local_storage:
+        if settings.ENVIRONMENT == "test":
+            return None
+        if _local_private_file(safe_name) is not None:
+            return build_local_file_url(safe_name, download_name=download_name, inline=inline)
+        if not _cloudinary_configured():
+            return None
+        # Not on disk: a file uploaded to Cloudinary before this machine stored
+        # locally (a database copied from production). Fall through to it.
 
     extension = Path(safe_name).suffix.lower()
     resource_type = _resource_type_for(extension)
@@ -254,17 +269,17 @@ def build_download_response(
     """
     safe_name = Path(stored_file_name).name
 
-    if settings.ENVIRONMENT == "test":
-        upload_dir = settings.upload_dir.resolve()
-        candidate = (upload_dir / safe_name).resolve()
-        if candidate.parent != upload_dir or not candidate.is_file():
+    if settings.uses_local_storage:
+        candidate = _local_private_file(safe_name)
+        if candidate is not None:
+            return FileResponse(
+                candidate,
+                media_type=mime_type or "application/octet-stream",
+                filename=download_name,
+                content_disposition_type="inline" if inline else "attachment",
+            )
+        if settings.ENVIRONMENT == "test" or not _cloudinary_configured():
             raise NotFoundException("File not found")
-        return FileResponse(
-            candidate,
-            media_type=mime_type or "application/octet-stream",
-            filename=download_name,
-            content_disposition_type="inline" if inline else "attachment",
-        )
 
     url = build_download_url(safe_name, folder=folder, download_name=download_name, inline=inline)
     if url is None:  # pragma: no cover - only reachable if ENVIRONMENT flips mid-request
@@ -272,3 +287,165 @@ def build_download_response(
     # The redirect target is a bearer credential for the file; keep it out of
     # every cache between here and the browser.
     return RedirectResponse(url, status_code=307, headers={"Cache-Control": "private, no-store"})
+
+
+def _content_disposition(download_name: str, *, inline: bool) -> str:
+    kind = "inline" if inline else "attachment"
+    ascii_name = download_name.encode("ascii", "ignore").decode() or "document"
+    ascii_name = ascii_name.replace('"', "").replace("\\", "")
+    return f"{kind}; filename=\"{ascii_name}\"; filename*=utf-8''{quote(download_name)}"
+
+
+async def stream_private_file(
+    stored_file_name: str,
+    *,
+    folder: str,
+    mime_type: str | None,
+    download_name: str,
+    inline: bool = False,
+) -> Response:
+    """Serve the bytes of a `private=True` upload from this origin.
+
+    `build_download_response` redirects to Cloudinary, which is fine for a tab
+    but not for a preview: Cloudinary's download API answers with
+    `X-Frame-Options: DENY`, so a PDF in an `<iframe>` renders blank. Proxying
+    lets the portal fetch the file over its authenticated client and show it
+    from a blob URL, and the signed Cloudinary URL never reaches the browser.
+
+    The caller must already have checked the requester may see the file.
+    """
+    safe_name = Path(stored_file_name).name
+    media_type = mime_type or "application/octet-stream"
+    headers = {
+        "Content-Disposition": _content_disposition(download_name, inline=inline),
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+    }
+
+    if settings.uses_local_storage:
+        candidate = _local_private_file(safe_name)
+        if candidate is not None:
+            return FileResponse(candidate, media_type=media_type, headers=headers)
+        if settings.ENVIRONMENT == "test" or not _cloudinary_configured():
+            raise NotFoundException("File not found")
+
+    url = build_download_url(safe_name, folder=folder, download_name=download_name, inline=True)
+    if url is None:  # pragma: no cover - only reachable if ENVIRONMENT flips mid-request
+        raise NotFoundException("File not found")
+
+    client = httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=120.0), follow_redirects=True)
+    try:
+        upstream = await client.send(client.build_request("GET", url), stream=True)
+    except httpx.HTTPError:
+        await client.aclose()
+        raise NotFoundException("File not found") from None
+    if upstream.status_code != 200:
+        await upstream.aclose()
+        await client.aclose()
+        raise NotFoundException("File not found")
+
+    async def body():
+        try:
+            async for chunk in upstream.aiter_bytes():
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    length = upstream.headers.get("content-length")
+    if length:
+        headers["Content-Length"] = length
+    return StreamingResponse(body(), media_type=media_type, headers=headers)
+
+
+# --- Local storage ---------------------------------------------------------------
+
+
+def local_dir(*, private: bool) -> Path:
+    """Where local storage keeps files. Only `public` is ever served as-is."""
+    path = settings.upload_dir / ("private" if private else "public")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _local_private_file(safe_name: str) -> Path | None:
+    """The private file by this name, if it is on disk and inside its directory."""
+    directory = local_dir(private=True).resolve()
+    candidate = (directory / Path(safe_name).name).resolve()
+    if candidate.parent != directory or not candidate.is_file():
+        return None
+    return candidate
+
+
+def _cloudinary_configured() -> bool:
+    return bool(settings.CLOUDINARY_CLOUD_NAME and settings.CLOUDINARY_API_KEY and settings.CLOUDINARY_API_SECRET)
+
+
+#: Keeps a file-link signature from ever being valid as anything else signed
+#: with the same secret.
+_LINK_KEY_PURPOSE = b"ignition/local-file-link/v1"
+
+
+def _link_key() -> bytes:
+    return hmac.new(settings.JWT_SECRET_KEY.encode(), _LINK_KEY_PURPOSE, hashlib.sha256).digest()
+
+
+def _b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _unb64(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def build_local_file_url(safe_name: str, *, download_name: str, inline: bool) -> str:
+    """The local-storage counterpart of Cloudinary's signed download URL.
+
+    Minted only after the caller's ownership check, and good for
+    `CLOUDINARY_URL_TTL_SECONDS` — the same contract `build_download_url` gives
+    a Cloudinary file. Like that URL it is a bearer credential until it expires.
+    """
+    payload = _b64(
+        json.dumps(
+            {
+                "n": safe_name,
+                "d": download_name,
+                "i": inline,
+                "e": int(time.time()) + settings.CLOUDINARY_URL_TTL_SECONDS,
+            },
+            separators=(",", ":"),
+        ).encode()
+    )
+    signature = _b64(hmac.new(_link_key(), payload.encode(), hashlib.sha256).digest())
+    return f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/api/v1/files/{payload}.{signature}"
+
+
+def serve_local_file_link(token: str) -> Response:
+    """Serve a file named by a link from `build_local_file_url`, or 404.
+
+    Every failure is the same 404 — a malformed, forged, expired or dangling
+    link tells the caller nothing about which.
+    """
+    if not settings.uses_local_storage:
+        raise NotFoundException("File not found")
+    try:
+        payload, signature = token.split(".", 1)
+        expected = _b64(hmac.new(_link_key(), payload.encode(), hashlib.sha256).digest())
+        if not hmac.compare_digest(signature, expected):
+            raise ValueError("bad signature")
+        claims = json.loads(_unb64(payload))
+        if int(claims["e"]) < time.time():
+            raise ValueError("expired")
+        name, download_name, inline = str(claims["n"]), str(claims["d"]), bool(claims["i"])
+    except (ValueError, KeyError, TypeError):
+        raise NotFoundException("File not found") from None
+
+    path = _local_private_file(name)
+    if path is None:
+        raise NotFoundException("File not found")
+    return FileResponse(
+        path,
+        filename=download_name,
+        content_disposition_type="inline" if inline else "attachment",
+        headers={"Cache-Control": "private, no-store"},
+    )

@@ -123,11 +123,6 @@ async def test_fapi_sec_001_checkout_unlocks_gated_documents_without_payment(
 ) -> None:
     student = await user_factory(UserRole.STUDENT, email="sec.pay@example.com")
     headers = await auth_headers(student)
-    offer = await _upload(client, admin_headers, student, document_type="offer_letter")
-    assert offer.status_code == 200, offer.text
-    gated = await client.get(f"{API}/documents/{offer.json()['id']}/link", headers=headers)
-    assert gated.status_code == 402
-
     checkout = await client.post(f"{API}/student/me/access/checkout", json={"payment_method": "esewa"}, headers=headers)
     # Secure behaviour in production: no gateway => refuse.
     assert checkout.status_code != 200, "checkout granted portal access with no payment"

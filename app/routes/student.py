@@ -13,13 +13,10 @@ from ..api.exceptions import BadRequestException, ConflictException, ForbiddenEx
 # NOTE: `require_paid_portal_access` is deliberately not imported or applied.
 #
 # It was written to gate the whole application workflow behind the access fee
-# and was never wired to a single endpoint — it has been an unused import in
-# this module since it was added. The product answer landed elsewhere: the fee
-# unlocks the *offer and CAS letters*, enforced on the document routes
-# themselves (`_assert_entitled` in routes/document.py), because a student must
-# be able to apply, upload and correspond before there is anything worth
-# paying for. The guard is left in `api/student.py` rather than deleted, since
-# a future "premium workflow" tier is exactly what it is for.
+# and was never wired to a single endpoint. The fee later gated the offer and
+# CAS letters on the document routes; that gate was removed on 2026-10-03, and
+# students now open the letters Ignition files for them freely. The guard, the
+# fee and the access payment stay in place for a future premium tier.
 from ..api.pagination import LimitParam, PageParam
 from ..api.student import (
     StudentScopedRepository,

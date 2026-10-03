@@ -1,12 +1,12 @@
-"""Offer, CAS, and the one-time unlock that gates them.
+"""Offer, CAS, and the one-time access fee.
 
 TESTS G–K from the brief. The properties worth protecting here are the ones a
 UI cannot enforce:
 
 * recording a milestone is **all-or-nothing** — a status claiming an offer with
   no date and no letter behind it is the bug the whole phase exists to fix;
-* the paywall is enforced **where the bytes are**, so `curl` cannot walk past
-  a hidden button;
+* the offer and CAS letters open for the student they were filed for, paid or
+  not (the gate was removed 2026-10-03) — and only for that student;
 * the fee is **once** — a second offer must not ask for a second payment.
 """
 
@@ -212,33 +212,45 @@ async def test_a_student_cannot_dismiss_someone_elses_milestone(
     assert response.status_code == 404
 
 
-# ── TESTS H / I / J — the paywall ────────────────────────────────────────────
+# ── TESTS H / I / J — opening the letters ────────────────────────────────────
 
 
-async def test_a_locked_student_cannot_reach_the_offer_letter_through_the_api(
-    client: AsyncClient, setup: dict
-) -> None:
-    """TEST H. Hiding the button is not a gate.
-
-    The download route is a URL with a bearer token. This is the request a
-    student could otherwise make with curl.
-    """
+async def test_an_unpaid_student_opens_their_offer_letter(client: AsyncClient, setup: dict) -> None:
+    """TEST H. The letters Ignition files are the student's to open, paid or not."""
     await _record_offer(client, setup)
     headers = setup["student_headers"]
 
     documents = (await client.get(f"{STUDENT}/me/documents", headers=headers)).json()["items"]
     offer = next(d for d in documents if d["document_type"] == "offer_letter")
 
-    # They are *told* it exists — that is the point of the paywall.
-    assert offer["title"]
-
-    for path in (f"{DOCUMENTS}/{offer['id']}/link", f"{DOCUMENTS}/{offer['id']}/download"):
+    for path in (
+        f"{DOCUMENTS}/{offer['id']}/link",
+        f"{DOCUMENTS}/{offer['id']}/download",
+        f"{DOCUMENTS}/{offer['id']}/content",
+    ):
         response = await client.get(path, headers=headers)
-        assert response.status_code == 402, f"{path} answered {response.status_code}"
+        assert response.status_code == 200, f"{path} answered {response.status_code}"
 
 
-async def test_their_own_documents_are_never_gated(client: AsyncClient, setup: dict) -> None:
-    """Charging somebody to read a file they supplied would be indefensible."""
+async def test_another_student_cannot_open_the_offer_letter(
+    client: AsyncClient, setup: dict, user_factory, auth_headers
+) -> None:
+    await _record_offer(client, setup)
+    documents = (await client.get(f"{STUDENT}/me/documents", headers=setup["student_headers"])).json()["items"]
+    offer = next(d for d in documents if d["document_type"] == "offer_letter")
+
+    stranger = await user_factory(UserRole.STUDENT, email="ms.letter.stranger@example.com")
+    stranger_headers = await auth_headers(stranger)
+    for path in (
+        f"{DOCUMENTS}/{offer['id']}/link",
+        f"{DOCUMENTS}/{offer['id']}/download",
+        f"{DOCUMENTS}/{offer['id']}/content",
+    ):
+        assert (await client.get(path, headers=stranger_headers)).status_code == 403, path
+
+
+async def test_content_serves_the_bytes_inline(client: AsyncClient, setup: dict) -> None:
+    """The portal's preview reads `/content`: same origin, real type, inline."""
     headers = setup["student_headers"]
     uploaded = await client.post(
         f"{DOCUMENTS}/upload",
@@ -246,33 +258,24 @@ async def test_their_own_documents_are_never_gated(client: AsyncClient, setup: d
         files={"file": ("passport.pdf", b"%PDF-1.4 scan", "application/pdf")},
         headers=headers,
     )
-    assert (await client.get(f"{DOCUMENTS}/{uploaded.json()['id']}/link", headers=headers)).status_code == 200
+    document_id = uploaded.json()["id"]
+
+    inline = await client.get(f"{DOCUMENTS}/{document_id}/content", headers=headers)
+    assert inline.status_code == 200
+    assert inline.content == b"%PDF-1.4 scan"
+    assert inline.headers["content-type"].startswith("application/pdf")
+    assert inline.headers["content-disposition"].startswith("inline")
+    assert "no-store" in inline.headers["cache-control"]
+
+    attachment = await client.get(f"{DOCUMENTS}/{document_id}/content?disposition=attachment", headers=headers)
+    assert attachment.headers["content-disposition"].startswith("attachment")
 
 
-async def test_staff_are_never_gated(client: AsyncClient, setup: dict) -> None:
+async def test_staff_open_the_offer_letter(client: AsyncClient, setup: dict) -> None:
     await _record_offer(client, setup)
     documents = (await client.get(f"{DOCUMENTS}?document_type=offer_letter", headers=setup["staff"])).json()["items"]
     response = await client.get(f"{DOCUMENTS}/{documents[0]['id']}/link", headers=setup["staff"])
     assert response.status_code == 200
-
-
-async def test_paying_unlocks_the_letter_server_side(client: AsyncClient, setup: dict) -> None:
-    """TEST I. The entitlement is a row, not a flag in the browser."""
-    await _record_offer(client, setup)
-    headers = setup["student_headers"]
-    documents = (await client.get(f"{STUDENT}/me/documents", headers=headers)).json()["items"]
-    offer = next(d for d in documents if d["document_type"] == "offer_letter")
-
-    assert (await client.get(f"{DOCUMENTS}/{offer['id']}/link", headers=headers)).status_code == 402
-
-    paid = await _unlock(client, setup)
-    assert paid.status_code == 200, paid.text
-    assert paid.json()["has_access"] is True
-
-    assert (await client.get(f"{DOCUMENTS}/{offer['id']}/link", headers=headers)).status_code == 200
-    # And it is still unlocked on a fresh request, because nothing about it
-    # lives in the client.
-    assert (await client.get(f"{DOCUMENTS}/{offer['id']}/download", headers=headers)).status_code in (200, 307)
 
 
 async def test_the_quoted_fee_is_the_configured_one(client: AsyncClient, setup: dict) -> None:
@@ -362,14 +365,11 @@ async def test_cas_needs_its_date_and_letter_and_notifies(client: AsyncClient, s
     notifications = (await client.get(f"{STUDENT}/me/notifications", headers=headers)).json()
     assert any("CAS" in n["title"] for n in notifications["items"])
 
-    # Gated on the same one-time fee, not a new one.
+    # Open straight away — no fee stands in front of it.
     filed = (
         await client.get(f"{STUDENT}/me/applications/{application_id}/documents", headers=headers)
     ).json()["items"]
     cas = next(d for d in filed if d["document_type"] == "cas_letter")
-    assert (await client.get(f"{DOCUMENTS}/{cas['id']}/link", headers=headers)).status_code == 402
-
-    await _unlock(client, setup)
     assert (await client.get(f"{DOCUMENTS}/{cas['id']}/link", headers=headers)).status_code == 200
 
 

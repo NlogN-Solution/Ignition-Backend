@@ -16,8 +16,10 @@ from ..routes.document import router as document_router
 from ..routes.eligibility import router as eligibility_router
 from ..routes.employee_profile import router as employee_profile_router
 from ..routes.employees import router as employees_router
+from ..routes.files import router as files_router
 from ..routes.health import router as health_router
 from ..routes.imports import router as imports_router
+from ..routes.journey import router as journey_router
 from ..routes.leads import router as leads_router
 from ..routes.leave import router as leave_router
 from ..routes.message import router as message_router
@@ -67,6 +69,8 @@ router.include_router(message_router)
 # migration, not a footnote to this one.
 router.include_router(communication_router)
 router.include_router(workflow_router)
+router.include_router(journey_router)
+router.include_router(files_router)
 router.include_router(leads_router)
 router.include_router(attendance_router)
 router.include_router(leave_router)

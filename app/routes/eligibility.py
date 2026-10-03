@@ -100,6 +100,7 @@ async def list_assessments(
     assigned_to: UUID | None = None,
     study_level: str | None = None,
     unassigned: bool | None = None,
+    lead_id: UUID | None = None,
     sort: str = "newest",
     service: EligibilityService = Depends(get_eligibility_service),
     _: object = Depends(_STAFF),
@@ -113,6 +114,7 @@ async def list_assessments(
         assigned_to=assigned_to,
         study_level=study_level,
         unassigned=unassigned,
+        lead_id=lead_id,
         sort=sort,
     )
     rows = [await _to_row(item, service) for item in items]

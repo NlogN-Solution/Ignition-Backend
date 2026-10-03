@@ -211,6 +211,23 @@ async def test_staff_can_search_and_filter(client: AsyncClient, user_factory, au
     assert (await client.get(STAFF, params={"unassigned": True}, headers=headers)).json()["total"] == 2
 
 
+async def test_a_lead_page_can_find_the_assessment_behind_the_lead(
+    client: AsyncClient, user_factory, auth_headers
+) -> None:
+    await client.post(SUBMIT, json=_submission())
+    await client.post(
+        SUBMIT,
+        json=_submission(contact={"full_name": "Bikash Shrestha", "email": "bikash@example.com", "phone": "+9779811111111"}),
+    )
+    headers = await auth_headers(await user_factory(UserRole.ADMIN))
+    rows = (await client.get(STAFF, headers=headers)).json()["items"]
+    target = rows[0]
+
+    found = (await client.get(STAFF, params={"lead_id": target["lead_id"]}, headers=headers)).json()
+    assert found["total"] == 1
+    assert found["items"][0]["id"] == target["id"]
+
+
 async def test_staff_can_find_an_assessment_by_the_reference_the_student_was_given(
     client: AsyncClient, user_factory, auth_headers
 ) -> None:

@@ -4,11 +4,14 @@ Idempotent: every insert is keyed on a natural unique column and skipped when
 the row already exists, so running it twice is a no-op rather than a pile of
 duplicates or an IntegrityError.
 
-    python -m scripts.seed              # seed
-    python -m scripts.seed --reset      # delete seeded rows first
+    python -m scripts.seed                # seed everything (development only)
+    python -m scripts.seed --reset        # delete seeded rows first
+    python -m scripts.seed --users-only   # just the three Ignition logins
 
-Refuses to touch a production database. The catalog here is deliberately small
-— Phase 4 imports the real one from the student frontend's data files.
+The full seed refuses to touch a production database: its catalog is a small
+demo set that would sit beside the real one. `--users-only` creates only the
+three staff logins below and is allowed anywhere, including production — it is
+how a fresh database gets its first accounts.
 """
 
 from __future__ import annotations
@@ -49,25 +52,20 @@ from app.models import (  # noqa: E402
 )
 from app.models.enums import DegreeLevel, UserRole, UserStatus  # noqa: E402
 
-#: Development logins. `example.com` is IANA's reserved documentation domain and
-#: — unlike `.test` — passes `EmailStr`, so these accounts can actually sign in;
-#: seeding an address the login endpoint rejects creates rows nobody can use.
-#: The password is printed on completion, and staff carry
-#: `must_change_password` so a seeded credential cannot quietly become real.
+#: The three Ignition logins: (email, role, first name, last name, password).
+#:
+#: The admin is `super_admin`, not `admin`: only a super admin can create other
+#: admins or use the owner-only operations (`app/core/rbac.py`), so with a plain
+#: admin as the only top account nobody could ever add another. The advisor is
+#: a counsellor — the console's name for the role that works students.
+#:
+#: Existing accounts are left alone: re-running the seed never resets a
+#: password someone has since changed.
 STAFF = [
-    ("owner@ignition.example.com", UserRole.SUPER_ADMIN, "Ignition", "Owner"),
-    ("admin@ignition.example.com", UserRole.ADMIN, "Asha", "Adhikari"),
-    ("manager@ignition.example.com", UserRole.MANAGER, "Manish", "Karki"),
-    ("counsellor@ignition.example.com", UserRole.COUNSELLOR, "Chandra", "Bhatta"),
-    ("admissions@ignition.example.com", UserRole.ADMISSIONS, "Anjali", "Shrestha"),
-    ("finance@ignition.example.com", UserRole.FINANCE, "Prakash", "Thapa"),
-    ("frontdesk@ignition.example.com", UserRole.FRONTDESK, "Nisha", "Gurung"),
+    ("admin@ignition-edutech.com", UserRole.SUPER_ADMIN, "Ignition", "Admin", "*#IgnitionAdmin@2026"),
+    ("advisor@ignition-edutech.com", UserRole.COUNSELLOR, "Ignition", "Advisor", "@2026IgnitionAdvisor$#"),
+    ("staff@ignition-edutech.com", UserRole.STAFF, "Ignition", "Staff", "@IgnitionStaff2026#"),
 ]
-STUDENTS = [
-    ("student@ignition.example.com", "Sita", "Rai"),
-    ("student2@ignition.example.com", "Bikash", "Lama"),
-]
-DEV_PASSWORD = "ignition-dev-password"
 
 COUNTRIES = [
     {"name": "Australia", "iso2": "AU", "iso3": "AUS", "phone_code": "+61", "currency_code": "AUD"},
@@ -400,12 +398,10 @@ async def _get_or_create(session: AsyncSession, model: type[Any], match: dict[st
     return instance
 
 
-async def seed(session: AsyncSession) -> dict[str, int]:
-    counts: dict[str, int] = {}
-
-    # --- Users ---------------------------------------------------------------
-    created_users = 0
-    for email, role, first, last in STAFF:
+async def seed_users(session: AsyncSession) -> int:
+    """Create the three Ignition logins that do not exist yet. Returns how many."""
+    created = 0
+    for email, role, first, last, password in STAFF:
         before = await session.scalar(select(User.id).where(User.email == email))
         await _get_or_create(
             session,
@@ -415,24 +411,19 @@ async def seed(session: AsyncSession) -> dict[str, int]:
             last_name=last,
             role=role,
             status=UserStatus.ACTIVE,
-            password_hash=hash_password(DEV_PASSWORD),
-            must_change_password=True,
+            password_hash=hash_password(password),
+            must_change_password=False,
         )
-        created_users += before is None
-    for email, first, last in STUDENTS:
-        before = await session.scalar(select(User.id).where(User.email == email))
-        await _get_or_create(
-            session,
-            User,
-            {"email": email},
-            first_name=first,
-            last_name=last,
-            role=UserRole.STUDENT,
-            status=UserStatus.ACTIVE,
-            password_hash=hash_password(DEV_PASSWORD),
-        )
-        created_users += before is None
-    counts["users"] = created_users
+        created += before is None
+    await session.commit()
+    return created
+
+
+async def seed(session: AsyncSession) -> dict[str, int]:
+    counts: dict[str, int] = {}
+
+    # --- Users ---------------------------------------------------------------
+    counts["users"] = await seed_users(session)
 
     # --- Catalog -------------------------------------------------------------
     countries: dict[str, Country] = {}
@@ -657,16 +648,17 @@ async def seed(session: AsyncSession) -> dict[str, int]:
     return counts
 
 
-#: Domains this seeder has used. `--reset` matches on all of them, not just the
-#: current one: renaming the seed domain once left nine `@ignition.test` rows
-#: behind that `--reset` could no longer see, and a single unparseable address
-#: was enough to 500 `GET /users` for the whole page.
+#: Demo domains this seeder used to create accounts on. `--reset` still clears
+#: them, so old demo staff and students do not linger. `ignition-edutech.com` is
+#: deliberately NOT here: it is the real domain, and matching on it would delete
+#: every real member of staff — the three seeded logins are matched by exact
+#: address instead.
 SEEDED_EMAIL_DOMAINS = ("@ignition.example.com", "@ignition.test")
 
 
 async def reset(session: AsyncSession) -> None:
     """Remove seeded rows, newest dependency first."""
-    seeded_emails = [email for email, *_ in STAFF] + [email for email, *_ in STUDENTS]
+    seeded_emails = [email for email, *_ in STAFF]
     from sqlalchemy import or_
 
     matches = or_(
@@ -696,9 +688,22 @@ async def reset(session: AsyncSession) -> None:
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reset", action="store_true", help="delete seeded rows before seeding")
+    parser.add_argument(
+        "--users-only",
+        action="store_true",
+        help="create only the three Ignition logins (allowed on production)",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
+    if args.users_only:
+        async with session_factory() as session:
+            created = await seed_users(session)
+        print(f"Created {created} of {len(STAFF)} Ignition logins (existing ones were left unchanged):")
+        for email, role, *_ in STAFF:
+            print(f"  {email:<34} {role.value}")
+        return 0
+
     if settings.is_production:
         print("Refusing to seed a production database.", file=sys.stderr)
         return 1
@@ -712,8 +717,9 @@ async def main() -> int:
     print(f"Seeded {settings.DB_NAME}:")
     for label, count in counts.items():
         print(f"  {label:<16} {count}")
-    print(f"\nStaff and student logins use the password: {DEV_PASSWORD}")
-    print("Staff accounts are flagged must_change_password.")
+    print("\nLogins:")
+    for email, role, *_ in STAFF:
+        print(f"  {email:<34} {role.value}")
     return 0
 
 

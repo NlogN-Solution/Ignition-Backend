@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,8 +11,12 @@ from ..models.enums import (
     ChecklistItemStatus,
     DocumentType,
     WorkflowActivityType,
+    WorkflowStageKind,
     WorkflowStepStatus,
 )
+
+#: When a stage document requirement applies; null means always.
+RequirementCondition = Literal["ug", "pg", "gap"]
 
 # --- Workflow stage document requirements ---------------------------------
 
@@ -20,6 +25,7 @@ class WorkflowStageDocumentRequirementBase(BaseModel):
     document_type: DocumentType | None = None
     custom_label: str | None = None
     is_required: bool = True
+    condition: RequirementCondition | None = None
 
 
 class WorkflowStageDocumentRequirementCreate(WorkflowStageDocumentRequirementBase):
@@ -30,6 +36,7 @@ class WorkflowStageDocumentRequirementUpdate(BaseModel):
     document_type: DocumentType | None = None
     custom_label: str | None = None
     is_required: bool | None = None
+    condition: RequirementCondition | None = None
 
 
 class WorkflowStageDocumentRequirementRead(WorkflowStageDocumentRequirementBase):
@@ -52,6 +59,8 @@ class WorkflowStageBase(BaseModel):
     color: str | None = None
     icon: str | None = None
     is_active: bool = True
+    kind: WorkflowStageKind = WorkflowStageKind.INFO
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkflowStageCreate(WorkflowStageBase):
@@ -66,6 +75,8 @@ class WorkflowStageUpdate(BaseModel):
     color: str | None = None
     icon: str | None = None
     is_active: bool | None = None
+    kind: WorkflowStageKind | None = None
+    config: dict[str, Any] | None = None
 
 
 class WorkflowStageRead(WorkflowStageBase):

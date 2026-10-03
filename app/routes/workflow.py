@@ -5,13 +5,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..api.application_access import APPLICATION_STAFF_ROLES as _APPLICATION_STAFF_ROLES
+from ..api.application_access import assert_application_access
 from ..api.auth import get_current_user, require_role, require_staff
 from ..api.deps import get_db_session
 from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from ..api.pagination import LimitParam, PageParam
-from ..api.scoping import may_see_record, own_work_scope
-from ..models import Application, User
-from ..models.enums import STAFF_ROLES, NotificationType, UserRole, WorkflowStepStatus
+from ..api.scoping import own_work_scope
+from ..models import User
+from ..models.enums import STAFF_ROLES, NotificationType, WorkflowStepStatus
 from ..schemas.workflow import (
     AddStepCommentRequest,
     ApplicationChecklistItemCreate,
@@ -59,46 +61,13 @@ async def get_checklist_service(session: AsyncSession = Depends(get_db_session))
     return ChecklistService(session)
 
 
-#: Staff roles trusted with any application's workflow.
-APPLICATION_STAFF_ROLES = frozenset({UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.COUNSELLOR, UserRole.ADMISSIONS})
+# The authorisation rule lives in `api/application_access.py`, shared with the
+# journey routes; the old names stay so this module reads as it always did.
+APPLICATION_STAFF_ROLES = _APPLICATION_STAFF_ROLES
+_assert_application_access = assert_application_access
 
 
-async def _assert_application_access(
-    application_id: UUID,
-    user: User,
-    application_service: ApplicationService,
-) -> Application:
-    """Authorise the caller for one application's workflow and checklist.
-
-    The same rule as `GET /applications/{id}` (`routes/application.py`), so a
-    sub-resource can never show what the application itself hides:
-
-    * a student reaches only their own application (403 otherwise, as there);
-    * staff on the application-handling roles pass the own-work rule — a
-      counsellor sees their own applications and unassigned ones, and gets a
-      404 for a colleague's, exactly as the by-id read does (FAPI-SEC-005).
-      This helper used to wave every staff member through, so the checklist
-      and workflow of an application `/applications/{id}` returned 404 for
-      were fully readable and writable here.
-
-    Returns the application so callers that already need it (e.g. to notify
-    its student) don't re-fetch it.
-    """
-    application = await application_service.get_application(application_id)
-    if application is None:
-        raise NotFoundException("Application not found")
-    if user.role in APPLICATION_STAFF_ROLES:
-        if not may_see_record(user, application.counsellor_id):
-            raise NotFoundException("Application not found")
-        return application
-    if user.role is UserRole.STUDENT and application.student_id == user.id:
-        return application
-    raise ForbiddenException("You do not have access to this application")
-
-
-async def _step_or_404(
-    service: ApplicationWorkflowService, step_id: UUID, application_id: UUID
-):
+async def _step_or_404(service: ApplicationWorkflowService, step_id: UUID, application_id: UUID):
     """The step, only when it belongs to the application in the URL (FAPI-SEC-003)."""
     step = await service.get_step_for_application(step_id, application_id)
     if step is None:

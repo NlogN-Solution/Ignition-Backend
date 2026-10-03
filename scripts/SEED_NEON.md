@@ -6,15 +6,14 @@ have neither, so this document is the same seed expressed as SQL you can paste
 into the **Neon console → your project → SQL Editor**.
 
 It produces exactly what `python -m scripts.seed` produces: the same rows, the
-same natural keys, the same login password. It is **idempotent** — every
+same natural keys, the same three logins. It is **idempotent** — every
 statement is guarded by `ON CONFLICT DO NOTHING` or `WHERE NOT EXISTS`, so
 running it twice adds nothing and errors on nothing.
 
-> **Before you start:** these are development credentials on a publicly reachable
-> deployment. Seed them, sign in, and change the passwords (see
-> [After seeding](#7-after-seeding)). Staff rows are created with
-> `must_change_password = true` so the app forces this on first login; the two
-> student rows are not, so change those yourself.
+> **Only need the logins?** Run just [step 3](#3-enable-pgcrypto) and
+> [step 4](#4-seed-the-users) — or, from a shell, `python -m scripts.seed
+> --users-only`, which is allowed on production. Step 5 adds a small *demo*
+> catalogue; skip it on a database that has (or will get) the real one.
 
 ---
 
@@ -96,10 +95,13 @@ which is byte-for-byte what Python's `base64.b64encode` returns, and
 
 ## 4. Seed the users
 
-Change `'ignition-dev-password'` in the last column of each row if you want a
-different password — it is the plaintext, and the hash is computed per row with
-its own salt. Existing accounts are left untouched (`ON CONFLICT (email)`), so
-this will not reset anybody's password.
+The three Ignition logins — the same as `STAFF` in `scripts/seed.py`. The last
+column is the plaintext password; the hash is computed per row with its own
+salt. Existing accounts are left untouched (`ON CONFLICT (email)`), so this will
+not reset anybody's password.
+
+The admin is `super_admin`: only a super admin can create other admins, so it
+has to be the top account. The advisor is a `counsellor`.
 
 ```sql
 INSERT INTO users (email, first_name, last_name, role, status, must_change_password, password_hash)
@@ -112,15 +114,9 @@ SELECT
     v.must_change_password,
     crypt(encode(digest(v.password, 'sha256'), 'base64'), gen_salt('bf', 12))
 FROM (VALUES
-    ('owner@ignition.example.com',      'Ignition', 'Owner',    'super_admin', true,  'ignition-dev-password'),
-    ('admin@ignition.example.com',      'Asha',     'Adhikari', 'admin',       true,  'ignition-dev-password'),
-    ('manager@ignition.example.com',    'Manish',   'Karki',    'manager',     true,  'ignition-dev-password'),
-    ('counsellor@ignition.example.com', 'Chandra',  'Bhatta',   'counsellor',  true,  'ignition-dev-password'),
-    ('admissions@ignition.example.com', 'Anjali',   'Shrestha', 'admissions',  true,  'ignition-dev-password'),
-    ('finance@ignition.example.com',    'Prakash',  'Thapa',    'finance',     true,  'ignition-dev-password'),
-    ('frontdesk@ignition.example.com',  'Nisha',    'Gurung',   'frontdesk',   true,  'ignition-dev-password'),
-    ('student@ignition.example.com',    'Sita',     'Rai',      'student',     false, 'ignition-dev-password'),
-    ('student2@ignition.example.com',   'Bikash',   'Lama',     'student',     false, 'ignition-dev-password')
+    ('admin@ignition-edutech.com',   'Ignition', 'Admin',   'super_admin', false, '*#IgnitionAdmin@2026'),
+    ('advisor@ignition-edutech.com', 'Ignition', 'Advisor', 'counsellor',  false, '@2026IgnitionAdvisor$#'),
+    ('staff@ignition-edutech.com',   'Ignition', 'Staff',   'staff',       false, '@IgnitionStaff2026#')
 ) AS v(email, first_name, last_name, role, must_change_password, password)
 ON CONFLICT (email) DO NOTHING;
 ```
@@ -129,14 +125,16 @@ Confirm it worked — this returns `true` for every row if the password verifies
 through the same code path the login endpoint uses:
 
 ```sql
-SELECT email,
-       role,
-       must_change_password,
-       password_hash = crypt(encode(digest('ignition-dev-password', 'sha256'), 'base64'), password_hash)
-           AS password_ok
-FROM users
-WHERE email LIKE '%@ignition.example.com'
-ORDER BY email;
+SELECT u.email,
+       u.role,
+       u.password_hash = crypt(encode(digest(v.password, 'sha256'), 'base64'), u.password_hash) AS password_ok
+FROM users u
+JOIN (VALUES
+    ('admin@ignition-edutech.com',   '*#IgnitionAdmin@2026'),
+    ('advisor@ignition-edutech.com', '@2026IgnitionAdvisor$#'),
+    ('staff@ignition-edutech.com',   '@IgnitionStaff2026#')
+) AS v(email, password) ON v.email = u.email
+ORDER BY u.email;
 ```
 
 ## 5. Seed the catalog and reference data
@@ -392,7 +390,7 @@ seeded database should show at least:
 
 | table | rows |
 | --- | --- |
-| users | 9 |
+| users | 3 |
 | countries | 5 |
 | universities | 6 |
 | programs | 5 |
@@ -416,7 +414,7 @@ Then hit the live API to confirm the app agrees:
 ```bash
 curl -s -X POST https://<your-render-service>.onrender.com/api/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"owner@ignition.example.com","password":"ignition-dev-password"}'
+  -d '{"email":"admin@ignition-edutech.com","password":"*#IgnitionAdmin@2026"}'
 ```
 
 A 200 with a token means the hash, the enum values and the role all line up. A
@@ -426,33 +424,17 @@ step 4.
 
 ## 7. After seeding
 
-These are documentation-domain addresses with a password that is written down in
-a public repo, sitting on a reachable deployment. Once you have confirmed login:
-
-- Sign in as each staff account and complete the forced password change.
-- Change the two student passwords too — they are **not** flagged
-  `must_change_password`. Either through the app, or in SQL:
-
-  ```sql
-  UPDATE users
-  SET password_hash = crypt(encode(digest('a-real-password-here', 'sha256'), 'base64'), gen_salt('bf', 12)),
-      must_change_password = true
-  WHERE email IN ('student@ignition.example.com', 'student2@ignition.example.com');
-  ```
-
-- Or, if you only wanted the reference data and not the logins, disable the
-  accounts outright:
-
-  ```sql
-  UPDATE users SET status = 'inactive' WHERE email LIKE '%@ignition.example.com';
-  ```
+These passwords are written down in this repository. Once you have confirmed
+you can sign in, change each of them from the console (profile → security), so
+the ones in the repo stop working.
 
 ## 8. Undoing it
 
-The equivalent of `python -m scripts.seed --reset`. **Deleting a user cascades**
-to their applications, documents, appointments, tasks, payments and notifications
-— on a database with real activity, prefer the `status = 'inactive'` update
-above.
+The equivalent of `python -m scripts.seed --reset`, minus the three Ignition
+logins: those are real accounts and are never deleted by domain. **Deleting a
+user cascades** to their applications, documents, appointments, tasks, payments
+and notifications. The first statement only removes the old demo accounts
+(`@ignition.example.com` / `@ignition.test`) from earlier versions of the seed.
 
 ```sql
 BEGIN;

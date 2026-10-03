@@ -131,3 +131,13 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 
 app.include_router(router)
+
+if settings.uses_local_storage:
+    # Public uploads only (avatars, site images) — the same files Cloudinary
+    # would serve publicly. Private files live in a sibling directory that is
+    # never mounted; they are reached through signed `/api/v1/files/` links.
+    from fastapi.staticfiles import StaticFiles
+
+    from .core.uploads import local_dir
+
+    app.mount("/uploads", StaticFiles(directory=local_dir(private=False)), name="uploads")

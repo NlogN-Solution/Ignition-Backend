@@ -30,6 +30,7 @@ from ..models.enums import (
     UserStatus,
     application_status_label,
 )
+from ..services.journey_service import JourneyService
 from ..services.progress_service import PointsService, ProgressService
 from ..services.staff_resolution import resolve_responsible_staff_ids
 from .cache import invalidate_dashboard_cache
@@ -174,6 +175,27 @@ async def sync_checklist_item_on_document_rejection(event: DocumentRejected, ses
         .values(status=ChecklistItemStatus.REJECTED)
     )
     await session.commit()
+
+
+# --- Application journey --------------------------------------------------------
+
+
+async def sync_journey_on_status_change(event: ApplicationStatusChanged, session: AsyncSession) -> None:
+    """Recording an offer or a CAS completes the journey stage waiting on it.
+
+    The status is the source of truth for issued stages (see
+    `services/journey_service.py`), so this runs for *every* status change,
+    however it was made — the milestone dialog, the plain status route, or an
+    import. Statuses the journey itself sets are never `milestone_status`
+    values, so this cannot loop.
+    """
+    try:
+        await JourneyService(session).sync_with_status(
+            event.application_id, ApplicationStatus(event.new_status), event.changed_by
+        )
+    except Exception:
+        await session.rollback()
+        raise
 
 
 # --- Correspondence -----------------------------------------------------------
@@ -549,7 +571,7 @@ async def _lead_desk_staff_ids(session: AsyncSession) -> list[UUID]:
 
 
 async def notify_desk_of_registration(session: AsyncSession, user: User, *, linked: bool) -> None:
-    """"Somebody just registered" — said once, to the people who act on it.
+    """ "Somebody just registered" — said once, to the people who act on it.
 
     The lead row this accompanies has existed since Phase 5b, but nothing
     announced it: a student could sign up on the portal and sit unworked in the
@@ -643,9 +665,7 @@ async def link_or_create_lead_for_student(event: StudentCreated, session: AsyncS
         session.add(
             LeadActivity(
                 lead_id=lead.id,
-                activity_type=(
-                    LeadActivityType.STATUS_CHANGED if lead.status != old_status else LeadActivityType.NOTE
-                ),
+                activity_type=(LeadActivityType.STATUS_CHANGED if lead.status != old_status else LeadActivityType.NOTE),
                 title="Registered on the portal",
                 description=(
                     "They created their own student account. Qualify and convert them when they are ready "
@@ -710,6 +730,7 @@ def register_subscribers() -> None:
 
     event_bus.subscribe(ApplicationStatusChanged, notify_student_of_status_change)
     event_bus.subscribe(ApplicationStatusChanged, log_status_change)
+    event_bus.subscribe(ApplicationStatusChanged, sync_journey_on_status_change)
     event_bus.subscribe(DocumentApproved, notify_student_of_document_approval)
     event_bus.subscribe(DocumentRejected, notify_student_of_document_rejection)
     event_bus.subscribe(DocumentApproved, sync_checklist_item_on_document_approval)

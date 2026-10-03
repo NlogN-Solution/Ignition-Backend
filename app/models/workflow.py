@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     TIMESTAMP,
@@ -15,6 +15,8 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base import Base
@@ -24,13 +26,18 @@ from .enums import (
     ApplicationWorkflowStatus,
     ChecklistItemStatus,
     DocumentType,
+    StepSlotOutcome,
+    StepSlotStatus,
+    StepSubmissionStatus,
     WorkflowActivityType,
+    WorkflowStageKind,
     WorkflowStepStatus,
 )
 
 if TYPE_CHECKING:
     from .academic import Country
     from .application import Application
+    from .appointment import Appointment
     from .document import Document
     from .user import User
 
@@ -80,6 +87,16 @@ class WorkflowStage(Base, UUIDPKMixin, TimestampMixin):
     icon: Mapped[str | None] = mapped_column(String(50))
     order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    #: A `WorkflowStageKind` value — what the stage asks of the student, and so
+    #: which screen the portal draws for it. A string column, validated by the
+    #: API, because it is template data rather than a fixed vocabulary of rows.
+    kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default=WorkflowStageKind.INFO.value
+    )
+    #: Kind-specific settings: review resources, booking rules, checklist tasks,
+    #: and the status links (`on_complete_status`, `milestone_status`). Shape
+    #: per kind is documented in `services/journey_service.py`.
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
 
     template: Mapped[WorkflowTemplate] = relationship(back_populates="stages")
     document_requirements: Mapped[list[WorkflowStageDocumentRequirement]] = relationship(
@@ -108,6 +125,10 @@ class WorkflowStageDocumentRequirement(Base, UUIDPKMixin, TimestampMixin):
     )
     custom_label: Mapped[str | None] = mapped_column(String(150))
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    #: When this requirement applies: `ug`, `pg`, `gap` (study gap over six
+    #: months), or null for always. Evaluated per application when the
+    #: workflow is instantiated, and again when the student's gap answer changes.
+    condition: Mapped[str | None] = mapped_column(String(20))
 
     stage: Mapped[WorkflowStage] = relationship(back_populates="document_requirements")
 
@@ -174,6 +195,10 @@ class ApplicationWorkflowStep(Base, UUIDPKMixin, TimestampMixin):
     started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    #: Per-step state with no table of its own: `{"tasks": {key: iso_timestamp}}`
+    #: for a checklist stage, and `{"submitted_at": ...}` once a documents stage
+    #: has been handed in.
+    progress: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
 
     application_workflow: Mapped[ApplicationWorkflow] = relationship(back_populates="steps")
     stage: Mapped[WorkflowStage | None] = relationship("WorkflowStage")
@@ -227,6 +252,91 @@ class WorkflowStepActivity(Base, UUIDPKMixin):
 
     def __repr__(self) -> str:
         return f"<WorkflowStepActivity id={self.id} type={self.activity_type}>"
+
+
+class WorkflowStepSubmission(Base, UUIDPKMixin, TimestampMixin):
+    """One round of a review stage: what the student handed in, and the verdict.
+
+    Rounds are rows rather than an overwritten field so the student and staff
+    both see the history — "round 3" with the feedback from rounds 1 and 2 is
+    the context a reviewer needs, and the evidence the student improved.
+    """
+
+    __tablename__ = "workflow_step_submissions"
+
+    step_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("application_workflow_steps.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    round: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    submitted_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    body_text: Mapped[str | None] = mapped_column(Text)
+    document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
+    external_url: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[StepSubmissionStatus] = mapped_column(
+        enum_type(StepSubmissionStatus, "step_submission_status"),
+        nullable=False,
+        server_default=StepSubmissionStatus.SUBMITTED.value,
+    )
+    feedback: Mapped[str | None] = mapped_column(Text)
+    #: Documents staff attached to their feedback (filed in the student's vault).
+    feedback_document_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(PGUUID(as_uuid=True)))
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+
+    step: Mapped[ApplicationWorkflowStep] = relationship("ApplicationWorkflowStep")
+    document: Mapped[Document | None] = relationship("Document")
+
+    __table_args__ = (
+        UniqueConstraint("step_id", "round", name="uq_workflow_step_submissions_step_id_round"),
+        Index("idx_workflow_step_submissions_step_id", "step_id"),
+        Index("idx_workflow_step_submissions_status", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<WorkflowStepSubmission id={self.id} round={self.round} status={self.status}>"
+
+
+class WorkflowStepSlot(Base, UUIDPKMixin, TimestampMixin):
+    """An interview time staff offered for a booking stage.
+
+    The student books one; its siblings in the same attempt are withdrawn, and
+    the booking becomes an `Appointment` so it is on both calendars. An outcome
+    of `reschedule` starts a new attempt with fresh slots.
+    """
+
+    __tablename__ = "workflow_step_slots"
+
+    step_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("application_workflow_steps.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    starts_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    ends_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    location: Mapped[str | None] = mapped_column(String(255))
+    meeting_link: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[StepSlotStatus] = mapped_column(
+        enum_type(StepSlotStatus, "step_slot_status"),
+        nullable=False,
+        server_default=StepSlotStatus.OPEN.value,
+    )
+    outcome: Mapped[StepSlotOutcome | None] = mapped_column(enum_type(StepSlotOutcome, "step_slot_outcome"))
+    outcome_note: Mapped[str | None] = mapped_column(Text)
+    appointment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("appointments.id", ondelete="SET NULL"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    booked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+
+    step: Mapped[ApplicationWorkflowStep] = relationship("ApplicationWorkflowStep")
+    appointment: Mapped[Appointment | None] = relationship("Appointment")
+
+    __table_args__ = (
+        Index("idx_workflow_step_slots_step_id", "step_id"),
+        Index("idx_workflow_step_slots_status", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<WorkflowStepSlot id={self.id} status={self.status}>"
 
 
 class ApplicationChecklistItem(Base, UUIDPKMixin, TimestampMixin):

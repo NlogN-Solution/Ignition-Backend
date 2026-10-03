@@ -24,11 +24,56 @@ from ..models import (
 from ..models.enums import (
     ApplicationWorkflowStatus,
     ChecklistItemStatus,
+    CourseLevel,
+    DegreeLevel,
     DocumentStatus,
     WorkflowActivityType,
+    WorkflowStageKind,
     WorkflowStepStatus,
 )
 from .document_service import DocumentService
+
+#: Degree levels that make an application undergraduate. Everything else with a
+#: level (postgraduate diploma, master, doctorate) is postgraduate.
+_UG_DEGREE_LEVELS = frozenset(
+    {DegreeLevel.CERTIFICATE, DegreeLevel.DIPLOMA, DegreeLevel.ADVANCED_DIPLOMA, DegreeLevel.BACHELOR}
+)
+_PG_COURSE_LEVELS = frozenset({CourseLevel.POSTGRADUATE, CourseLevel.INTEGRATED_MASTERS})
+
+
+def study_level_of(program: Program | None) -> str:
+    """`ug` or `pg`, from the course the application is for.
+
+    `degree_level` is what the application is made at and wins; `course_level`
+    (the public catalogue's facet) is the fallback. A course with neither is
+    treated as undergraduate — the smaller document list — and staff can add
+    to the checklist by hand, which is a better failure than demanding a
+    bachelor's transcript from a school leaver.
+    """
+    if program is None:
+        return "ug"
+    if program.degree_level is not None:
+        return "ug" if program.degree_level in _UG_DEGREE_LEVELS else "pg"
+    if program.course_level is not None:
+        return "pg" if program.course_level in _PG_COURSE_LEVELS else "ug"
+    return "ug"
+
+
+def _stage_columns(data: dict[str, Any]) -> dict[str, Any]:
+    """`kind` is a plain string column; store the enum's value, not the member."""
+    kind = data.get("kind")
+    if isinstance(kind, WorkflowStageKind):
+        return {**data, "kind": kind.value}
+    return data
+
+
+def requirement_applies(condition: str | None, *, level: str, has_gap: bool) -> bool:
+    """Whether a stage document requirement belongs on this application."""
+    if not condition:
+        return True
+    if condition == "gap":
+        return has_gap
+    return condition == level
 
 
 def slugify(value: str) -> str:
@@ -143,6 +188,8 @@ class WorkflowTemplateService:
                 icon=stage.icon,
                 order=stage.order,
                 is_active=stage.is_active,
+                kind=stage.kind,
+                config=dict(stage.config or {}),
             )
             self.session.add(stage_clone)
             await self.session.flush()
@@ -154,6 +201,7 @@ class WorkflowTemplateService:
                         document_type=req.document_type,
                         custom_label=req.custom_label,
                         is_required=req.is_required,
+                        condition=req.condition,
                     )
                 )
 
@@ -170,7 +218,7 @@ class WorkflowTemplateService:
         # with the first — and every stage after it. `coalesce` above already
         # returns -1 for an empty template.
         next_order = (max_order if max_order is not None else -1) + 1
-        stage = WorkflowStage(template_id=template_id, order=next_order, **data)
+        stage = WorkflowStage(template_id=template_id, order=next_order, **_stage_columns(data))
         self.session.add(stage)
         await self.session.commit()
         # `refresh` leaves `document_requirements` unloaded, and serializing the
@@ -189,7 +237,7 @@ class WorkflowTemplateService:
         return result.scalar_one_or_none()
 
     async def update_stage(self, stage: WorkflowStage, data: dict[str, Any]) -> WorkflowStage:
-        for key, value in data.items():
+        for key, value in _stage_columns(data).items():
             if value is not None:
                 setattr(stage, key, value)
         await self.session.commit()
@@ -266,7 +314,7 @@ class ApplicationWorkflowService:
         )
         return result.scalar_one_or_none()
 
-    async def _resolve_template(self, application: Application, template_id: UUID | None) -> WorkflowTemplate:
+    async def resolve_template(self, application: Application, template_id: UUID | None) -> WorkflowTemplate:
         if template_id:
             template = await self.session.get(WorkflowTemplate, template_id)
             if template is None:
@@ -314,7 +362,7 @@ class ApplicationWorkflowService:
         if application is None:
             raise ValueError("Application not found")
 
-        template = await self._resolve_template(application, template_id)
+        template = await self.resolve_template(application, template_id)
 
         stages_result = await self.session.execute(
             select(WorkflowStage)
@@ -325,6 +373,9 @@ class ApplicationWorkflowService:
         stages = stages_result.scalars().all()
         if not stages:
             raise ValueError("This workflow template has no active stages")
+
+        program = await self.session.get(Program, application.program_id)
+        level = study_level_of(program)
 
         workflow = ApplicationWorkflow(
             application_id=application_id,
@@ -356,6 +407,8 @@ class ApplicationWorkflowService:
             )
 
             for req in stage.document_requirements:
+                if not requirement_applies(req.condition, level=level, has_gap=application.has_study_gap):
+                    continue
                 self.session.add(
                     ApplicationChecklistItem(
                         application_id=application_id,
@@ -681,9 +734,7 @@ class ChecklistService:
         # nobody is going to work, and leave the item and its document saying
         # different things, which is the whole class of bug this method exists
         # to close.
-        linked_document = (
-            await document_service.get_document(data["document_id"]) if newly_linked else None
-        )
+        linked_document = await document_service.get_document(data["document_id"]) if newly_linked else None
         #
         # An approval only carries over when it was an approval *of this kind
         # of document* (FAPI-SEC-002). It used to carry over for any approved

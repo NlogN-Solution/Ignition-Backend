@@ -66,6 +66,11 @@ PUBLIC_ENDPOINTS: set[tuple[str, str]] = {
     # person — is authenticated and lives under /student.
     ("POST", "/api/v1/public/apply-intents"),
     ("GET", "/api/v1/public/apply-intents/{intent_id}"),
+    # Local file storage (development only; refused in production). The token
+    # in the path *is* the authorisation: signed, expiring, naming one file,
+    # and minted only after the link route checked ownership — the same
+    # contract as Cloudinary's signed download URL. See `routes/files.py`.
+    ("GET", "/api/v1/files/{token}"),
 }
 
 #: FastAPI's own docs routes, which are disabled in production by `main.py`.

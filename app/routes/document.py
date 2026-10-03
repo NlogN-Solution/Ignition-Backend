@@ -14,16 +14,18 @@ from ..api.exceptions import (
     ConflictException,
     ForbiddenException,
     NotFoundException,
-    PaymentRequiredException,
 )
 from ..api.pagination import LimitParam, PageParam
 from ..api.scoping import assert_may_see_student, student_visibility_condition
+from ..core.config import get_settings
 from ..core.uploads import (
     DOCUMENT_EXTENSIONS,
     DOCUMENT_FOLDER,
+    VIDEO_EXTENSIONS,
     build_download_response,
     build_download_url,
     store_upload,
+    stream_private_file,
 )
 from ..models import Application, Document, User
 from ..models.enums import DocumentStatus, DocumentType, NotificationType, UserRole
@@ -42,7 +44,6 @@ from ..schemas.document import (
 )
 from ..services.document_service import DocumentService, get_document_service
 from ..services.notification_service import NotificationService, get_notification_service
-from ..services.portal_access_service import PortalAccessService, get_portal_access_service
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -68,16 +69,6 @@ DOCUMENT_TYPE_TITLES = {
 _REVIEW_ROLES = require_role(UserRole.ADMIN, UserRole.COUNSELLOR, UserRole.ADMISSIONS, UserRole.MANAGER)
 
 
-#: Documents a student must have unlocked the platform to open.
-#:
-#: The offer letter and the CAS statement, and nothing else. Their own
-#: passport, their own transcripts, the bank statement they uploaded — all
-#: freely theirs, because charging somebody to read a file they supplied would
-#: be indefensible. What the fee buys is the thing Ignition obtained *for*
-#: them.
-GATED_DOCUMENT_TYPES = frozenset({DocumentType.OFFER_LETTER, DocumentType.CAS_LETTER})
-
-
 def _assert_visible_to(user: User, document: Document) -> None:
     if user.role is UserRole.STUDENT and document.student_id != user.id:
         raise ForbiddenException("Forbidden")
@@ -98,36 +89,6 @@ async def _document_or_404(service: DocumentService, user: User, document_id: UU
     if user.role is not UserRole.STUDENT and document.student_id != user.id:
         await assert_may_see_student(service.session, user, document.student_id, "Document not found")
     return document
-
-
-async def _assert_entitled(user: User, document: Document, access: PortalAccessService) -> None:
-    """The paywall, enforced where the bytes are.
-
-    **This is the check that matters.** Hiding the button is not a gate: the
-    download route is a URL with a bearer token, and a student who has not paid
-    could previously have read their own offer letter with `curl` — which is
-    the exact bypass the brief calls out.
-
-    Staff are unaffected. So is every other document type, and so is the
-    student's own upload of a gated type on the vanishing chance they have one
-    — `uploaded_by` is checked, because the fee is for what Ignition obtained,
-    not for anything with the word "offer" on it.
-
-    402, not 403: "pay and this works" is a different answer from "this is not
-    yours", and the portal needs to tell them apart to know whether to show the
-    unlock screen or an error.
-    """
-    if user.role is not UserRole.STUDENT:
-        return
-    if document.document_type not in GATED_DOCUMENT_TYPES:
-        return
-    if document.uploaded_by == user.id:
-        return
-    if await access.has_access(user.id):
-        return
-    raise PaymentRequiredException(
-        "Unlock your Ignition application package to open your offer and CAS letters."
-    )
 
 
 @router.get("", response_model=DocumentList, summary="List documents")
@@ -234,7 +195,17 @@ async def upload_document(
         if application is None or application.deleted_at is not None or application.student_id != student_id:
             raise NotFoundException("Application not found")
 
-    stored = await store_upload(file, DOCUMENT_EXTENSIONS, folder=DOCUMENT_FOLDER, private=True)
+    if document_type is DocumentType.INTERVIEW_RECORDING:
+        # The one document type that is media, at its own size limit.
+        stored = await store_upload(
+            file,
+            VIDEO_EXTENSIONS,
+            folder=DOCUMENT_FOLDER,
+            private=True,
+            max_mb=get_settings().MAX_VIDEO_UPLOAD_MB,
+        )
+    else:
+        stored = await store_upload(file, DOCUMENT_EXTENSIONS, folder=DOCUMENT_FOLDER, private=True)
 
     # Who uploaded it decides whether it is waiting on anyone.
     #
@@ -290,7 +261,6 @@ async def get_document_link(
     document_id: UUID,
     disposition: str = "inline",
     service: DocumentService = Depends(get_document_service),
-    access: PortalAccessService = Depends(get_portal_access_service),
     user: User = Depends(_VIEW_ROLES),
 ) -> DocumentLinkRead:
     """The same ownership check as `/download`, answered as JSON.
@@ -302,7 +272,6 @@ async def get_document_link(
     URL to open instead, so the auth happens on the XHR where the token lives.
     """
     document = await _document_or_404(service, user, document_id)
-    await _assert_entitled(user, document, access)
 
     url = build_download_url(
         document.stored_file_name,
@@ -317,12 +286,36 @@ async def get_document_link(
     )
 
 
+@router.get("/{document_id}/content", summary="Stream a document's file")
+async def get_document_content(
+    document_id: UUID,
+    disposition: str = "inline",
+    service: DocumentService = Depends(get_document_service),
+    user: User = Depends(_VIEW_ROLES),
+) -> Response:
+    """The file's bytes, from this origin, for the portal's preview and View.
+
+    Same ownership check as `/download`. Unlike `/download` and `/link`, this
+    serves the bytes itself rather than handing over a Cloudinary URL: those
+    URLs carry `X-Frame-Options: DENY`, so they cannot be shown in a preview
+    frame. The portal fetches this over its authenticated client and displays
+    a blob URL.
+    """
+    document = await _document_or_404(service, user, document_id)
+    return await stream_private_file(
+        document.stored_file_name,
+        folder=DOCUMENT_FOLDER,
+        mime_type=document.mime_type,
+        download_name=document.original_file_name,
+        inline=disposition != "attachment",
+    )
+
+
 @router.get("/{document_id}/download", summary="Download a document's file")
 async def download_document(
     document_id: UUID,
     disposition: str = "attachment",
     service: DocumentService = Depends(get_document_service),
-    access: PortalAccessService = Depends(get_portal_access_service),
     user: User = Depends(_VIEW_ROLES),
 ) -> Response:
     """Authenticated, ownership-checked file access.
@@ -335,7 +328,6 @@ async def download_document(
     signed and short-lived rather than public.
     """
     document = await _document_or_404(service, user, document_id)
-    await _assert_entitled(user, document, access)
 
     return build_download_response(
         document.stored_file_name,

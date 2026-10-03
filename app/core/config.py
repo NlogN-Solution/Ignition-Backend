@@ -170,7 +170,20 @@ class Settings(BaseSettings):
     # local-disk fallback so the test suite doesn't need real Cloudinary
     # credentials or network access. Unused in development/production.
     UPLOAD_DIR: str = str(BASE_DIR / "uploads")
+    #: Where uploads go: `cloudinary`, or `local` (files under UPLOAD_DIR,
+    #: served by this API). Unset means local in development and tests and
+    #: Cloudinary everywhere else, so a developer's uploads never land in the
+    #: production Cloudinary account. Production refuses `local`.
+    STORAGE_BACKEND: Literal["cloudinary", "local"] | None = None
+    #: This API's own address, as a browser reaches it. Local storage builds
+    #: absolute file URLs from it, because the portals run on other origins.
+    BACKEND_PUBLIC_URL: str = "http://localhost:8001"
     MAX_UPLOAD_SIZE_MB: int = Field(default=25, ge=1)
+    #: Interview recordings (the one document type that takes video). Kept
+    #: under MAX_REQUEST_BODY_MB, which would otherwise refuse the request
+    #: first; anything bigger goes in as a link. Stored on Cloudinary's `raw`
+    #: pipeline like every non-image, so the plan's raw-file limit applies too.
+    MAX_VIDEO_UPLOAD_MB: int = Field(default=50, ge=1)
     #: Ceiling on a whole request body, enforced while it streams in
     #: (core/middleware.BodySizeLimitMiddleware) — before any multipart
     #: parsing or buffering. Covers a message carrying several attachments,
@@ -193,19 +206,18 @@ class Settings(BaseSettings):
                 # FAPI-SEC-001: no gateway is integrated, so "simulated" in
                 # production means "free". Refuse to boot rather than trust
                 # that someone remembered to set it.
-                raise ValueError(
-                    "SIMULATED_PAYMENTS must be false in production — no payment gateway is integrated."
-                )
+                raise ValueError("SIMULATED_PAYMENTS must be false in production — no payment gateway is integrated.")
             if not self.JWT_SECRET_KEY:
                 raise ValueError("JWT_SECRET_KEY must be set in production.")
             if self.JWT_SECRET_KEY in _INSECURE_SECRETS:
                 raise ValueError("JWT_SECRET_KEY is a known placeholder value — generate a real secret.")
             if len(self.JWT_SECRET_KEY) < 32:
                 raise ValueError("JWT_SECRET_KEY must be at least 32 characters in production.")
+            if self.STORAGE_BACKEND == "local":
+                raise ValueError("STORAGE_BACKEND=local is for development; production stores files in Cloudinary.")
             if not (self.CLOUDINARY_CLOUD_NAME and self.CLOUDINARY_API_KEY and self.CLOUDINARY_API_SECRET):
                 raise ValueError(
-                    "CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET must all be set "
-                    "in production."
+                    "CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET must all be set in production."
                 )
         elif not self.JWT_SECRET_KEY:
             # Ephemeral per-process secret: tokens simply don't survive a restart
@@ -276,6 +288,12 @@ class Settings(BaseSettings):
         path = Path(self.UPLOAD_DIR)
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    @property
+    def uses_local_storage(self) -> bool:
+        if self.STORAGE_BACKEND is not None:
+            return self.STORAGE_BACKEND == "local"
+        return self.ENVIRONMENT in ("development", "test")
 
     @property
     def is_production(self) -> bool:
