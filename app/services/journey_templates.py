@@ -51,16 +51,33 @@ CAS_SHIELD_DOCUMENTS: list[_Requirement] = [
     (DocumentType.FINANCIAL_DOCUMENT, "Education loan sanction letter", None),
 ]
 
+#: The guides live in the student portal (`src/data/interviewGuides.js`), at
+#: `/interviews/guides/<slug>` on the Interview Preparation page.
 INTERVIEW_RESOURCES: list[dict[str, str]] = [
-    {"title": "Common interview questions", "description": "Top 40 credibility questions with tips", "url": ""},
+    {
+        "title": "Common interview questions",
+        "description": "Top 40 credibility questions with tips",
+        "url": "/interviews/guides/common-questions",
+    },
     {
         "title": "Course & university research",
         "description": "Template: why this course, why this university",
-        "url": "",
+        "url": "/interviews/guides/course-research",
     },
-    {"title": "Finance & sponsor explanation", "description": "How to talk about your funding clearly", "url": ""},
-    {"title": "Practise with a mock interview", "description": "Scored practice in your portal", "url": "/interviews"},
+    {
+        "title": "Finance & sponsor explanation",
+        "description": "How to talk about your funding clearly",
+        "url": "/interviews/guides/finance-sponsor",
+    },
+    {
+        "title": "Practise with a mock interview",
+        "description": "Scored practice in your portal",
+        "url": "/interviews/guides/mock-interview",
+    },
 ]
+
+#: The practice sets the recording stage waits on — every UK interview type.
+PRACTICE_INTERVIEW_KEYS = ["pre_cas", "credibility", "academic"]
 
 VISA_TASKS: list[dict[str, str]] = [
     {"key": "ihs", "label": "Pay Immigration Health Surcharge (IHS)"},
@@ -91,7 +108,7 @@ UK_JOURNEY_STAGES: list[dict[str, Any]] = [
         "key": "interview_prep",
         "name": "Interview Preparation",
         "kind": WorkflowStageKind.REVIEW,
-        "description": "Use the resources, prepare your answers and send them to your counsellor.",
+        "description": "Read the guides on the Interview Preparation page, then send your counsellor your written answers.",
         "config": {
             "resources": INTERVIEW_RESOURCES,
             "allow_text": True,
@@ -104,8 +121,14 @@ UK_JOURNEY_STAGES: list[dict[str, Any]] = [
         "key": "interview_recording",
         "name": "Interview Recording",
         "kind": WorkflowStageKind.REVIEW,
-        "description": "Record yourself answering the practice questions and hand in the video.",
-        "config": {"allow_text": False, "allow_document": True, "allow_link": True, "accept": "video"},
+        "description": "Complete all three recorded practice interviews, then send your scores to your counsellor.",
+        "config": {
+            "allow_text": True,
+            "allow_document": True,
+            "allow_link": True,
+            "accept": "video",
+            "requires_practice": PRACTICE_INTERVIEW_KEYS,
+        },
     },
     {
         "key": "mock_interview",

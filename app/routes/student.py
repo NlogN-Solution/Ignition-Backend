@@ -1774,6 +1774,8 @@ async def list_my_interviews(
                 started_at=s.started_at,
                 completed_at=s.completed_at,
                 score=s.score,
+                type_id=s.type_id,
+                type_key=s.type.key,
                 type_name=s.type.name,
                 feedback_band=s.feedback_band.band if s.feedback_band else None,
             )

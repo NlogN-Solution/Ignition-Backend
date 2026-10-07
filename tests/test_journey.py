@@ -15,9 +15,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 
-from app.models.enums import UserRole
-from app.services.journey_templates import ensure_uk_journey_template
+from app.models import InterviewSession, InterviewType
+from app.models.enums import InterviewSessionStatus, UserRole
+from app.services.journey_templates import PRACTICE_INTERVIEW_KEYS, ensure_uk_journey_template
 
 pytestmark = pytest.mark.asyncio
 
@@ -325,6 +327,87 @@ async def test_the_recording_stage_takes_a_link_but_the_preparation_stage_does_n
         _url(setup, f"/steps/{recording['id']}/submissions"),
         json={"external_url": "https://youtu.be/abc"},
         headers=setup["student_headers"],
+    )
+    assert accepted.status_code == 200, accepted.text
+
+
+async def _practice(session, student, keys: list[str], *, completed: list[str]) -> None:
+    """The practice catalogue, and the sessions the student has finished."""
+    for key in keys:
+        interview_type = InterviewType(key=key, name=key, duration_minutes=20, passing_score=70)
+        session.add(interview_type)
+        await session.flush()
+        if key in completed:
+            session.add(
+                InterviewSession(
+                    student_id=student.id,
+                    type_id=interview_type.id,
+                    status=InterviewSessionStatus.COMPLETED,
+                    started_at=datetime.now(UTC),
+                    completed_at=datetime.now(UTC),
+                    score=80,
+                )
+            )
+    await session.commit()
+
+
+async def test_the_recording_stage_waits_for_every_practice_interview(
+    client: AsyncClient, setup: dict, session
+) -> None:
+    await _practice(session, setup["student"], PRACTICE_INTERVIEW_KEYS, completed=["pre_cas", "credibility"])
+    await _record(client, setup, "offer_received", "offer_received_date")
+    await _pass_review(client, setup, "interview_prep", body_text="answers")
+    recording = _step(await _journey(client, setup), "interview_recording")
+    url = _url(setup, f"/steps/{recording['id']}/submissions")
+
+    refused = await client.post(url, json={"body_text": "scores"}, headers=setup["student_headers"])
+    assert refused.status_code == 400
+    assert "2 of 3" in refused.text
+
+    academic = await session.scalar(select(InterviewType).where(InterviewType.key == "academic"))
+    session.add(
+        InterviewSession(
+            student_id=setup["student"].id,
+            type_id=academic.id,
+            status=InterviewSessionStatus.COMPLETED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            score=72,
+        )
+    )
+    await session.commit()
+
+    accepted = await client.post(url, json={"body_text": "scores"}, headers=setup["student_headers"])
+    assert accepted.status_code == 200, accepted.text
+
+
+async def test_an_unfinished_practice_session_does_not_count(client: AsyncClient, setup: dict, session) -> None:
+    await _practice(session, setup["student"], ["academic"], completed=[])
+    academic = await session.scalar(select(InterviewType).where(InterviewType.key == "academic"))
+    session.add(
+        InterviewSession(
+            student_id=setup["student"].id,
+            type_id=academic.id,
+            status=InterviewSessionStatus.IN_PROGRESS,
+            started_at=datetime.now(UTC),
+        )
+    )
+    await session.commit()
+    await _record(client, setup, "offer_received", "offer_received_date")
+    await _pass_review(client, setup, "interview_prep", body_text="answers")
+    recording = _step(await _journey(client, setup), "interview_recording")
+    refused = await client.post(
+        _url(setup, f"/steps/{recording['id']}/submissions"), json={"body_text": "x"}, headers=setup["student_headers"]
+    )
+    assert refused.status_code == 400
+
+
+async def test_the_preparation_stage_needs_no_practice(client: AsyncClient, setup: dict, session) -> None:
+    await _practice(session, setup["student"], PRACTICE_INTERVIEW_KEYS, completed=[])
+    await _record(client, setup, "offer_received", "offer_received_date")
+    prep = _step(await _journey(client, setup), "interview_prep")
+    accepted = await client.post(
+        _url(setup, f"/steps/{prep['id']}/submissions"), json={"body_text": "answers"}, headers=setup["student_headers"]
     )
     assert accepted.status_code == 200, accepted.text
 

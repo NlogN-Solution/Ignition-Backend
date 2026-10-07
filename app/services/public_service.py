@@ -11,11 +11,12 @@ must 404 on its own URL too, or "unpublished" only means "unlinked".
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import ColumnElement, Select, Text, and_, func, or_, select
+from sqlalchemy import ColumnElement, Select, SQLColumnExpression, and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -31,6 +32,7 @@ from ..models import (
     UniversityRoute,
 )
 from ..models.enums import CourseLevel, CourseSubject, EntryRoute, UkRegion
+from .search_intents import matched_ids, search_index
 
 #: The three routes a student picks between at the top of the funnel, and the
 #: course levels each contains. Mirrors `studyRoutes` in
@@ -73,7 +75,18 @@ class CourseFilters:
     this class and the facet response all use one vocabulary.
     """
 
-    __slots__ = ("q", "route", "level", "subject", "university", "placement", "duration")
+    __slots__ = (
+        "q",
+        "route",
+        "level",
+        "subject",
+        "university",
+        "placement",
+        "duration",
+        "qualification",
+        "location",
+        "matches",
+    )
 
     def __init__(
         self,
@@ -84,6 +97,8 @@ class CourseFilters:
         university: str | None = None,
         placement: bool | None = None,
         duration: str | None = None,
+        qualification: str | None = None,
+        location: str | None = None,
     ) -> None:
         self.q = q
         self.route = route
@@ -92,6 +107,9 @@ class CourseFilters:
         self.university = university
         self.placement = placement
         self.duration = duration
+        self.qualification = qualification
+        self.location = location
+        self.matches: dict[str, float] | None = None
 
 
 class PublicCatalogueService:
@@ -154,14 +172,16 @@ class PublicCatalogueService:
         """
         conditions: list[ColumnElement[bool]] = []
 
-        if filters.q and filters.q.strip():
-            needle = f"%{filters.q.strip().lower()}%"
+        if filters.matches is not None:
+            conditions.append(Program.id.in_(matched_ids(filters.matches)))
+        if skip != "qualification" and filters.qualification:
+            conditions.append(func.lower(Program.qualification) == filters.qualification.lower())
+        if skip != "location" and filters.location:
+            location = filters.location.strip().lower()
             conditions.append(
                 or_(
-                    func.lower(Program.name).like(needle),
-                    func.lower(Program.qualification).like(needle),
-                    func.lower(Program.subject.cast(Text)).like(needle),
-                    func.lower(University.name).like(needle),
+                    func.lower(University.city) == location,
+                    func.lower(Program.campus).op("~")(rf"(^|/)\s*{re.escape(location)}\s*($|/)"),
                 )
             )
 
@@ -184,6 +204,10 @@ class PublicCatalogueService:
 
         return conditions
 
+    async def _resolve_search(self, filters: CourseFilters) -> None:
+        if filters.q and filters.q.strip() and filters.matches is None:
+            filters.matches = (await search_index(self.session)).matches(filters.q)
+
     async def search_courses(
         self,
         filters: CourseFilters,
@@ -191,6 +215,7 @@ class PublicCatalogueService:
         limit: int,
         sort: str = "title",
     ) -> tuple[list[Program], int]:
+        await self._resolve_search(filters)
         conditions = self._conditions(filters)
         # `route` joins the same way the other two do. The card reads the
         # route's fee and scholarship wording — `programs.tuition_fee` is NULL
@@ -211,12 +236,18 @@ class PublicCatalogueService:
             count_query = count_query.where(condition)
 
         total = await self.session.scalar(count_query) or 0
-        order = {
+        order: SQLColumnExpression[str | float | None] = {
             "title": Program.name,
             "university": University.name,
             "duration": Program.duration_years,
         }.get(sort, Program.name)
-        query = query.order_by(order, Program.name).offset((page - 1) * limit).limit(limit)
+        if sort == "relevance" and filters.matches:
+            order = case(
+                {UUID(k): v for k, v in filters.matches.items()},
+                value=Program.id,
+                else_=0,
+            ).desc()
+        query = query.order_by(order, Program.name, Program.id).offset((page - 1) * limit).limit(limit)
         result = await self.session.execute(query)
         return list(result.scalars().unique().all()), total
 
@@ -296,6 +327,8 @@ class PublicCatalogueService:
         `CourseExplorer` already anticipated the move.
         """
 
+        await self._resolve_search(filters)
+
         async def grouped(column: Any, skip: str) -> dict[Any, int]:
             query = (
                 select(column, func.count())
@@ -313,6 +346,22 @@ class PublicCatalogueService:
         by_subject = await grouped(Program.subject, "subject")
         by_duration = await grouped(Program.duration_years, "duration")
         by_university = await grouped(University.slug, "university")
+        by_qualification = await grouped(Program.qualification, "qualification")
+        location_query = (
+            select(Program.id, University.city, Program.campus)
+            .join(University, Program.university_id == University.id)
+            .where(
+                Program.is_published.is_(True),
+                University.is_published.is_(True),
+                *self._conditions(filters, skip="location"),
+            )
+        )
+        from .search_intents import locations
+
+        by_location: dict[str, int] = {}
+        for _, city, campus in await self.session.execute(location_query):
+            for location in locations(city or "", campus or ""):
+                by_location[location] = by_location.get(location, 0) + 1
 
         placement_query = (
             select(func.count())
@@ -366,8 +415,7 @@ class PublicCatalogueService:
         return {
             "route": route_counts,
             "level": [
-                {"value": level.value, "label": level.value, "count": by_level.get(level, 0)}
-                for level in CourseLevel
+                {"value": level.value, "label": level.value, "count": by_level.get(level, 0)} for level in CourseLevel
             ],
             "subject": [
                 {"value": subject.value, "label": subject.value, "count": by_subject.get(subject, 0)}
@@ -381,6 +429,14 @@ class PublicCatalogueService:
             "university": [
                 {"value": slug, "label": names.get(slug, slug), "count": count}
                 for slug, count in sorted(by_university.items(), key=lambda pair: names.get(pair[0], pair[0]))
+            ],
+            "qualification": [
+                {"value": value, "label": value, "count": count}
+                for value, count in sorted(by_qualification.items(), key=lambda pair: pair[0] or "")
+                if value
+            ],
+            "location": [
+                {"value": value, "label": value, "count": count} for value, count in sorted(by_location.items())
             ],
             "placement": placement,
             "total": total,
@@ -442,11 +498,15 @@ class PublicCatalogueService:
 
     # --- course profiles -----------------------------------------------------
 
-    async def course_profiles(self, page: int, limit: int, subject: str | None = None) -> tuple[list[CourseProfile], int]:
+    async def course_profiles(
+        self, page: int, limit: int, subject: str | None = None
+    ) -> tuple[list[CourseProfile], int]:
         conditions: list[ColumnElement[bool]] = [CourseProfile.is_published.is_(True)]
         if subject:
             conditions.append(CourseProfile.subject == subject)
-        query = select(CourseProfile).where(and_(*conditions)).order_by(CourseProfile.display_order, CourseProfile.title)
+        query = (
+            select(CourseProfile).where(and_(*conditions)).order_by(CourseProfile.display_order, CourseProfile.title)
+        )
         total = await self.session.scalar(select(func.count()).select_from(CourseProfile).where(and_(*conditions))) or 0
         result = await self.session.execute(query.offset((page - 1) * limit).limit(limit))
         return list(result.scalars().all()), total
@@ -538,9 +598,7 @@ class PublicCatalogueService:
 
     async def posts(self, page: int, limit: int) -> tuple[list[BlogPost], int]:
         total = (
-            await self.session.scalar(
-                select(func.count()).select_from(BlogPost).where(BlogPost.is_published.is_(True))
-            )
+            await self.session.scalar(select(func.count()).select_from(BlogPost).where(BlogPost.is_published.is_(True)))
             or 0
         )
         result = await self.session.execute(
@@ -553,9 +611,7 @@ class PublicCatalogueService:
         return list(result.scalars().all()), total
 
     async def post(self, slug: str) -> BlogPost | None:
-        return await self.session.scalar(
-            select(BlogPost).where(BlogPost.slug == slug, BlogPost.is_published.is_(True))
-        )
+        return await self.session.scalar(select(BlogPost).where(BlogPost.slug == slug, BlogPost.is_published.is_(True)))
 
     # --- taxonomies ----------------------------------------------------------
 

@@ -58,6 +58,7 @@ from ..schemas.public import (
 from ..services.apply_intent_service import ApplyIntentService, get_apply_intent_service
 from ..services.eligibility_service import EligibilityService, get_eligibility_service
 from ..services.public_service import CourseFilters, PublicCatalogueService, get_public_service
+from ..services.search_intents import SearchSuggestions, search_index
 
 #: `route_class` puts a read-through Redis cache in front of every GET here.
 #: The routes below are unchanged by it and cannot forget to use it; what it
@@ -184,9 +185,7 @@ def _university_payload(university: Any, course_count: int | None = None) -> dic
         "interview_profile": university.interview_profile,
         "flyer_url": university.flyer_url,
         "ranking": university.ranking,
-        "acceptance_rate": (
-            float(university.acceptance_rate) if university.acceptance_rate is not None else None
-        ),
+        "acceptance_rate": (float(university.acceptance_rate) if university.acceptance_rate is not None else None),
         "faculties": university.faculties,
         "highlights": university.highlights,
     }
@@ -277,6 +276,20 @@ async def public_university(
     return UniversityDetail(**payload)
 
 
+@router.get("/search/suggestions", response_model=SearchSuggestions, response_model_exclude_none=True)
+async def public_search_suggestions(
+    response: Response,
+    q: str = Query(default="", max_length=100),
+    service: PublicCatalogueService = Depends(get_public_service),
+    _: None = Depends(require_public),
+) -> SearchSuggestions:
+    """Small discovery intents, never individual course records."""
+    _cache(response)
+    if q.strip() and len(q.strip()) < 2:
+        return SearchSuggestions(items=[])
+    return SearchSuggestions(items=(await search_index(service.session)).suggestions(q))
+
+
 # --- courses -----------------------------------------------------------------
 
 
@@ -295,6 +308,8 @@ async def public_courses(
     university: str | None = None,
     placement: bool | None = None,
     duration: str | None = None,
+    qualification: str | None = None,
+    location: str | None = None,
     sort: str = "title",
     page: PageParam = 1,
     limit: LimitParam = 24,
@@ -308,7 +323,15 @@ async def public_courses(
     """
     _cache(response)
     filters = CourseFilters(
-        q=q, route=route, level=level, subject=subject, university=university, placement=placement, duration=duration
+        q=q,
+        route=route,
+        level=level,
+        subject=subject,
+        university=university,
+        placement=placement,
+        duration=duration,
+        qualification=qualification,
+        location=location,
     )
     programs, total = await service.search_courses(filters, page, limit, sort=sort)
     items = [CoursePublic(**CoursePublic.payload(program)) for program in programs]
@@ -330,6 +353,8 @@ async def public_course_facets(
     university: str | None = None,
     placement: bool | None = None,
     duration: str | None = None,
+    qualification: str | None = None,
+    location: str | None = None,
     service: PublicCatalogueService = Depends(get_public_service),
     _: None = Depends(require_public),
 ) -> CourseFacets:
@@ -340,7 +365,15 @@ async def public_course_facets(
     """
     _cache(response)
     filters = CourseFilters(
-        q=q, route=route, level=level, subject=subject, university=university, placement=placement, duration=duration
+        q=q,
+        route=route,
+        level=level,
+        subject=subject,
+        university=university,
+        placement=placement,
+        duration=duration,
+        qualification=qualification,
+        location=location,
     )
     return CourseFacets(**await service.course_facets(filters))
 
@@ -414,9 +447,7 @@ async def public_course(
 
     if university is not None:
         scholarships = await service.course_scholarships(program)
-        payload["scholarships"] = [
-            _scholarship_payload(item, university.slug) for item in scholarships
-        ] or None
+        payload["scholarships"] = [_scholarship_payload(item, university.slug) for item in scholarships] or None
 
         # "About the university this course belongs to", as a tab rather than
         # a link off the page. A strict subset of what `/universities/{slug}`
@@ -645,9 +676,7 @@ async def public_posts(
     )
 
 
-@router.get(
-    "/posts/{slug}", response_model=PostPublic, response_model_exclude_none=True, summary="A published post"
-)
+@router.get("/posts/{slug}", response_model=PostPublic, response_model_exclude_none=True, summary="A published post")
 async def public_post(
     slug: str,
     response: Response,

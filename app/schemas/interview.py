@@ -84,6 +84,10 @@ class InterviewSessionSummary(BaseModel):
     started_at: datetime
     completed_at: datetime | None = None
     score: int | None = None
+    type_id: UUID
+    #: Which practice set this was — the Interview Preparation page marks each
+    #: set completed by it, and the journey's recording stage waits on all three.
+    type_key: str
     type_name: str
     feedback_band: str | None = None
 

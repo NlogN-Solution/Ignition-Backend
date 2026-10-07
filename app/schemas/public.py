@@ -231,9 +231,7 @@ class CoursePublic(BaseModel):
                 if university
                 else None
             ),
-            "course_profile_slug": (
-                program.course_profile.slug if getattr(program, "course_profile", None) else None
-            ),
+            "course_profile_slug": (program.course_profile.slug if getattr(program, "course_profile", None) else None),
             "is_example": program.is_example or None,
         }
         if intakes is not None:
@@ -381,6 +379,8 @@ class FacetOption(BaseModel):
 
 
 class CourseFacets(BaseModel):
+    qualification: list[FacetOption] = []
+    location: list[FacetOption] = []
     route: list[FacetOption]
     level: list[FacetOption]
     subject: list[FacetOption]

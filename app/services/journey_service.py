@@ -24,7 +24,9 @@ Config keys, by kind:
 - documents: `level_aware` — the stage whose items depend on UG/PG/gap.
 - issued: `milestone_status` — the status whose recording completes the step.
 - review: `resources` (list of {title, description, url}), `allow_text`,
-  `allow_document`, `allow_link`, `accept` (`document` | `video`).
+  `allow_document`, `allow_link`, `accept` (`document` | `video`),
+  `requires_practice` — interview type keys the student must have completed a
+  practice session of before handing anything in.
 - booking: `allow_reschedule`, `fail_ends_journey`, `appointment_type`.
 - checklist: `tasks` (list of {key, label}).
 
@@ -62,6 +64,8 @@ from ..models import (
     ApplicationWorkflowStep,
     Appointment,
     Document,
+    InterviewSession,
+    InterviewType,
     Program,
     User,
     WorkflowStage,
@@ -76,6 +80,7 @@ from ..models.enums import (
     AppointmentStatus,
     AppointmentType,
     ChecklistItemStatus,
+    InterviewSessionStatus,
     NotificationType,
     StepSlotOutcome,
     StepSlotStatus,
@@ -473,6 +478,35 @@ class JourneyService:
 
     # ----------------------------------------------------------- review stages
 
+    async def _require_practice(self, application: Application, keys: Any) -> None:
+        """Refuse a hand-in until every listed practice interview is finished.
+
+        Only *active* types count: a type retired from the catalogue cannot be
+        sat any more, so demanding it would lock the stage for good.
+        """
+        if not keys:
+            return
+        required = set(
+            await self.session.scalars(
+                select(InterviewType.id).where(InterviewType.key.in_(list(keys)), InterviewType.is_active.is_(True))
+            )
+        )
+        if not required:
+            return
+        done = set(
+            await self.session.scalars(
+                select(InterviewSession.type_id).where(
+                    InterviewSession.student_id == application.student_id,
+                    InterviewSession.status == InterviewSessionStatus.COMPLETED,
+                    InterviewSession.type_id.in_(required),
+                )
+            )
+        )
+        if required - done:
+            raise BadRequestException(
+                f"Complete all {len(required)} practice interviews first ({len(done)} of {len(required)} done)"
+            )
+
     async def submit_review(
         self, application: Application, step: ApplicationWorkflowStep, payload: SubmissionCreate, user: User
     ) -> WorkflowStepSubmission:
@@ -484,6 +518,7 @@ class JourneyService:
             raise BadRequestException("This stage takes an upload, not a link")
         if payload.document_id and not config.get("allow_document", True):
             raise BadRequestException("This stage does not take a file")
+        await self._require_practice(application, config.get("requires_practice"))
 
         latest = await self.session.scalar(
             select(WorkflowStepSubmission)

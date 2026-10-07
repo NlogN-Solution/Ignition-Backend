@@ -505,3 +505,27 @@ async def test_import_rejects_an_unreadable_workbook(client: AsyncClient, user_f
         headers=await auth_headers(admin),
     )
     assert response.status_code == 400
+
+
+async def test_search_intents_and_filtered_results_agree(client: AsyncClient, user_factory, auth_headers) -> None:
+    admin = await user_factory(UserRole.ADMIN)
+    await _seed(client, await auth_headers(admin))
+    response = await client.get(f"{PUBLIC}/search/suggestions?q=computor%20scince")
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert items[0]["label"] == "Computer Science"
+    assert all("slug" not in item and not item["exact_entity"] for item in items)
+    for query in ("computer science", "comp sci", "computor scince"):
+        results = (await client.get(f"{PUBLIC}/courses", params={"q": query, "sort": "relevance"})).json()
+        facets = (await client.get(f"{PUBLIC}/courses/facets", params={"q": query})).json()
+        assert results["total"] == facets["total"] == 1
+        assert results["items"][0]["title"] == "BSc (Hons) Computer Science"
+    assert (await client.get(f"{PUBLIC}/courses?q=computer%20science&location=London")).json()["total"] == 0
+    assert (await client.get(f"{PUBLIC}/courses?q=computer%20science&location=York")).json()["total"] == 1
+    assert (await client.get(f"{PUBLIC}/courses?q=computer%20science&route=postgraduate")).json()["total"] == 0
+    university = (await client.get(f"{PUBLIC}/search/suggestions", params={"q": "York St John University"})).json()["items"]
+    assert university[0]["exact_entity"] and university[0]["entity_slug"] == "york-st-john"
+    assert university[1]["destination"]["university"] == "york-st-john"
+    assert (await client.get(f"{PUBLIC}/search/suggestions?q=z")).json()["items"] == []
+    assert (await client.get(f"{PUBLIC}/search/suggestions?q=zzzxxyy")).json()["items"] == []
+    assert (await client.get(f"{PUBLIC}/search/suggestions", params={"q": "x" * 101})).status_code == 422
