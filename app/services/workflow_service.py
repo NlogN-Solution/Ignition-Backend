@@ -585,12 +585,16 @@ class ApplicationWorkflowService:
                 WorkflowStage.key.label("stage_key"),
             )
             .join(ApplicationWorkflow, ApplicationWorkflow.id == ApplicationWorkflowStep.application_workflow_id)
+            .join(Application, Application.id == ApplicationWorkflow.application_id)
+            .where(Application.deleted_at.is_(None))
             .outerjoin(WorkflowStage, WorkflowStage.id == ApplicationWorkflowStep.stage_id)
         )
         count_query = (
             select(func.count())
             .select_from(ApplicationWorkflowStep)
             .join(ApplicationWorkflow, ApplicationWorkflow.id == ApplicationWorkflowStep.application_workflow_id)
+            .join(Application, Application.id == ApplicationWorkflow.application_id)
+            .where(Application.deleted_at.is_(None))
         )
 
         if stage_id:

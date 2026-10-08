@@ -554,6 +554,7 @@ async def public_course_profile(
                     name=university.name,
                     city=university.city,
                     region=university.region.value if university.region else None,
+                    logo_url=university.logo_url,
                 )
                 for university in universities
                 if university.slug

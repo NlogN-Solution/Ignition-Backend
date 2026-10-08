@@ -148,6 +148,7 @@ class CourseUniversity(BaseModel):
     name: str
     city: str | None = None
     region: str | None = None
+    logo_url: str | None = None
 
     model_config = _FROM_ORM
 
@@ -227,6 +228,7 @@ class CoursePublic(BaseModel):
                     "name": university.name,
                     "city": university.city,
                     "region": university.region.value if university.region else None,
+                    "logo_url": university.logo_url,
                 }
                 if university
                 else None

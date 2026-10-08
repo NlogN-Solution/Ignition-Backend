@@ -75,6 +75,22 @@ async def _seed(client: AsyncClient, headers: dict[str, str]) -> dict:
 # ── The hide-when-absent contract ────────────────────────────────────────────
 
 
+async def test_course_lists_include_the_university_logo(client: AsyncClient, user_factory, auth_headers) -> None:
+    headers = await auth_headers(await user_factory(UserRole.ADMIN))
+    university = await _seed(client, headers)
+    logo = "https://example.com/university-logo.png"
+    updated = await client.patch(f"{UNIVERSITIES}/{university['id']}", json={"logo_url": logo}, headers=headers)
+    assert updated.status_code == 200, updated.text
+    response = await client.get(f"{PUBLIC}/courses")
+    assert response.status_code == 200, response.text
+    assert len(response.json()["items"]) == 3
+    for course in response.json()["items"]:
+        assert course["university"]["logo_url"] == logo
+    detail = await client.get(f"{PUBLIC}/courses/{response.json()['items'][0]['slug']}")
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["university"]["logo_url"] == logo
+
+
 async def test_absent_fields_are_omitted_not_nulled(client: AsyncClient, user_factory, auth_headers) -> None:
     """The landing hides any section whose field is absent. Send `null` and it
     renders an empty section shell instead — a heading with nothing under it."""

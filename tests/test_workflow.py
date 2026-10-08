@@ -117,6 +117,45 @@ async def test_only_admins_manage_templates(client: AsyncClient, user_factory, a
 # ── Instantiation and advancement ─────────────────────────────────────────────
 
 
+async def test_dashboard_steps_exclude_deleted_applications_for_every_staff_scope(
+    client: AsyncClient, admin_headers, template: dict, application: dict, user_factory, auth_headers
+) -> None:
+    application_ids = [application["application"]["id"]]
+    for _ in range(2):
+        created = await client.post(
+            APPLICATIONS,
+            json={"student_id": str(application["student"].id), "program_id": application["application"]["program_id"]},
+            headers=admin_headers,
+        )
+        assert created.status_code == 200, created.text
+        application_ids.append(created.json()["id"])
+    for application_id in application_ids:
+        started = await client.post(
+            f"{APPLICATIONS}/{application_id}/workflow", json={"template_id": template["id"]}, headers=admin_headers
+        )
+        assert started.status_code == 200, started.text
+
+    endpoint = f"{ACADEMIC}/workflow-steps"
+    before = await client.get(endpoint, params={"status": "current"}, headers=admin_headers)
+    assert before.json()["total"] == 3
+    deleted = await client.delete(f"{APPLICATIONS}/{application_ids[0]}", headers=admin_headers)
+    assert deleted.status_code == 200, deleted.text
+
+    owner = await user_factory(UserRole.SUPER_ADMIN)
+    counsellor = await user_factory(UserRole.COUNSELLOR)
+    for headers in [admin_headers, await auth_headers(owner), await auth_headers(counsellor)]:
+        response = await client.get(endpoint, params={"status": "current", "limit": 1}, headers=headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["total"] == 2
+        assert len(response.json()["items"]) == 1
+        all_steps = await client.get(endpoint, headers=headers)
+        assert all_steps.json()["total"] == 6
+        assert {item["application_id"] for item in all_steps.json()["items"]} == set(application_ids[1:])
+        deleted_steps = await client.get(endpoint, params={"application_id": application_ids[0]}, headers=headers)
+        assert deleted_steps.json()["items"] == []
+        assert deleted_steps.json()["total"] == 0
+
+
 async def test_instantiating_creates_one_step_per_stage(
     client: AsyncClient,
     admin_headers,
