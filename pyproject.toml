@@ -21,7 +21,7 @@ dependencies = [
     "alembic==1.18.5",
     "asyncpg==0.31.0",          # app runtime (async)
     "psycopg[binary]==3.3.4",   # alembic (sync)
-    "PyJWT==2.13.0",
+    "PyJWT==2.15.0",
     # No passlib: 1.7.4 (its final release, 2020) is incompatible with bcrypt
     # >= 4.1 and raises on every hash. core/security.py calls bcrypt directly.
     "bcrypt==5.0.0",
@@ -32,6 +32,8 @@ dependencies = [
     "celery==5.4.0",
     "slowapi==0.1.9",
     "cloudinary==1.46.0",
+    # Cloudinary's HTTP dependency: require the patched security release.
+    "urllib3==2.8.0",
     # Runtime, not just test: core/landing.py imports httpx to fire the
     # Next.js revalidation webhook. Keep it out of the dev extra only.
     "httpx==0.28.1",

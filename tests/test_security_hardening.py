@@ -603,6 +603,7 @@ def test_private_links_expire(monkeypatch) -> None:
 
     settings = get_settings()
     monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "cloudinary")
     cloudinary.config(cloud_name="demo", api_key="k", api_secret="s")
     url = uploads.build_download_url("abc.pdf", folder=uploads.DOCUMENT_FOLDER, download_name="a.pdf")
     assert url is not None
@@ -626,6 +627,7 @@ def test_private_links_address_the_stored_public_id(monkeypatch) -> None:
     from app.core import uploads
 
     monkeypatch.setattr(get_settings(), "ENVIRONMENT", "development")
+    monkeypatch.setattr(get_settings(), "STORAGE_BACKEND", "cloudinary")
     cloudinary.config(cloud_name="demo", api_key="k", api_secret="s")
 
     pdf = urlparse(uploads.build_download_url("abc.pdf", folder=uploads.DOCUMENT_FOLDER, download_name="My offer.pdf"))

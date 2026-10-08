@@ -304,7 +304,7 @@ class JourneyService:
             template_id=workflow.template_id,
             template_name=workflow.template.name if workflow.template else "",
             status=workflow.status.value,
-            study_level=study_level_of(program),  # type: ignore[arg-type]
+            study_level=study_level_of(program),
             has_study_gap=application.has_study_gap,
             current_step_id=current.id if current else None,
             progress_percent=round(done / len(workflow.steps) * 100) if workflow.steps else 0,
@@ -416,7 +416,7 @@ class JourneyService:
             ),
             None,
         )
-        if stage_step is None:
+        if stage_step is None or stage_step.stage is None:
             raise BadRequestException("This journey does not ask about study gaps")
         if stage_step.status in _TERMINAL_STEP_STATUSES or stage_step.progress.get("submitted_at"):
             raise ConflictException("Your application documents are already submitted")

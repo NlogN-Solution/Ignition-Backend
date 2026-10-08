@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, urlencode
@@ -344,7 +345,7 @@ async def stream_private_file(
         await client.aclose()
         raise NotFoundException("File not found")
 
-    async def body():
+    async def body() -> AsyncIterator[bytes]:
         try:
             async for chunk in upstream.aiter_bytes():
                 yield chunk
