@@ -58,6 +58,7 @@ class PriorityTaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     due_date: date | None = None
+    stage: str | None = Field(default=None, max_length=60)
 
 
 class PriorityTaskUpdate(BaseModel):
@@ -65,6 +66,7 @@ class PriorityTaskUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     due_date: date | None = None
     completed: bool | None = None
+    stage: str | None = Field(default=None, max_length=60)
 
 
 class PriorityTaskRead(ChecklistItemRead):

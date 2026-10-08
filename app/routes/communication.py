@@ -22,7 +22,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
 
-from ..api.auth import get_current_user, require_role
+from ..api.auth import get_current_user, require_owner, require_role
 from ..api.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from ..api.pagination import PageParam
 from ..core.uploads import (
@@ -257,6 +257,20 @@ async def get_thread(
 
     await service.mark_read(thread, by_student=is_student)
     return ThreadDetail.of(await service.get_thread(thread_id), viewer_is_student=is_student)
+
+
+@router.delete("/threads/{thread_id}", status_code=204, summary="Delete a conversation (super admin only)")
+async def delete_thread(
+    thread_id: UUID,
+    service: CommunicationService = Depends(get_communication_service),
+    _: User = Depends(require_owner),
+) -> Response:
+    thread = await service.get_thread(thread_id)
+    if thread is None:
+        raise NotFoundException("Thread not found")
+    await service.session.delete(thread)
+    await service.session.commit()
+    return Response(status_code=204)
 
 
 @router.post(

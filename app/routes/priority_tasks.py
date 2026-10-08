@@ -88,6 +88,7 @@ async def create_priority_task(
         description=payload.description,
         due_date=payload.due_date,
         assigned_by=user.id,
+        stage=payload.stage,
     )
     # The student hears about it, not only sees it next time they open the
     # dashboard. A notification failing must not undo the task.
@@ -118,7 +119,7 @@ async def update_priority_task(
     student = await _student(session, student_id)
     item = await _item(session, student_id, item_id)
     fields = payload.model_dump(exclude_unset=True)
-    for key in ("title", "description", "due_date"):
+    for key in ("title", "description", "due_date", "stage"):
         if key in fields and not (key == "title" and fields[key] is None):
             setattr(item, key, fields[key])
     await session.commit()

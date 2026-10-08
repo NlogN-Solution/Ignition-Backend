@@ -23,6 +23,35 @@ STUDENT = "/api/v1/student"
 LEADS = "/api/v1/leads"
 
 
+async def test_only_owner_can_delete_conversations(client: AsyncClient, user_factory, auth_headers, session) -> None:
+    from uuid import UUID
+
+    from sqlalchemy import func, select
+
+    from app.models import ThreadMessage
+
+    owner = await user_factory(UserRole.SUPER_ADMIN, email="delete.owner@example.com")
+    owner_headers = await auth_headers(owner)
+    student = await user_factory(UserRole.STUDENT, email="delete.student@example.com")
+    student_headers = await auth_headers(student)
+    created = await client.post(f"{COMMS}/threads", headers=owner_headers, json={
+        "student_id": str(student.id), "subject": "Removable conversation", "body": "First message",
+    })
+    assert created.status_code == 201, created.text
+    thread_id = created.json()["id"]
+    await _send(client, thread_id, student_headers, "Student reply")
+    for role in (UserRole.ADMIN, UserRole.COUNSELLOR, UserRole.ADMISSIONS, UserRole.MANAGER, UserRole.STUDENT):
+        user = student if role is UserRole.STUDENT else await user_factory(role, email=f"delete.{role.value}@example.com")
+        response = await client.delete(f"{COMMS}/threads/{thread_id}", headers=await auth_headers(user))
+        assert response.status_code == 403, response.text
+    assert (await client.get(f"{COMMS}/threads/{thread_id}", headers=student_headers)).status_code == 200
+    assert (await client.delete(f"{COMMS}/threads/{thread_id}", headers=owner_headers)).status_code == 204
+    assert (await client.get(f"{COMMS}/threads/{thread_id}", headers=student_headers)).status_code == 404
+    assert (await client.get(f"{STUDENT}/me/threads", headers=student_headers)).json() == []
+    assert await session.scalar(select(func.count()).select_from(ThreadMessage).where(ThreadMessage.thread_id == UUID(thread_id))) == 0
+    assert (await client.delete(f"{COMMS}/threads/{thread_id}", headers=owner_headers)).status_code == 404
+
+
 async def _send(client: AsyncClient, thread_id: str, headers: dict, body: str) -> dict:
     """Replies are multipart, always — see the note in schemas/communication.py."""
     response = await client.post(

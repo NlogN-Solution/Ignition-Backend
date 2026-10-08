@@ -98,7 +98,7 @@ async def test_priority_task_round_trip(client: AsyncClient, setup: dict) -> Non
     base = f"{API}/students/{student_id}/priority-tasks"
 
     created = await client.post(
-        base, json={"title": "Upload your IELTS certificate", "due_date": "2026-10-01"}, headers=setup["staff"]
+        base, json={"title": "Upload your IELTS certificate", "due_date": "2026-10-01", "stage": "Interview preparation"}, headers=setup["staff"]
     )
     assert created.status_code == 200, created.text
     task = created.json()
@@ -112,6 +112,7 @@ async def test_priority_task_round_trip(client: AsyncClient, setup: dict) -> Non
     checklist = (await client.get(f"{API}/student/me/checklist", headers=setup["student_headers"])).json()
     mine = next(item for item in checklist["items"] if item["id"] == task["id"])
     assert mine["is_priority"] is True
+    assert mine["stage"] == "Interview preparation"
 
     # …cannot delete or reword it…
     assert (

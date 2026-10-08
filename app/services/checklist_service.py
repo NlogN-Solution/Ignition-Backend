@@ -136,6 +136,7 @@ class ChecklistService:
         description: str | None,
         due_date: date | None,
         assigned_by: uuid.UUID,
+        stage: str | None = None,
     ) -> StudentChecklistItem:
         """A task a counsellor sets. Order 0 puts it ahead of the student's own
         items wherever the checklist is listed in order; `is_custom` stays false
@@ -149,6 +150,7 @@ class ChecklistService:
             is_custom=False,
             is_priority=True,
             assigned_by=assigned_by,
+            stage=stage,
         )
         self.session.add(item)
         await self.session.commit()
